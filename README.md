@@ -29,18 +29,23 @@ Stoka LMS/
 ├── docker-compose.yml            # Entorno local: Postgres, Redis, MinIO, Keycloak
 ├── .env.example                  # Plantilla de variables de entorno (copiar a .env)
 ├── package.json / turbo.json     # Monorepo (npm workspaces + Turborepo)
+├── scripts/
+│   └── setup-keycloak.js         # Crea el realm/cliente/usuario de prueba en Keycloak
 └── apps/
     └── api/                      # Backend NestJS (Core API)
         ├── prisma/
         │   ├── schema.prisma     # Modelo de datos completo
         │   ├── rls-policies.sql  # Políticas de aislamiento multi-tenant
-        │   └── apply-rls.js      # Script que aplica rls-policies.sql
+        │   ├── apply-rls.js      # Script que aplica rls-policies.sql
+        │   └── seed.js           # Roles/permisos base + tenant de desarrollo
         └── src/
             ├── main.ts           # Arranque del servidor
             ├── app.module.ts     # Módulo raíz (arma toda la app)
             ├── config/           # Lectura de variables de entorno
             ├── prisma/           # Conexión a base de datos (PrismaService)
             ├── common/tenant/    # Resolución del tenant activo por request
+            ├── auth/             # Login (Keycloak) + aprovisionamiento JIT
+            ├── rbac/             # Motor de permisos (Casbin) + guard
             └── modules/          # Módulos de negocio (health, y los que siguen)
 ```
 
@@ -72,21 +77,45 @@ npm run prisma:migrate
 #    Ver la explicacion completa en apps/api/prisma/rls-policies.sql.
 npm run prisma:rls
 
-# 6. Arrancar el backend en modo desarrollo (recarga en caliente)
+# 6. Sembrar roles/permisos base del sistema y un tenant de desarrollo
+#    ("Instituto San Martín (desarrollo)", con dominios "localhost" y
+#    "sanmartin.localhost" ya registrados para poder probar sin configurar nada mas)
+npm run prisma:seed
+
+# 7. Configurar Keycloak (realm "stoka-dev", cliente "stoka-api" y un
+#    usuario de prueba). Requiere Keycloak arriba (paso 3). Al terminar
+#    imprime un "Client Secret": copialo en KEYCLOAK_CLIENT_SECRET dentro
+#    de .env y apps/api/.env.
+cd ..
+npm run keycloak:setup
+
+# 8. Arrancar el backend en modo desarrollo (recarga en caliente)
+cd apps/api
 npm run dev
 ```
 
-Verificación rápida de que quedó bien: `curl http://localhost:3001/api/v1/health` debe responder `{"status":"ok",...}`.
+Verificación rápida de que quedó bien:
+```bash
+curl http://localhost:3001/api/v1/health
+# {"status":"ok",...}
 
-El backend queda disponible en `http://localhost:3001/api/v1/health`.
+# Login real contra Keycloak con el usuario de prueba que crea el paso 7:
+curl -X POST http://localhost:8080/realms/stoka-dev/protocol/openid-connect/token \
+  -d grant_type=password -d client_id=stoka-api -d "client_secret=<el que imprimio el paso 7>" \
+  -d username=maria@stoka-lms.test -d password=Maria12345!
+# devuelve un access_token
+
+curl -H "Authorization: Bearer <access_token>" -H "Host: sanmartin.localhost" \
+  http://localhost:3001/api/v1/auth/me
+# {"userId":"...","tenantId":"...","email":"maria@stoka-lms.test",...}
+```
 
 ## Qué sigue
 
-Este es el cimiento del proyecto (estructura, entorno local, modelo de datos, aislamiento multi-tenant). Los próximos pasos, en orden:
+Este es el cimiento del proyecto: estructura, entorno local, modelo de datos, aislamiento multi-tenant, **autenticación real contra Keycloak** y **motor de permisos (Casbin)** ya funcionando de punta a punta. Los próximos pasos, en orden:
 
-1. Módulo de autenticación (login + validación de tokens de Keycloak).
-2. Motor de permisos (Casbin) sobre las tablas `roles`/`permissions`/`role_permissions`.
-3. Módulos de negocio: Académico (periodos/cursos/módulos), Matrícula, Evaluaciones/Gradebook, Certificados.
-4. Frontend Next.js (`apps/web`).
+1. Frontend Next.js (`apps/web`) con login contra Keycloak.
+2. Módulos de negocio: Académico (periodos/cursos/módulos), Matrícula, Evaluaciones/Gradebook, Certificados — reemplazando el controlador temporal `rbac-demo` (ver `apps/api/src/rbac/rbac-demo.controller.ts`).
+3. Panel de administración para asignar roles a usuarios (hoy se hace manualmente en la base de datos; ver el ejemplo en el historial de commits).
 
 Ver el detalle completo de fases en [docs/architecture/06-roadmap.md](docs/architecture/06-roadmap.md).

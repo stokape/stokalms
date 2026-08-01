@@ -24,6 +24,8 @@ import { PrismaModule } from './prisma/prisma.module';
 import { TenantModule } from './common/tenant/tenant.module';
 import { TenantContextMiddleware } from './common/tenant/tenant-context.middleware';
 import { HealthModule } from './modules/health/health.module';
+import { AuthModule } from './auth/auth.module';
+import { RbacModule } from './rbac/rbac.module';
 
 @Module({
   imports: [
@@ -42,6 +44,12 @@ import { HealthModule } from './modules/health/health.module';
 
     // Resolucion del tenant activo por request (ver src/common/tenant/).
     TenantModule,
+
+    // Autenticacion contra Keycloak + aprovisionamiento JIT (ver src/auth/).
+    AuthModule,
+
+    // Motor de permisos Casbin (ver src/rbac/ y ADR-005-rbac-engine.md).
+    RbacModule,
 
     // Primer modulo de negocio (endpoint de salud). Los siguientes modulos
     // (Academico, Matricula, Evaluaciones, Certificados, RBAC...) se
