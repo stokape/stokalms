@@ -10,7 +10,7 @@
 // ============================================================================
 
 import Link from 'next/link';
-import { requireAccessToken, apiFetch, toErrorMessage } from '@/lib/api';
+import { requireAccessToken, apiFetch, toErrorMessage, ApiError } from '@/lib/api';
 import { ErrorBanner } from '@/components/ErrorBanner';
 
 interface StudentResult {
@@ -38,6 +38,32 @@ export default async function CourseGradesPage({
   try {
     data = await apiFetch<GradesResponse>(token, `/courses/${courseId}/grades`);
   } catch (err) {
+    // El backend devuelve un 409 especificamente cuando el curso todavia
+    // no tiene una escala de notas asignada (ver
+    // GradebookService.computeCourseGrades) — ese mensaje esta escrito
+    // para quien programa ("...PATCH /courses/:id...", ver
+    // gradebook.service.ts), no para quien usa la plataforma. Se detecto
+    // probando de verdad: un usuario real lo vio tal cual, sin entender
+    // que significaba ni que hacer. Acá se reemplaza por un mensaje en
+    // lenguaje simple con un enlace a donde SI se puede solucionar (ver
+    // el formulario de "asignar escala" en cursos/[courseId]/page.tsx).
+    if (err instanceof ApiError && err.status === 409) {
+      return (
+        <div className="mx-auto max-w-3xl">
+          <Link href={`/cursos/${courseId}`} className="text-sm text-zinc-500 hover:underline">
+            &larr; Curso
+          </Link>
+          <p className="mt-4 rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+            Este curso todavía no tiene una escala de notas asignada, así que no se puede calcular
+            ninguna nota final todavía.{' '}
+            <Link href={`/cursos/${courseId}`} className="underline">
+              Volvé al curso para asignarle una
+            </Link>
+            .
+          </p>
+        </div>
+      );
+    }
     return <ErrorBanner message={toErrorMessage(err)} />;
   }
 

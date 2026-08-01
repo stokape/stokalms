@@ -10,11 +10,13 @@
 import Link from 'next/link';
 import { requireAccessToken, apiFetch, toErrorMessage } from '@/lib/api';
 import { ErrorBanner } from '@/components/ErrorBanner';
+import { asignarEscalaDeNotas } from './actions';
 
 interface Course {
   id: string;
   code: string;
   title: string;
+  gradingScaleId: string | null;
 }
 
 interface Section {
@@ -23,12 +25,20 @@ interface Section {
   capacity: number;
 }
 
+interface GradingScale {
+  id: string;
+  name: string;
+}
+
 export default async function CourseDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ courseId: string }>;
+  searchParams: Promise<{ error?: string }>;
 }) {
   const { courseId } = await params;
+  const { error } = await searchParams;
   const token = await requireAccessToken();
 
   let course: Course;
@@ -36,6 +46,24 @@ export default async function CourseDetailPage({
     course = await apiFetch<Course>(token, `/courses/${courseId}`);
   } catch (err) {
     return <ErrorBanner message={toErrorMessage(err)} />;
+  }
+
+  // Sin escala de notas asignada, el curso no puede calcular ninguna nota
+  // final (ver la validacion en GradebookService.computeCourseGrades, en
+  // el backend) — se detecto probando de verdad que un curso de prueba se
+  // habia quedado sin ninguna escala asignada, y la pagina de notas
+  // mostraba el mensaje TECNICO del backend ("...PATCH /courses/:id...")
+  // tal cual a un usuario final, sin ninguna pantalla desde donde
+  // solucionarlo. Este formulario cierra ese hueco. Igual que las
+  // secciones, se pide en un try/catch separado: un Docente (sin
+  // "grading_scale:view") puede perfectamente ver el curso sin ver esto.
+  let gradingScales: GradingScale[] | null = null;
+  if (!course.gradingScaleId) {
+    try {
+      gradingScales = await apiFetch<GradingScale[]>(token, '/grading-scales');
+    } catch {
+      gradingScales = null;
+    }
   }
 
   // Las secciones se piden en un try/catch SEPARADO del curso: un Docente
@@ -58,6 +86,46 @@ export default async function CourseDetailPage({
       </Link>
       <h1 className="mt-2 mb-1 text-2xl font-semibold">{course.title}</h1>
       <p className="mb-6 font-mono text-sm text-zinc-500">{course.code}</p>
+
+      {error && (
+        <div className="mb-6">
+          <ErrorBanner message={decodeURIComponent(error)} />
+        </div>
+      )}
+
+      {!course.gradingScaleId && gradingScales && (
+        <div className="mb-8 rounded-lg border border-amber-300 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950">
+          <p className="mb-3 text-sm text-amber-800 dark:text-amber-300">
+            Este curso todavía no tiene una escala de notas asignada — hasta que le asignes una, la
+            pantalla de notas finales no va a poder calcular nada.
+          </p>
+          {gradingScales.length === 0 ? (
+            <p className="text-sm text-amber-800 dark:text-amber-300">
+              Tu institución todavía no creó ninguna escala de notas.
+            </p>
+          ) : (
+            <form action={asignarEscalaDeNotas.bind(null, courseId)} className="flex max-w-sm gap-2">
+              <select
+                name="gradingScaleId"
+                required
+                className="flex-1 rounded border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
+              >
+                {gradingScales.map((scale) => (
+                  <option key={scale.id} value={scale.id}>
+                    {scale.name}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="submit"
+                className="rounded-full bg-foreground px-4 py-2 text-sm text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc]"
+              >
+                Asignar
+              </button>
+            </form>
+          )}
+        </div>
+      )}
 
       <div className="mb-8">
         <Link
