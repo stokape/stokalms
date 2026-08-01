@@ -27,11 +27,18 @@ export default async function Home() {
           <p className="text-zinc-800 dark:text-zinc-200">
             Sesion iniciada como <strong>{session.user?.email ?? session.user?.name}</strong>
           </p>
+          {/* Antes apuntaba a "/dashboard" (la pantalla de PRUEBA con el
+             JSON crudo de /auth/me) — ahora que existen pantallas de
+             negocio reales (ver app/(app)/), el destino natural despues de
+             iniciar sesion es "Cursos". "/dashboard" sigue existiendo y
+             accesible desde el menu de esas pantallas ("Diagnostico
+             tecnico"), para quien necesite confirmar que el token es
+             aceptado por el backend. */}
           <a
-            href="/dashboard"
+            href="/cursos"
             className="rounded-full bg-foreground px-6 py-3 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc]"
           >
-            Ir al panel
+            Entrar a la plataforma
           </a>
           {/* Un formulario que llama a un Server Action es el patron
              recomendado por NextAuth.js v5 para cerrar sesion sin

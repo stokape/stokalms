@@ -5,6 +5,7 @@
 // ../matriculas/[enrollmentId]/certificados/page.tsx).
 // ============================================================================
 
+import Link from 'next/link';
 import { requireAccessToken, apiFetch, toErrorMessage } from '@/lib/api';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { crearPlantilla } from './actions';
@@ -62,7 +63,9 @@ export default async function PlantillasCertificadoPage({
         <ul className="mb-8 divide-y divide-zinc-200 dark:divide-zinc-800">
           {templates.map((t) => (
             <li key={t.id} className="py-3">
-              {t.name}
+              <Link href={`/plantillas-certificado/${t.id}`} className="hover:underline">
+                {t.name}
+              </Link>
             </li>
           ))}
         </ul>
