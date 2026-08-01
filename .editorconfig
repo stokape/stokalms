@@ -1,0 +1,19 @@
+# .editorconfig homogeniza el formato basico (indentacion, fin de linea, etc.)
+# entre distintos editores (VS Code, WebStorm, etc.) para que el diff de Git
+# nunca muestre cambios de formato falsos causados por configuraciones
+# personales distintas de cada persona del equipo.
+
+root = true
+
+[*]
+indent_style = space
+indent_size = 2
+end_of_line = lf
+charset = utf-8
+trim_trailing_whitespace = true
+insert_final_newline = true
+
+[*.md]
+# En Markdown, dos espacios al final de linea fuerzan un salto de linea
+# dentro del mismo parrafo; por eso NO recortamos espacios finales aqui.
+trim_trailing_whitespace = false

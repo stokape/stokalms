@@ -1,0 +1,126 @@
+# ============================================================================
+# docker-compose.yml — Entorno de desarrollo LOCAL de Stoka LMS.
+#
+# Este archivo describe los servicios de infraestructura que el backend
+# (apps/api) necesita para funcionar: base de datos, cache/colas, almacen de
+# archivos e identidad. NO incluye el backend ni el frontend: esos se corren
+# aparte con "npm run dev" para poder editar codigo con recarga en caliente.
+#
+# Relacion con el resto del proyecto:
+# - Los valores de usuario/password/puertos de aqui deben coincidir con los
+#   de ".env" (ver .env.example, que es la plantilla documentada).
+# - docs/architecture/01-arquitectura-alto-nivel.md describe estos mismos
+#   componentes (PostgreSQL, Redis, MinIO, Keycloak) a nivel de arquitectura.
+#
+# Como se usa: "npm run docker:up" (equivale a "docker compose up -d").
+# Requiere tener Docker Desktop instalado y corriendo.
+# ============================================================================
+
+services:
+
+  # --------------------------------------------------------------------
+  # PostgreSQL — base de datos principal (ver ADR-004-base-datos.md).
+  # Aqui viven todas las tablas de negocio (tenants, cursos, notas, etc.)
+  # con Row-Level Security activado para aislar tenants (ver ADR-001).
+  # --------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine   # Version 16, variante "alpine" = imagen liviana.
+    container_name: stoka-postgres
+    restart: unless-stopped     # Se reinicia solo si Docker Desktop se reinicia.
+    environment:
+      # Estas 3 variables las lee la propia imagen de Postgres para crear
+      # el usuario y la base de datos la PRIMERA vez que se levanta.
+      POSTGRES_USER: stoka
+      POSTGRES_PASSWORD: stoka_dev_password
+      POSTGRES_DB: stoka_lms
+    ports:
+      # "host:contenedor" -> exponemos el 5432 del contenedor en el 5432
+      # de tu maquina, para que Prisma (DATABASE_URL en .env) se conecte
+      # como si Postgres corriera localmente.
+      - "5432:5432"
+    volumes:
+      # Sin esto, cada vez que se apaga el contenedor se pierden los datos.
+      # Este volumen con nombre persiste los datos entre reinicios.
+      - stoka_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      # Docker usa esto para saber si Postgres ya esta listo para recibir
+      # conexiones (evita que el backend intente conectarse demasiado pronto).
+      test: ["CMD-SHELL", "pg_isready -U stoka -d stoka_lms"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # --------------------------------------------------------------------
+  # Redis — cache + broker de colas de trabajos en segundo plano.
+  # Ver docs/architecture/01-arquitectura-alto-nivel.md, seccion "Cache".
+  # --------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: stoka-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - stoka_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # --------------------------------------------------------------------
+  # MinIO — almacenamiento de archivos compatible con la API de S3, para
+  # desarrollo local (videos, PDFs, certificados, paquetes SCORM).
+  # En produccion este rol lo cumple Cloudflare R2 o AWS S3 (mismo API).
+  # --------------------------------------------------------------------
+  minio:
+    image: minio/minio:latest
+    container_name: stoka-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      # Deben coincidir con STORAGE_ACCESS_KEY / STORAGE_SECRET_KEY del .env
+      MINIO_ROOT_USER: stoka_minio_admin
+      MINIO_ROOT_PASSWORD: stoka_minio_dev_password
+    ports:
+      - "9000:9000"   # API compatible con S3 (la que usa el backend).
+      - "9001:9001"   # Consola web de administracion (para ver archivos a ojo).
+    volumes:
+      - stoka_minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # --------------------------------------------------------------------
+  # Keycloak — identidad, login y SSO (ver ADR-003-auth-identity.md).
+  # Corre en modo "start-dev": usa una base de datos interna de desarrollo
+  # (no la Postgres de arriba), pensada solo para entorno local/pruebas.
+  # --------------------------------------------------------------------
+  keycloak:
+    image: quay.io/keycloak/keycloak:25.0
+    container_name: stoka-keycloak
+    restart: unless-stopped
+    command: start-dev   # Modo desarrollo: mas simple, no usar tal cual en produccion.
+    environment:
+      # Credenciales del super-usuario de administracion de Keycloak
+      # (para entrar a http://localhost:8080/admin la primera vez).
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin_dev_password
+    ports:
+      - "8080:8080"
+    depends_on:
+      # No es una dependencia de base de datos (usa su propio storage en
+      # modo dev), pero lo agrupamos para que arranque junto al resto.
+      postgres:
+        condition: service_healthy
+
+# ------------------------------------------------------------------------
+# Volumenes con nombre: Docker los administra y persiste fuera del ciclo
+# de vida de los contenedores (si borras el contenedor, el volumen queda).
+# ------------------------------------------------------------------------
+volumes:
+  stoka_postgres_data:
+  stoka_redis_data:
+  stoka_minio_data:

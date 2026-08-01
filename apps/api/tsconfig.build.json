@@ -1,0 +1,7 @@
+{
+  // Variante de tsconfig usada SOLO al compilar para produccion ("nest build").
+  // Hereda todas las reglas de tsconfig.json y solo agrega que carpetas excluir
+  // del build final (pruebas y archivos de configuracion no compilan a dist/).
+  "extends": "./tsconfig.json",
+  "exclude": ["node_modules", "dist", "test", "**/*spec.ts"]
+}

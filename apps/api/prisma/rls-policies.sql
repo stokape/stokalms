@@ -1,0 +1,208 @@
+-- ============================================================================
+-- rls-policies.sql — Activa el aislamiento multi-tenant a nivel de base de
+-- datos (Row-Level Security de PostgreSQL).
+--
+-- POR QUE EXISTE ESTE ARCHIVO APARTE DE schema.prisma:
+-- Prisma sabe crear tablas, columnas, indices y llaves foraneas, pero NO
+-- tiene forma de declarar politicas de seguridad RLS de PostgreSQL. Por eso,
+-- despues de cada "npx prisma migrate dev" (que crea/actualiza las tablas),
+-- hay que ejecutar este script para que el aislamiento entre tenants quede
+-- reforzado por el propio motor de base de datos, no solo por el codigo de
+-- la aplicacion (ver docs/architecture/adr/ADR-001-multi-tenancy.md, que
+-- explica POR QUE se eligio este mecanismo en vez de confiar solo en que
+-- cada consulta de NestJS incluya "WHERE tenant_id = ...").
+--
+-- COMO SE APLICA: "npm run prisma:rls" (definido en apps/api/package.json),
+-- que ejecuta prisma/apply-rls.js, el cual lee este archivo y lo corre
+-- contra la base de datos usando DATABASE_URL (.env).
+--
+-- COMO FUNCIONA EN TIEMPO DE EJECUCION:
+-- El backend NestJS, en el middleware de tenant (ver
+-- src/common/tenant/tenant-context.middleware.ts) y en PrismaService (ver
+-- src/prisma/prisma.service.ts), ejecuta, al inicio de cada transaccion:
+--     SELECT set_config('app.current_tenant', '<uuid-del-tenant>', true);
+-- El "true" final significa "solo para esta transaccion" (LOCAL); en cuanto
+-- la transaccion termina, el valor se olvida — asi una conexion reciclada
+-- del pool nunca "hereda" por accidente el tenant de la request anterior.
+-- Cada politica de abajo compara "tenant_id" contra ese valor.
+-- ============================================================================
+
+
+-- ----------------------------------------------------------------------------
+-- Tablas EXCLUIDAS deliberadamente de RLS (no llevan filtro por tenant_id):
+--
+--   tenants           -> es la tabla que ENUMERA los tenants; no tiene sentido
+--                        que un tenant se "filtre a si mismo".
+--   tenant_domains    -> el middleware de resolucion de tenant necesita poder
+--                        buscar CUALQUIER dominio (de cualquier tenant) para
+--                        saber a que tenant_id corresponde, ANTES de que
+--                        exista un "tenant activo" que fijar. Si esta tabla
+--                        tuviera RLS, la propia resolucion del tenant fallaria.
+--   users             -> la identidad de una persona es GLOBAL (ver
+--                        docs/architecture/02-modelo-de-datos.md, 2.2); lo que
+--                        SI esta aislado por tenant es "user_tenants".
+--   permissions       -> catalogo global de permisos posibles (resource:action),
+--                        igual para toda la plataforma, no es dato de un tenant.
+--   role_permissions  -> tabla puente de un catalogo global; no expone datos
+--                        sensibles de un tenant especifico por si sola.
+-- ----------------------------------------------------------------------------
+
+
+-- Funcion auxiliar reutilizada por todas las politicas de abajo: lee el
+-- tenant activo de la transaccion actual. El "true" en current_setting hace
+-- que devuelva NULL (en vez de lanzar un error) si nadie fijo el valor
+-- todavia — y comparar cualquier tenant_id contra NULL siempre da FALSE, asi
+-- que el efecto es "no devolver ninguna fila" en vez de romper la consulta.
+-- Esto es una decision de seguridad: ante la duda, no mostrar nada (fail closed).
+CREATE OR REPLACE FUNCTION app_current_tenant() RETURNS uuid AS $$
+  SELECT current_setting('app.current_tenant', true)::uuid;
+$$ LANGUAGE sql STABLE;
+
+
+-- ----------------------------------------------------------------------------
+-- Plantilla que se repite para cada tabla: activar RLS, forzarla incluso
+-- para el dueño de la tabla (FORCE, importante porque por defecto el dueño
+-- de una tabla en Postgres se salta las politicas RLS), y crear la politica
+-- de aislamiento. Se hace tabla por tabla porque PostgreSQL no tiene forma de
+-- aplicar esto en bloque a muchas tablas con un solo comando.
+-- ----------------------------------------------------------------------------
+
+-- user_tenants: la membresia de una persona en un tenant.
+ALTER TABLE user_tenants ENABLE ROW LEVEL SECURITY;
+ALTER TABLE user_tenants FORCE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON user_tenants
+  USING (tenant_id = app_current_tenant());
+
+-- roles: caso especial. tenant_id puede ser NULL (rol base del sistema,
+-- compartido por todos) o tener un valor (rol personalizado de ESE tenant).
+-- La politica deja pasar ambos casos validos, ver docs/architecture/03-rbac.md.
+ALTER TABLE roles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE roles FORCE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON roles
+  USING (tenant_id IS NULL OR tenant_id = app_current_tenant());
+
+-- user_roles: que rol tiene cada persona, en que alcance (tenant o curso).
+ALTER TABLE user_roles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE user_roles FORCE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON user_roles
+  USING (tenant_id = app_current_tenant());
+
+-- terms: periodos academicos (semestres/ciclos) propios de cada tenant.
+ALTER TABLE terms ENABLE ROW LEVEL SECURITY;
+ALTER TABLE terms FORCE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON terms
+  USING (tenant_id = app_current_tenant());
+
+-- courses: cursos de cada tenant.
+ALTER TABLE courses ENABLE ROW LEVEL SECURITY;
+ALTER TABLE courses FORCE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON courses
+  USING (tenant_id = app_current_tenant());
+
+-- sections: secciones/horarios de un curso.
+ALTER TABLE sections ENABLE ROW LEVEL SECURITY;
+ALTER TABLE sections FORCE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON sections
+  USING (tenant_id = app_current_tenant());
+
+-- modules: modulos de contenido dentro de un curso.
+ALTER TABLE modules ENABLE ROW LEVEL SECURITY;
+ALTER TABLE modules FORCE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON modules
+  USING (tenant_id = app_current_tenant());
+
+-- lessons: lecciones dentro de un modulo.
+ALTER TABLE lessons ENABLE ROW LEVEL SECURITY;
+ALTER TABLE lessons FORCE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON lessons
+  USING (tenant_id = app_current_tenant());
+
+-- resources: videos/PDFs/enlaces/SCORM dentro de una leccion.
+ALTER TABLE resources ENABLE ROW LEVEL SECURITY;
+ALTER TABLE resources FORCE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON resources
+  USING (tenant_id = app_current_tenant());
+
+-- enrollments: matriculas de estudiantes en secciones.
+ALTER TABLE enrollments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE enrollments FORCE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON enrollments
+  USING (tenant_id = app_current_tenant());
+
+-- gradebook_categories: categorias ponderadas del libro de calificaciones.
+ALTER TABLE gradebook_categories ENABLE ROW LEVEL SECURITY;
+ALTER TABLE gradebook_categories FORCE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON gradebook_categories
+  USING (tenant_id = app_current_tenant());
+
+-- assessments: examenes, tareas, foros calificables, rubricas.
+ALTER TABLE assessments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE assessments FORCE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON assessments
+  USING (tenant_id = app_current_tenant());
+
+-- questions: preguntas dentro de una evaluacion.
+ALTER TABLE questions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE questions FORCE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON questions
+  USING (tenant_id = app_current_tenant());
+
+-- submissions: intentos/entregas de un estudiante.
+ALTER TABLE submissions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE submissions FORCE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON submissions
+  USING (tenant_id = app_current_tenant());
+
+-- submission_answers: respuesta a cada pregunta dentro de un intento.
+ALTER TABLE submission_answers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE submission_answers FORCE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON submission_answers
+  USING (tenant_id = app_current_tenant());
+
+-- grades: nota final calculada de un intento/entrega.
+ALTER TABLE grades ENABLE ROW LEVEL SECURITY;
+ALTER TABLE grades FORCE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON grades
+  USING (tenant_id = app_current_tenant());
+
+-- grading_scales: escalas de nota propias de cada tenant (vigesimal/centesimal/literal).
+ALTER TABLE grading_scales ENABLE ROW LEVEL SECURITY;
+ALTER TABLE grading_scales FORCE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON grading_scales
+  USING (tenant_id = app_current_tenant());
+
+-- attendance_records: registros de asistencia.
+ALTER TABLE attendance_records ENABLE ROW LEVEL SECURITY;
+ALTER TABLE attendance_records FORCE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON attendance_records
+  USING (tenant_id = app_current_tenant());
+
+-- certificate_templates: plantillas de certificado configuradas por el tenant.
+ALTER TABLE certificate_templates ENABLE ROW LEVEL SECURITY;
+ALTER TABLE certificate_templates FORCE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON certificate_templates
+  USING (tenant_id = app_current_tenant());
+
+-- certificates: certificados emitidos.
+-- NOTA: el endpoint PUBLICO de verificacion (GET /verify/:codigo, ver
+-- docs/architecture/04-flujos-criticos.md, seccion 4.3) NO puede pasar por
+-- esta politica porque no conoce el tenant de antemano (alguien externo solo
+-- tiene el codigo). Ese endpoint usa una consulta especial con un usuario de
+-- base de datos con permiso BYPASS RLS acotado a esa unica consulta de solo
+-- lectura (se implementara junto al modulo de certificados).
+ALTER TABLE certificates ENABLE ROW LEVEL SECURITY;
+ALTER TABLE certificates FORCE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON certificates
+  USING (tenant_id = app_current_tenant());
+
+-- tenant_features: interruptores de funciones activas por tenant (feature flags).
+ALTER TABLE tenant_features ENABLE ROW LEVEL SECURITY;
+ALTER TABLE tenant_features FORCE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON tenant_features
+  USING (tenant_id = app_current_tenant());
+
+-- audit_logs: registro de acciones sensibles (ver ADR y 07-infraestructura.md, 7.6).
+ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE audit_logs FORCE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON audit_logs
+  USING (tenant_id = app_current_tenant());

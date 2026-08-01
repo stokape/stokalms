@@ -1,0 +1,33 @@
+{
+  "name": "stoka-lms",
+  "version": "0.1.0",
+  "private": true,
+
+  "description": "Stoka LMS - Plataforma SaaS multi-tenant de gestion de aprendizaje (LMS) para entidades educativas.",
+
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f"
+  },
+
+  "devDependencies": {
+    "turbo": "^2.1.3"
+  },
+
+  "engines": {
+    "node": ">=20.0.0"
+  },
+
+  "packageManager": "npm@11.10.0"
+}

@@ -1,0 +1,38 @@
+# Dependencias instaladas por npm en cada app/paquete del monorepo.
+# Nunca se versionan: se reconstruyen con "npm install" en cualquier maquina.
+node_modules/
+
+# Carpetas de compilacion generadas por NestJS (apps/api) y Next.js (apps/web).
+# Se regeneran con "npm run build", no son codigo fuente.
+dist/
+build/
+.next/
+out/
+
+# Cache local de Turborepo (turbo run ...). Acelera builds repetidos en la
+# misma maquina, no debe compartirse entre desarrolladores.
+.turbo/
+
+# Variables de entorno REALES (contraseñas, claves de API, cadenas de conexion).
+# Solo se versiona ".env.example" como plantilla sin datos sensibles.
+.env
+.env.local
+.env.*.local
+
+# Archivos generados por Prisma que dependen de la version de node_modules.
+# El "schema.prisma" (codigo fuente) SI se versiona; el cliente generado no.
+apps/api/generated/
+
+# Volumenes de datos de Docker Compose si se montan como carpetas locales
+# (Postgres, MinIO, Keycloak). Contienen datos de desarrollo, no codigo.
+docker-data/
+
+# Logs y reportes de cobertura de pruebas.
+*.log
+coverage/
+
+# Archivos propios del sistema operativo o del editor, irrelevantes para el codigo.
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json

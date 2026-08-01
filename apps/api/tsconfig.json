@@ -1,0 +1,27 @@
+{
+  // Configuracion del compilador de TypeScript para el backend NestJS.
+  // NestJS usa "decoradores" (@Module, @Controller, @Injectable...) para
+  // declarar su arquitectura; varias opciones de abajo existen SOLO para
+  // que esos decoradores funcionen correctamente.
+  "compilerOptions": {
+    "module": "commonjs",              // Formato de modulos que entiende Node.js.
+    "declaration": true,                // Genera archivos .d.ts (tipos) junto al build.
+    "removeComments": true,             // El build de produccion no necesita comentarios.
+    "emitDecoratorMetadata": true,      // Requerido por NestJS: guarda metadata de tipos
+                                         // para que la inyeccion de dependencias (DI)
+                                         // sepa que clase instanciar en cada @Injectable.
+    "experimentalDecorators": true,     // Habilita la sintaxis @Decorador de TypeScript.
+    "allowSyntheticDefaultImports": true,
+    "target": "ES2021",                 // Version de JavaScript de salida (Node 20+ la soporta).
+    "sourceMap": true,                  // Permite depurar el .ts original aunque se ejecute el .js compilado.
+    "outDir": "./dist",                 // Carpeta de salida del build (ver .gitignore: no se versiona).
+    "baseUrl": "./",
+    "incremental": true,                // Acelera recompilaciones sucesivas (cachea info de tipos).
+    "skipLibCheck": true,               // No revisa tipos dentro de node_modules (mas rapido, es codigo de terceros).
+    "strictNullChecks": true,           // Obliga a manejar explicitamente null/undefined (menos bugs en runtime).
+    "noImplicitAny": true,              // Prohibe variables sin tipo definido ni inferible ("any" implicito).
+    "strictBindCallApply": true,
+    "forceConsistentCasingInFileNames": true, // Evita bugs de mayusculas/minusculas al mover codigo entre Windows/Linux.
+    "noFallthroughCasesInSwitch": true
+  }
+}

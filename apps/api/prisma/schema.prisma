@@ -1,0 +1,617 @@
+// ============================================================================
+// schema.prisma — Fuente de verdad del modelo de datos de Stoka LMS.
+//
+// Este archivo es la "traduccion a codigo" del diagrama entidad-relacion
+// documentado en docs/architecture/02-modelo-de-datos.md. Cada modelo de
+// abajo corresponde exactamente a una entidad de ese diagrama; si cambias
+// algo aqui, actualiza tambien el documento (y viceversa).
+//
+// Como funciona Prisma en este proyecto:
+//   1) Este archivo describe las tablas (en lenguaje Prisma, no SQL directo).
+//   2) "npx prisma migrate dev" LEE este archivo, genera SQL de migracion,
+//      y lo aplica contra la base de datos definida en DATABASE_URL (.env).
+//   3) "npx prisma generate" LEE este archivo y genera un cliente de
+//      TypeScript (en apps/api/generated/, ver .gitignore) con autocompletado
+//      exacto para cada modelo — eso es lo que usa PrismaService.
+//
+// IMPORTANTE — Row-Level Security (aislamiento multi-tenant, ver
+// docs/architecture/adr/ADR-001-multi-tenancy.md): Prisma NO tiene sintaxis
+// propia para declarar politicas RLS de PostgreSQL. Por eso, ademas de este
+// archivo, existe "apps/api/prisma/rls-policies.sql", que se aplica DESPUES
+// de cada migracion y activa el aislamiento a nivel de base de datos para
+// cada tabla que tenga "tenantId".
+// ============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  // Prisma lee la variable DATABASE_URL del ".env" (ver .env.example, raiz
+  // del repo) — nunca se escribe la cadena de conexion real aqui.
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// TENANT — cada entidad educativa (instituto, universidad, academia) que usa
+// la plataforma. Es el "inquilino" del que habla la guia no tecnica
+// (docs/guia-para-no-tecnicos.md, seccion 1: "un edificio con muchos inquilinos").
+// ============================================================================
+model Tenant {
+  id             String   @id @default(uuid())
+  name           String
+  // Plan comercial contratado (ej. "basico", "pro", "enterprise"); determina
+  // los feature flags por defecto en TenantFeature.
+  plan           String   @default("basico")
+  // Configuracion de marca (logo, colores) en JSON: cambia con frecuencia y
+  // es especifica de cada tenant, por eso no se modela como columnas fijas
+  // (ver docs/architecture/02-modelo-de-datos.md, seccion 2.2).
+  branding       Json     @default("{}")
+  defaultLocale  String   @default("es") @map("default_locale")
+  timezone       String   @default("America/Lima")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  // --- Relaciones: todo lo que "pertenece" a este tenant ---
+  domains             TenantDomain[]
+  userMemberships     UserTenant[]
+  roles               Role[]
+  terms               Term[]
+  gradingScales       GradingScale[]
+  certificateTemplates CertificateTemplate[]
+  features            TenantFeature[]
+  auditLogs           AuditLog[]
+
+  @@map("tenants")
+}
+
+// Dominio/subdominio propio de un tenant (ej. "academia" -> academia.stokalms.com,
+// o un dominio custom "campus.institutosanmartin.edu.pe"). El middleware de
+// resolucion de tenant (src/common/tenant) consulta esta tabla para saber a
+// que tenantId corresponde el "Host" de cada request entrante.
+model TenantDomain {
+  id       String @id @default(uuid())
+  tenantId String @map("tenant_id")
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  // Dominio completo, ej. "academia.stokalms.com". Debe ser unico en TODA la
+  // plataforma (dos tenants no pueden compartir el mismo dominio de entrada).
+  domain   String @unique
+  isPrimary Boolean @default(true) @map("is_primary")
+
+  @@index([tenantId])
+  @@map("tenant_domains")
+}
+
+// ============================================================================
+// USUARIOS — USER es GLOBAL (una persona, una sola cuenta, sin importar en
+// cuantos tenants participe). UserTenant es la MEMBRESIA de esa persona en
+// un tenant especifico, y es la tabla que realmente lleva tenantId (ver
+// docs/architecture/02-modelo-de-datos.md, seccion 2.2, primer punto).
+// ============================================================================
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  // Contraseña ya "hasheada" (nunca se guarda en texto plano). En el modulo
+  // de autenticacion (proximo paso) esto convive con el login via Keycloak.
+  passwordHash String?  @map("password_hash")
+  fullName     String   @map("full_name")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  memberships UserTenant[]
+  auditLogs   AuditLog[]
+
+  @@map("users")
+}
+
+// Membresia de un User dentro de un Tenant especifico. Un mismo profesor
+// puede tener una fila aqui por cada instituto en el que dicta clases.
+model UserTenant {
+  id       String @id @default(uuid())
+  userId   String @map("user_id")
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenantId String @map("tenant_id")
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  // "active" | "suspended" | "invited" — controla si esta persona puede
+  // iniciar sesion dentro de ESTE tenant en particular.
+  status   String @default("active")
+
+  roles       UserRole[]
+  enrollments Enrollment[]
+
+  // Un mismo usuario no puede tener dos membresias distintas en el mismo tenant.
+  @@unique([userId, tenantId])
+  @@index([tenantId])
+  @@map("user_tenants")
+}
+
+// ============================================================================
+// RBAC — Roles y permisos (ver docs/architecture/03-rbac.md). Estas tablas
+// son la FUENTE DE VERDAD que el motor Casbin (proximo paso) lee para armar
+// sus politicas en memoria; Casbin nunca decide sin consultar estas tablas.
+// ============================================================================
+model Role {
+  id           String  @id @default(uuid())
+  // tenantId nulo = rol BASE del sistema (Admin, Docente, Estudiante...),
+  // compartido por todos los tenants. Un rol con tenantId propio es un rol
+  // personalizado creado por ese tenant especifico (ver 03-rbac.md, 3.3).
+  tenantId     String? @map("tenant_id")
+  tenant       Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name         String
+  // Roles del sistema (isSystemRole = true) no pueden borrarse desde el panel
+  // de administracion, aunque sus permisos si sean editables por tenant.
+  isSystemRole Boolean @default(false) @map("is_system_role")
+
+  permissions RolePermission[]
+  assignments UserRole[]
+
+  @@index([tenantId])
+  @@map("roles")
+}
+
+// Catalogo GLOBAL de permisos posibles, expresados como "recurso:accion"
+// (ej. resource="course", action="create"). No tiene tenantId: la lista de
+// que PERMISOS EXISTEN es la misma para toda la plataforma; lo que cambia
+// por tenant es que ROL tiene asignado cada permiso (tabla RolePermission).
+model Permission {
+  id       String @id @default(uuid())
+  resource String
+  action   String
+
+  roles RolePermission[]
+
+  @@unique([resource, action])
+  @@map("permissions")
+}
+
+// Tabla "puente" muchos-a-muchos entre Role y Permission: cada fila dice
+// "este rol incluye este permiso".
+model RolePermission {
+  id           String     @id @default(uuid())
+  roleId       String     @map("role_id")
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permissionId String     @map("permission_id")
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+// Asignacion de un Rol a una Membresia (UserTenant) con un ALCANCE opcional:
+// si scopeCourseId es null, el rol aplica a todo el tenant; si tiene un
+// valor, el rol solo aplica dentro de ese curso especifico (ver 03-rbac.md,
+// seccion 3.4 y el ejemplo del profesor que tambien es estudiante).
+model UserRole {
+  id             String      @id @default(uuid())
+  // "tenantId" esta REPETIDO aqui a proposito (ya se puede deducir siguiendo
+  // userTenant -> tenant), aunque tecnicamente es redundante. Se llama
+  // "denormalizacion": la copiamos en cada tabla de negocio para que la
+  // politica de Row-Level Security (ver prisma/rls-policies.sql y
+  // docs/architecture/adr/ADR-001-multi-tenancy.md) pueda comparar
+  // "tenant_id = current_setting(...)" DIRECTAMENTE, sin tener que hacer un
+  // JOIN dentro de la politica (los JOINs dentro de politicas RLS se evaluan
+  // en CADA fila de CADA consulta, y eso es lento a gran escala).
+  tenantId       String      @map("tenant_id")
+  userTenantId   String      @map("user_tenant_id")
+  userTenant     UserTenant  @relation(fields: [userTenantId], references: [id], onDelete: Cascade)
+  roleId         String      @map("role_id")
+  role           Role        @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  scopeCourseId  String?     @map("scope_course_id")
+  scopeCourse    Course?     @relation(fields: [scopeCourseId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([userTenantId])
+  @@index([scopeCourseId])
+  @@map("user_roles")
+}
+
+// ============================================================================
+// ESTRUCTURA ACADEMICA — Term > Course > Section, y Course > Module > Lesson > Resource
+// (ver docs/architecture/02-modelo-de-datos.md y docs/guia-para-no-tecnicos.md, seccion 2).
+// ============================================================================
+
+// Periodo academico propio de un tenant (ej. "2026 - Semestre I"). Cada
+// tenant define el nombre/duracion que usa (semestre, ciclo, trimestre...).
+model Term {
+  id        String   @id @default(uuid())
+  tenantId  String   @map("tenant_id")
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name      String
+  startDate DateTime @map("start_date")
+  endDate   DateTime @map("end_date")
+
+  courses Course[]
+
+  @@index([tenantId])
+  @@map("terms")
+}
+
+model Course {
+  id              String   @id @default(uuid())
+  tenantId        String   @map("tenant_id")
+  termId          String   @map("term_id")
+  term            Term     @relation(fields: [termId], references: [id], onDelete: Cascade)
+  code            String
+  title           String
+  // Escala de notas que usa ESTE curso (cada tenant puede tener varias
+  // escalas definidas y elegir cual aplica a cada curso).
+  gradingScaleId  String?  @map("grading_scale_id")
+  gradingScale    GradingScale? @relation(fields: [gradingScaleId], references: [id])
+
+  sections           Section[]
+  modules             Module[]
+  assessments         Assessment[]
+  gradebookCategories GradebookCategory[]
+  roleAssignments     UserRole[]
+
+  @@index([tenantId])
+  @@index([termId])
+  @@map("courses")
+}
+
+model Section {
+  id       String @id @default(uuid())
+  // Denormalizado para Row-Level Security directa (ver explicacion completa
+  // en el modelo UserRole, mas arriba, y ADR-001-multi-tenancy.md).
+  tenantId String @map("tenant_id")
+  courseId String @map("course_id")
+  course   Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  name     String
+  // Horario de la seccion en JSON (dias, horas, aula) — flexible porque
+  // cada institucion arma sus horarios de forma distinta.
+  schedule Json   @default("{}")
+  capacity Int    @default(0)
+
+  enrollments Enrollment[]
+
+  @@index([tenantId])
+  @@index([courseId])
+  @@map("sections")
+}
+
+model Module {
+  id       String @id @default(uuid())
+  // Denormalizado para RLS directa (ver ADR-001-multi-tenancy.md).
+  tenantId String @map("tenant_id")
+  courseId String @map("course_id")
+  course   Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  title    String
+  order    Int    @default(0)
+
+  lessons Lesson[]
+  // Modulos que este modulo exige tener completos antes de desbloquearse
+  // (ver docs/guia-para-no-tecnicos.md, seccion 2, ejemplo de TechFuturo).
+  requiredBy   ModulePrerequisite[] @relation("RequiredModule")
+  prerequisites ModulePrerequisite[] @relation("DependentModule")
+
+  @@index([tenantId])
+  @@index([courseId])
+  @@map("modules")
+}
+
+// Tabla puente que modela "el modulo B requiere haber completado el modulo A".
+// Se modela como tabla aparte (en vez de una columna simple) porque un
+// modulo podria, a futuro, depender de MAS de un prerequisito.
+model ModulePrerequisite {
+  id                 String @id @default(uuid())
+  dependentModuleId  String @map("dependent_module_id")
+  dependentModule    Module @relation("DependentModule", fields: [dependentModuleId], references: [id], onDelete: Cascade)
+  requiredModuleId   String @map("required_module_id")
+  requiredModule     Module @relation("RequiredModule", fields: [requiredModuleId], references: [id], onDelete: Cascade)
+
+  @@unique([dependentModuleId, requiredModuleId])
+  @@map("module_prerequisites")
+}
+
+model Lesson {
+  id       String @id @default(uuid())
+  // Denormalizado para RLS directa (ver ADR-001-multi-tenancy.md).
+  tenantId String @map("tenant_id")
+  moduleId String @map("module_id")
+  module   Module @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  title    String
+  content  String @default("")
+
+  resources Resource[]
+
+  @@index([tenantId])
+  @@index([moduleId])
+  @@map("lessons")
+}
+
+model Resource {
+  id         String @id @default(uuid())
+  // Denormalizado para RLS directa (ver ADR-001-multi-tenancy.md).
+  tenantId   String @map("tenant_id")
+  lessonId   String @map("lesson_id")
+  lesson     Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  // "video" | "pdf" | "scorm" | "link" | "doc" (ver docs/architecture/02-modelo-de-datos.md).
+  type       String
+  // URL dentro del almacenamiento de archivos (MinIO en local, S3/R2 en
+  // produccion — ver .env.example, seccion STORAGE_*).
+  storageUrl String @map("storage_url")
+  metadata   Json   @default("{}")
+
+  @@index([tenantId])
+  @@index([lessonId])
+  @@map("resources")
+}
+
+// ============================================================================
+// MATRICULA — vincula un UserTenant (estudiante) con una Section especifica.
+// ============================================================================
+model Enrollment {
+  id           String   @id @default(uuid())
+  // Denormalizado para RLS directa (ver ADR-001-multi-tenancy.md).
+  tenantId     String   @map("tenant_id")
+  sectionId    String   @map("section_id")
+  section      Section  @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  userTenantId String   @map("user_tenant_id")
+  userTenant   UserTenant @relation(fields: [userTenantId], references: [id], onDelete: Cascade)
+  // "active" | "dropped" | "completed" — "completed" es lo que puede disparar
+  // la evaluacion de criterios de emision de certificado (ver flujo 4.3 en
+  // docs/architecture/04-flujos-criticos.md).
+  status       String   @default("active")
+  enrolledAt   DateTime @default(now()) @map("enrolled_at")
+
+  submissions        Submission[]
+  attendanceRecords   AttendanceRecord[]
+  certificates        Certificate[]
+
+  @@unique([sectionId, userTenantId])
+  @@index([tenantId])
+  @@index([sectionId])
+  @@map("enrollments")
+}
+
+// ============================================================================
+// EVALUACIONES Y CALIFICACIONES (ver docs/architecture/04-flujos-criticos.md,
+// seccion 4.2, y docs/guia-para-no-tecnicos.md, seccion 4).
+// ============================================================================
+
+model GradebookCategory {
+  id         String @id @default(uuid())
+  // Denormalizado para RLS directa (ver ADR-001-multi-tenancy.md).
+  tenantId   String @map("tenant_id")
+  courseId   String @map("course_id")
+  course     Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  name       String
+  // Peso de esta categoria en la nota final del curso, en porcentaje (0-100).
+  weightPct  Float  @map("weight_pct")
+  // Cuantas notas de la categoria se descartan (la(s) mas baja(s)) al
+  // calcular el promedio — ver ejemplo en docs/guia-para-no-tecnicos.md, 4.2.
+  dropLowest Int    @default(0) @map("drop_lowest")
+
+  assessments Assessment[]
+
+  @@index([tenantId])
+  @@index([courseId])
+  @@map("gradebook_categories")
+}
+
+model Assessment {
+  id                  String  @id @default(uuid())
+  // Denormalizado para RLS directa (ver ADR-001-multi-tenancy.md).
+  tenantId            String  @map("tenant_id")
+  courseId            String  @map("course_id")
+  course              Course  @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  gradebookCategoryId String  @map("gradebook_category_id")
+  gradebookCategory   GradebookCategory @relation(fields: [gradebookCategoryId], references: [id])
+  // "exam" | "assignment" | "forum" | "rubric"
+  type        String
+  // Configuracion especifica del tipo (ej. auto_publish, ventana de tiempo,
+  // politica de recuperacion) — flexible porque cada tipo tiene sus propias
+  // opciones (ver docs/architecture/02-modelo-de-datos.md, ASSESSMENT.config).
+  config      Json    @default("{}")
+  maxPoints   Float   @map("max_points")
+  maxAttempts Int     @default(1) @map("max_attempts")
+
+  questions   Question[]
+  submissions Submission[]
+
+  @@index([tenantId])
+  @@index([courseId])
+  @@map("assessments")
+}
+
+model Question {
+  id            String @id @default(uuid())
+  // Denormalizado para RLS directa (ver ADR-001-multi-tenancy.md).
+  tenantId      String @map("tenant_id")
+  assessmentId  String @map("assessment_id")
+  assessment    Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  // "mcq" (opcion multiple) | "open" (respuesta abierta) | "tf" (verdadero/falso) | "matching" (emparejamiento)
+  type          String
+  body          Json
+  // Respuesta(s) correcta(s), usada para auto-calificar tipos "mcq"/"tf"/"matching".
+  // En preguntas de tipo "open" queda vacia porque la califica un docente.
+  correctAnswer Json   @default("{}") @map("correct_answer")
+  points        Float
+
+  answers SubmissionAnswer[]
+
+  @@index([tenantId])
+  @@index([assessmentId])
+  @@map("questions")
+}
+
+model Submission {
+  id            String   @id @default(uuid())
+  // Denormalizado para RLS directa (ver ADR-001-multi-tenancy.md).
+  tenantId      String   @map("tenant_id")
+  assessmentId  String   @map("assessment_id")
+  assessment    Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  enrollmentId  String   @map("enrollment_id")
+  enrollment    Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  // Cada intento crea una fila NUEVA (nunca se sobreescribe una anterior),
+  // para preservar el historial completo de intentos (ver 04-flujos-criticos.md, 4.2).
+  attemptNumber Int      @default(1) @map("attempt_number")
+  submittedAt   DateTime @default(now()) @map("submitted_at")
+  // "in_progress" | "submitted" | "pending_review" | "graded"
+  status        String   @default("submitted")
+
+  answers SubmissionAnswer[]
+  grade   Grade?
+
+  @@index([tenantId])
+  @@index([assessmentId])
+  @@index([enrollmentId])
+  @@map("submissions")
+}
+
+model SubmissionAnswer {
+  id           String     @id @default(uuid())
+  // Denormalizado para RLS directa (ver ADR-001-multi-tenancy.md).
+  tenantId     String     @map("tenant_id")
+  submissionId String     @map("submission_id")
+  submission   Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  questionId   String     @map("question_id")
+  question     Question   @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  answer       Json
+  // Puntaje obtenido en ESTA pregunta especifica (auto-calculado o puesto
+  // manualmente por el docente segun el tipo de pregunta).
+  score        Float?
+  feedback     String?
+
+  @@unique([submissionId, questionId])
+  @@index([tenantId])
+  @@map("submission_answers")
+}
+
+model Grade {
+  id           String     @id @default(uuid())
+  // Denormalizado para RLS directa (ver ADR-001-multi-tenancy.md).
+  tenantId     String     @map("tenant_id")
+  submissionId String     @unique @map("submission_id")
+  submission   Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  rawScore     Float      @map("raw_score")
+  // Nota final ya aplicando la escala del tenant (ver GradingScale) y el
+  // redondeo configurado — ver ejemplo numerico completo en
+  // docs/guia-para-no-tecnicos.md, seccion 4.4.
+  finalScore   Float      @map("final_score")
+  letterGrade  String?    @map("letter_grade")
+  // Mientras "published" es false, el estudiante NO ve esta nota todavia
+  // (el docente puede seguir corrigiendola antes de publicar el bloque).
+  published    Boolean    @default(false)
+
+  @@index([tenantId])
+  @@map("grades")
+}
+
+// Escala de notas propia de un tenant (vigesimal/centesimal/literal). Ver
+// docs/guia-para-no-tecnicos.md, seccion 4.2 (Instituto San Martin vs TechFuturo).
+model GradingScale {
+  id              String @id @default(uuid())
+  tenantId        String @map("tenant_id")
+  tenant          Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name            String
+  // "vigesimal" (0-20) | "centesimal" (0-100) | "literal" (A/B/C/D/F, etc.)
+  type            String
+  // Bandas de conversion (ej. de rango numerico a letra), en JSON porque
+  // cada tenant define sus propios cortes.
+  bands           Json   @default("{}")
+  decimalRounding Int    @default(0) @map("decimal_rounding")
+
+  courses Course[]
+
+  @@index([tenantId])
+  @@map("grading_scales")
+}
+
+// ============================================================================
+// ASISTENCIA
+// ============================================================================
+model AttendanceRecord {
+  id           String   @id @default(uuid())
+  // Denormalizado para RLS directa (ver ADR-001-multi-tenancy.md).
+  tenantId     String   @map("tenant_id")
+  enrollmentId String   @map("enrollment_id")
+  enrollment   Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  sessionDate  DateTime @map("session_date")
+  // "present" | "absent" | "late" | "excused"
+  status       String
+  // "manual" | "qr" — como se registro esta asistencia.
+  method       String   @default("manual")
+
+  @@index([tenantId])
+  @@index([enrollmentId])
+  @@map("attendance_records")
+}
+
+// ============================================================================
+// CERTIFICADOS (ver docs/architecture/04-flujos-criticos.md, seccion 4.3, y
+// docs/guia-para-no-tecnicos.md, seccion 5).
+// ============================================================================
+model CertificateTemplate {
+  id            String   @id @default(uuid())
+  tenantId      String   @map("tenant_id")
+  tenant        Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name          String
+  // Plantilla HTML editable por el propio tenant desde el panel (sin tocar
+  // codigo); el worker de certificados la renderiza con Playwright headless
+  // (ver docs/architecture/01-arquitectura-alto-nivel.md, tabla de stack).
+  htmlTemplate  String   @map("html_template")
+  // Lista de campos dinamicos que la plantilla puede usar (ej. nombre del
+  // estudiante, curso, fecha, firma) — documentado para que el editor
+  // visual del panel sepa que variables ofrecer.
+  dynamicFields Json     @default("[]") @map("dynamic_fields")
+
+  certificates Certificate[]
+
+  @@index([tenantId])
+  @@map("certificate_templates")
+}
+
+model Certificate {
+  id                String   @id @default(uuid())
+  tenantId          String   @map("tenant_id")
+  tenant            Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  enrollmentId      String   @map("enrollment_id")
+  enrollment        Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  templateId        String   @map("template_id")
+  template          CertificateTemplate @relation(fields: [templateId], references: [id])
+  // Codigo UNICO EN TODA LA PLATAFORMA (no solo dentro del tenant), porque
+  // la URL publica de verificacion ("/verify/{codigo}") no lleva contexto
+  // de tenant en la ruta (ver 02-modelo-de-datos.md, seccion 2.2).
+  verificationCode  String   @unique @map("verification_code")
+  pdfUrl            String   @map("pdf_url")
+  issuedAt          DateTime @default(now()) @map("issued_at")
+  revoked           Boolean  @default(false)
+
+  @@index([tenantId])
+  @@map("certificates")
+}
+
+// ============================================================================
+// FEATURE FLAGS por tenant (ver docs/architecture/01-arquitectura-alto-nivel.md,
+// seccion 1.5).
+// ============================================================================
+model TenantFeature {
+  id         String  @id @default(uuid())
+  tenantId   String  @map("tenant_id")
+  tenant     Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  featureKey String  @map("feature_key")
+  enabled    Boolean @default(false)
+  config     Json    @default("{}")
+
+  @@unique([tenantId, featureKey])
+  @@map("tenant_features")
+}
+
+// ============================================================================
+// AUDITORIA — registra acciones sensibles (cambios de nota, certificados,
+// permisos). Requerido por la Ley N 29733 / GDPR (ver
+// docs/architecture/07-infraestructura.md, seccion 7.6).
+// ============================================================================
+model AuditLog {
+  id        String   @id @default(uuid())
+  tenantId  String   @map("tenant_id")
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userId    String?  @map("user_id")
+  user      User?    @relation(fields: [userId], references: [id])
+  action    String
+  payload   Json     @default("{}")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([tenantId])
+  @@map("audit_logs")
+}
