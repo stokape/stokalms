@@ -32,12 +32,23 @@ export default async function CourseDetailPage({
   const token = await requireAccessToken();
 
   let course: Course;
-  let sections: Section[];
   try {
     course = await apiFetch<Course>(token, `/courses/${courseId}`);
-    sections = await apiFetch<Section[]>(token, `/courses/${courseId}/sections`);
   } catch (err) {
     return <ErrorBanner message={toErrorMessage(err)} />;
+  }
+
+  // Las secciones se piden en un try/catch SEPARADO del curso: un Docente
+  // (sin "section:view", ver prisma/seed.js) puede tener perfecto sentido
+  // para ver el curso y su nota final, pero no la lista administrativa de
+  // secciones/matriculados — eso no deberia tumbar TODA la pagina, solo
+  // ocultar esa seccion (mismo patron que las plantillas en
+  // matriculas/[enrollmentId]/certificados/page.tsx).
+  let sections: Section[] | null = null;
+  try {
+    sections = await apiFetch<Section[]>(token, `/courses/${courseId}/sections`);
+  } catch {
+    sections = null;
   }
 
   return (
@@ -57,22 +68,26 @@ export default async function CourseDetailPage({
         </Link>
       </div>
 
-      <h2 className="mb-3 text-lg font-medium">Secciones</h2>
-      {sections.length === 0 ? (
-        <p className="text-zinc-500">Este curso todavía no tiene secciones.</p>
-      ) : (
-        <ul className="divide-y divide-zinc-200 dark:divide-zinc-800">
-          {sections.map((section) => (
-            <li key={section.id} className="py-3">
-              <Link href={`/cursos/${courseId}/secciones/${section.id}`} className="hover:underline">
-                {section.name}{' '}
-                <span className="text-sm text-zinc-500">
-                  (cupo: {section.capacity > 0 ? section.capacity : 'sin límite'})
-                </span>
-              </Link>
-            </li>
-          ))}
-        </ul>
+      {sections && (
+        <>
+          <h2 className="mb-3 text-lg font-medium">Secciones</h2>
+          {sections.length === 0 ? (
+            <p className="text-zinc-500">Este curso todavía no tiene secciones.</p>
+          ) : (
+            <ul className="divide-y divide-zinc-200 dark:divide-zinc-800">
+              {sections.map((section) => (
+                <li key={section.id} className="py-3">
+                  <Link href={`/cursos/${courseId}/secciones/${section.id}`} className="hover:underline">
+                    {section.name}{' '}
+                    <span className="text-sm text-zinc-500">
+                      (cupo: {section.capacity > 0 ? section.capacity : 'sin límite'})
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
       )}
     </div>
   );

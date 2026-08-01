@@ -6,6 +6,7 @@ Plataforma SaaS multi-tenant de gestión de aprendizaje (LMS) para entidades edu
 
 - [`docs/architecture/`](docs/architecture/README.md) — arquitectura técnica completa (stack, modelo de datos, RBAC, flujos, API, roadmap, infraestructura) con sus [ADRs](docs/architecture/adr/).
 - [`docs/guia-para-no-tecnicos.md`](docs/guia-para-no-tecnicos.md) — la misma información explicada sin jerga técnica, con ejemplos.
+- [`docs/manuales/`](docs/manuales/README.md) — manuales de USO para personas no técnicas: primeros pasos, uno por rol (Estudiante / Docente-Coordinador-Administrador) y resolución de problemas.
 
 Todo el código de este repositorio implementa las decisiones documentadas ahí — si algo en el código no coincide con esos documentos, uno de los dos está desactualizado y hay que corregirlo.
 
@@ -213,6 +214,7 @@ Este es el cimiento del proyecto: estructura, entorno local, modelo de datos, ai
 2. Matrícula masiva (CSV/Excel) — hoy solo existe la individual.
 3. Panel de administración para asignar roles a usuarios (hoy se hace manualmente en la base de datos; ver el ejemplo en el historial de commits).
 4. Pantallas de negocio para Evaluaciones (crear preguntas, rendir un examen, calificar a mano) — hoy esos flujos solo existen como endpoints de API, probados con `curl`.
-5. Manuales de uso por rol, instalación y resolución de problemas, pensados para personas no técnicas (en construcción — ver `docs/manuales/`).
+
+Manuales de uso por rol, primeros pasos y resolución de problemas para personas no técnicas: ver [docs/manuales/](docs/manuales/README.md) (cubren exactamente lo que ya existe en pantalla; se amplían a medida que se agreguen las pantallas de la lista de arriba).
 
 Ver el detalle completo de fases en [docs/architecture/06-roadmap.md](docs/architecture/06-roadmap.md).
