@@ -39,7 +39,8 @@ const PERMISSIONS = [
   ['assessment', 'view'], ['assessment', 'create'], ['assessment', 'edit'], ['assessment', 'delete'], ['assessment', 'publish'],
   ['submission', 'view'], ['submission', 'create'], ['submission', 'grade'],
   ['grade', 'view'], ['grade', 'view_own'], ['grade', 'edit'], ['grade', 'publish'],
-  ['certificate', 'view'], ['certificate', 'issue'], ['certificate', 'revoke'],
+  ['certificate', 'view'], ['certificate', 'view_own'], ['certificate', 'issue'], ['certificate', 'revoke'],
+  ['certificate_template', 'view'], ['certificate_template', 'create'], ['certificate_template', 'edit'], ['certificate_template', 'delete'],
   ['attendance', 'view'], ['attendance', 'create'], ['attendance', 'edit'],
   ['role', 'view'], ['role', 'create'], ['role', 'edit'], ['role', 'delete'], ['role', 'assign'],
 ];
@@ -65,7 +66,8 @@ const SYSTEM_ROLES = [
       ['enrollment', 'view'], ['enrollment', 'create'], ['enrollment', 'delete'], ['enrollment', 'bulk_import'],
       ['gradebook_category', 'view'],
       ['module', 'view'], ['lesson', 'view'],
-      ['grade', 'view'], ['certificate', 'view'],
+      ['grade', 'view'], ['certificate', 'view'], ['certificate', 'issue'], ['certificate', 'revoke'],
+      ['certificate_template', 'view'], ['certificate_template', 'create'], ['certificate_template', 'edit'], ['certificate_template', 'delete'],
     ],
   ],
   [
@@ -81,6 +83,7 @@ const SYSTEM_ROLES = [
       ['grade', 'view'], ['grade', 'edit'], ['grade', 'publish'],
       ['attendance', 'view'], ['attendance', 'create'], ['attendance', 'edit'],
       ['certificate', 'view'], ['certificate', 'issue'],
+      ['certificate_template', 'view'],
     ],
   ],
   [
@@ -88,7 +91,7 @@ const SYSTEM_ROLES = [
     [
       ['course', 'view'], ['module', 'view'], ['lesson', 'view'], ['resource', 'view'],
       ['assessment', 'view'], ['submission', 'view'], ['submission', 'create'],
-      ['grade', 'view_own'], ['certificate', 'view'],
+      ['grade', 'view_own'], ['certificate', 'view_own'],
     ],
   ],
   [
@@ -141,16 +144,32 @@ async function main() {
       create: { name: roleName, isSystemRole: true, tenantId: null },
     });
 
+    const currentPermissionIds = [];
     for (const [resource, action] of rolePermissions) {
       const permission = await prisma.permission.findUniqueOrThrow({
         where: { resource_action: { resource, action } },
       });
+      currentPermissionIds.push(permission.id);
       await prisma.rolePermission.upsert({
         where: { roleId_permissionId: { roleId: role.id, permissionId: permission.id } },
         update: {},
         create: { roleId: role.id, permissionId: permission.id },
       });
     }
+
+    // Este seed es DECLARATIVO, no solo aditivo: si un permiso se QUITA de
+    // la lista de SYSTEM_ROLES de arriba (como paso con Estudiante,
+    // "certificate:view" -> "certificate:view_own"), hay que borrar
+    // tambien la asignacion vieja — de lo contrario queda viva para
+    // siempre en la base de datos, porque el "upsert" de arriba solo sabe
+    // AGREGAR, nunca QUITAR. Se detecto este bug probando de verdad: un
+    // estudiante seguia viendo certificados ajenos despues de angostar su
+    // permiso, porque el rol todavia tenia la fila vieja de "view" sin
+    // que nadie la hubiera borrado.
+    await prisma.rolePermission.deleteMany({
+      where: { roleId: role.id, permissionId: { notIn: currentPermissionIds } },
+    });
+
     console.log(`  - ${roleName}: ${rolePermissions.length} permisos`);
   }
 

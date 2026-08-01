@@ -1,0 +1,27 @@
+// ============================================================================
+// verify.controller.ts — "GET /api/v1/verify/:codigo": el UNICO endpoint de
+// negocio de todo el backend que NO lleva "@UseGuards(JwtAuthGuard, ...)" a
+// proposito. Ver docs/architecture/04-flujos-criticos.md, seccion 4.3: quien
+// escanea el QR de un certificado impreso no tiene sesion ni token — es el
+// publico en general verificando que un documento sea autentico.
+//
+// Sigue pasando por TenantContextMiddleware (se aplica a "*" en
+// app.module.ts), pero eso no importa aqui: certificate.service.ts
+// (metodo "verifyPublic") resuelve el tenant a partir del CODIGO, no del
+// dominio del request, precisamente porque quien llama puede estar en
+// CUALQUIER dominio (ver la nota extensa en rls-policies.sql sobre
+// "find_certificate_tenant").
+// ============================================================================
+
+import { Controller, Get, Param } from '@nestjs/common';
+import { CertificateService } from './certificate.service';
+
+@Controller('verify')
+export class VerifyController {
+  constructor(private readonly certificateService: CertificateService) {}
+
+  @Get(':code')
+  verify(@Param('code') code: string) {
+    return this.certificateService.verifyPublic(code);
+  }
+}

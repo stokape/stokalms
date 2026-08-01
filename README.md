@@ -47,11 +47,13 @@ Stoka LMS/
             ├── auth/             # Login (Keycloak) + aprovisionamiento JIT
             ├── rbac/             # Motor de permisos (Casbin) + guard
             ├── common/filters/   # Traduce errores de Prisma a respuestas HTTP claras
+            ├── common/storage/   # Cliente de archivos (MinIO/S3), usado por Certificados
             └── modules/
                 ├── health/       # Endpoint de salud
                 ├── academic/     # Periodos, Cursos, Secciones
                 ├── enrollment/   # Matrícula individual
-                └── gradebook/    # Escalas, categorías, evaluaciones, entregas, notas
+                ├── gradebook/    # Escalas, categorías, evaluaciones, entregas, notas
+                └── certificates/ # Plantillas, emisión, revocación y verificación pública
     └── web/                      # Frontend Next.js
         ├── auth.ts               # Configuración de NextAuth.js (proveedor Keycloak)
         └── app/
@@ -154,17 +156,22 @@ Todos protegidos con `JwtAuthGuard` + `PermissionsGuard` (ver `docs/architecture
 | Preguntas | `POST/GET /courses/:courseId/assessments/:assessmentId/questions`, `PATCH/DELETE .../questions/:id` (oculta `correctAnswer` a quien no tenga `assessment:edit`) |
 | Entregas | `POST/GET .../assessments/:assessmentId/submissions` (auto-califica mcq/tf/matching), `PATCH .../submissions/:id/answers/:questionId` (calificación manual de preguntas abiertas) |
 | Notas finales | `POST /courses/:courseId/gradebook/publish` (calcula y publica), `GET /courses/:courseId/grades` (vista completa o solo propia, según permisos) |
+| Plantillas de certificado | `POST/GET /certificate-templates`, `GET/PATCH/DELETE /certificate-templates/:id` (recurso de tenant, no de curso) |
+| Certificados | `POST /enrollments/:enrollmentId/certificates` (emite; exige matrícula en estado `completed`), `GET /enrollments/:enrollmentId/certificates`, `GET /certificates/:id` (vista completa o solo propia), `PATCH /certificates/:id/revoke` (nunca se borra) |
+| Verificación pública | `GET /verify/:codigo` — **sin autenticación**, sin tenant conocido de antemano (ver la nota extensa en `rls-policies.sql` sobre `find_certificate_tenant`); devuelve solo nombre, curso, institución, fecha y si está vigente |
 
 Notas importantes encontradas al probar contra el sistema real (no solo revisando el código):
 - El `onDelete: Cascade` por defecto de Prisma borraba en cascada cursos/secciones/matrículas/notas/certificados al borrar su registro padre, sin avisar. Se cambió a `onDelete: Restrict` en toda la cadena académica (ver los comentarios en `schema.prisma`, empezando por el modelo `Course`), y se agregó un filtro global (`common/filters/prisma-exception.filter.ts`) que traduce ese error a un `409 Conflict` claro en vez de un `500` genérico.
 - El `ValidationPipe` global (`forbidNonWhitelisted: true`) rechazaba el campo `answer` de una entrega porque no tenía ningún decorador de `class-validator` — cualquier campo de un DTO que acepte JSON libre necesita al menos `@IsDefined()` para no ser tratado como "no permitido" (ver `submit-assessment.dto.ts`).
 - La nota final de un curso (ponderada por categorías, con `dropLowest`) **no se guarda** en su propia tabla: se recalcula cada vez a partir de las notas individuales por evaluación, para evitar dos fuentes de verdad desincronizadas (ver `gradebook.service.ts`).
+- La verificación pública de un certificado no conoce el tenant de antemano (solo el código, que puede llegar de un QR impreso desde cualquier dominio). Se resolvió con una función SQL `SECURITY DEFINER` (`find_certificate_tenant`, ver `rls-policies.sql`) que hace un bypass de Row-Level Security ACOTADO al mínimo indispensable (solo el `tenant_id`, nunca el certificado en sí); con ese dato, el resto de la consulta pasa por el carril normal de `withTenant` con RLS aplicada.
+- **Bug real encontrado probando con dos usuarios distintos**: `prisma/seed.js` solo AGREGABA permisos a los roles del sistema, nunca quitaba los que se retiraban de la lista. Al angostar el permiso de Estudiante de `certificate:view` (ver cualquier certificado del tenant) a `certificate:view_own` (solo el propio), la fila vieja de `view` seguía viva en la base de datos — un estudiante de prueba podía ver certificados ajenos conociendo el UUID de la matrícula. Se corrigió haciendo que el seed sea declarativo: al final de sembrar cada rol, borra cualquier `RolePermission` que ya no esté en la lista actual (ver el comentario extenso en `seed.js`).
 
 ## Qué sigue
 
-Este es el cimiento del proyecto: estructura, entorno local, modelo de datos, aislamiento multi-tenant, **autenticación real contra Keycloak** (backend y frontend), **motor de permisos (Casbin)**, un **frontend Next.js con login funcional**, y los módulos de **Académico, Matrícula y Evaluaciones/Gradebook** — todo validado de punta a punta con datos reales (incluyendo el cálculo ponderado de la nota final). Los próximos pasos, en orden:
+Este es el cimiento del proyecto: estructura, entorno local, modelo de datos, aislamiento multi-tenant, **autenticación real contra Keycloak** (backend y frontend), **motor de permisos (Casbin)**, un **frontend Next.js con login funcional**, y los módulos de **Académico, Matrícula, Evaluaciones/Gradebook y Certificados** — todo validado de punta a punta con datos reales (incluyendo el cálculo ponderado de la nota final y la emisión/verificación pública de un certificado real, con PDF generado por Chromium headless). Los próximos pasos, en orden:
 
-1. Certificados (generación automática, plantillas, verificación pública por QR) — ver `docs/architecture/04-flujos-criticos.md`, sección 4.3.
+1. Cola de generación de certificados (BullMQ + worker separado) — hoy la emisión es SÍNCRONA dentro del request (ver la nota de simplificación del MVP en `certificate-renderer.service.ts`); pasar a una cola es trabajo de infraestructura genuino que se justifica cuando el volumen de emisiones lo requiera.
 2. Matrícula masiva (CSV/Excel) — hoy solo existe la individual.
 3. Panel de administración para asignar roles a usuarios (hoy se hace manualmente en la base de datos; ver el ejemplo en el historial de commits).
 4. Pantallas de negocio en el frontend (hoy solo existe la pantalla de prueba `/dashboard`).

@@ -194,13 +194,49 @@ CREATE POLICY tenant_isolation ON certificate_templates
 -- NOTA: el endpoint PUBLICO de verificacion (GET /verify/:codigo, ver
 -- docs/architecture/04-flujos-criticos.md, seccion 4.3) NO puede pasar por
 -- esta politica porque no conoce el tenant de antemano (alguien externo solo
--- tiene el codigo). Ese endpoint usa una consulta especial con un usuario de
--- base de datos con permiso BYPASS RLS acotado a esa unica consulta de solo
--- lectura (se implementara junto al modulo de certificados).
+-- tiene el codigo). Ese endpoint usa la funcion "find_certificate_tenant"
+-- definida mas abajo, con permiso BYPASS RLS acotado a esa unica consulta.
 ALTER TABLE certificates ENABLE ROW LEVEL SECURITY;
 ALTER TABLE certificates FORCE ROW LEVEL SECURITY;
 CREATE POLICY tenant_isolation ON certificates
   USING (tenant_id = app_current_tenant());
+
+-- ----------------------------------------------------------------------------
+-- find_certificate_tenant: bypass ACOTADO de RLS para el endpoint publico de
+-- verificacion (GET /verify/:codigo, ver
+-- apps/api/src/modules/certificates/verify.service.ts).
+--
+-- Quien verifica un certificado no tiene sesion ni tenant conocido de
+-- antemano — solo tiene el codigo (ej. lo escaneo de un QR impreso). No hay
+-- forma de llamar a "withTenant(tenantId, ...)" (que es lo que activa
+-- correctamente la politica de arriba) porque todavia no sabemos el
+-- tenantId: es exactamente lo que esta funcion averigua.
+--
+-- "SECURITY DEFINER" hace que la funcion se ejecute con los privilegios de
+-- quien la CREO (el usuario administrador "stoka", superusuario que este
+-- mismo script usa via DATABASE_URL), no de quien la invoca. Un superusuario
+-- se salta RLS siempre (ver la nota extensa sobre "stoka_app" mas abajo en
+-- este archivo) — por eso esta funcion SI puede leer "certificates" sin que
+-- le aplique la politica "tenant_isolation".
+--
+-- El riesgo de un SECURITY DEFINER es que expone TODO lo que su cuerpo
+-- pueda leer a cualquiera con permiso de EJECUTARLA. Por eso esta funcion
+-- devuelve el MINIMO indispensable (un tenant_id, ni siquiera confirma que
+-- el codigo exista si no hace falta) y NUNCA los datos del certificado en
+-- si. Con ese tenant_id, verify.service.ts abre despues una transaccion
+-- normal con "withTenant" (que SI aplica RLS) para leer el certificado
+-- completo, dentro del mismo carril de aislamiento que usa el resto del
+-- backend — este bypass nunca evita la Row-Level Security del dato en si,
+-- solo el primer paso de "a que tenant pertenece este codigo".
+CREATE OR REPLACE FUNCTION find_certificate_tenant(p_verification_code text)
+RETURNS text AS $$
+  SELECT tenant_id FROM certificates WHERE verification_code = p_verification_code;
+$$ LANGUAGE sql SECURITY DEFINER STABLE SET search_path = public;
+
+-- Sin este GRANT, "stoka_app" (el rol restringido con el que corre el
+-- backend, ver mas abajo) no tendria permiso ni para EJECUTAR esta funcion,
+-- aunque la funcion en si corra con privilegios de "stoka".
+GRANT EXECUTE ON FUNCTION find_certificate_tenant(text) TO stoka_app;
 
 -- tenant_features: interruptores de funciones activas por tenant (feature flags).
 ALTER TABLE tenant_features ENABLE ROW LEVEL SECURITY;

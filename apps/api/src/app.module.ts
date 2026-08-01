@@ -26,9 +26,11 @@ import { TenantContextMiddleware } from './common/tenant/tenant-context.middlewa
 import { HealthModule } from './modules/health/health.module';
 import { AuthModule } from './auth/auth.module';
 import { RbacModule } from './rbac/rbac.module';
+import { StorageModule } from './common/storage/storage.module';
 import { AcademicModule } from './modules/academic/academic.module';
 import { EnrollmentModule } from './modules/enrollment/enrollment.module';
 import { GradebookModule } from './modules/gradebook/gradebook.module';
+import { CertificatesModule } from './modules/certificates/certificates.module';
 
 @Module({
   imports: [
@@ -47,6 +49,11 @@ import { GradebookModule } from './modules/gradebook/gradebook.module';
 
     // Resolucion del tenant activo por request (ver src/common/tenant/).
     TenantModule,
+
+    // Cliente de almacenamiento de archivos (MinIO/S3), usado por
+    // Certificados hoy y por cualquier modulo futuro que suba archivos
+    // (ver src/common/storage/).
+    StorageModule,
 
     // Autenticacion contra Keycloak + aprovisionamiento JIT (ver src/auth/).
     AuthModule,
@@ -68,6 +75,10 @@ import { GradebookModule } from './modules/gradebook/gradebook.module';
 
     // Evaluaciones, calificaciones y notas finales (ver src/modules/gradebook/).
     GradebookModule,
+
+    // Plantillas, emision, revocacion y verificacion publica de
+    // certificados (ver src/modules/certificates/).
+    CertificatesModule,
   ],
 })
 export class AppModule implements NestModule {

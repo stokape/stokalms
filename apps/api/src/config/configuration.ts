@@ -20,6 +20,13 @@ export interface AppConfig {
   env: string;
   port: number;
   platformRootDomain: string;
+  // URL publica y absoluta desde la que se puede llamar a ESTA misma API
+  // desde afuera (ej. al escanear un QR impreso en un certificado). Es
+  // deliberadamente distinta de "NEXT_PUBLIC_API_URL" (que lee el
+  // FRONTEND): esta la usa el propio BACKEND, del lado del servidor, para
+  // construir enlaces absolutos que van DENTRO de contenido generado (ver
+  // certificate.service.ts, que arma la URL que el QR codifica).
+  apiPublicUrl: string;
   database: {
     // Usuario administrador (superusuario): solo lo usa el CLI de Prisma
     // para migraciones, nunca el backend en tiempo de ejecucion.
@@ -56,6 +63,7 @@ export default (): AppConfig => ({
   env: process.env.NODE_ENV ?? 'development',
   port: parseInt(process.env.API_PORT ?? '3001', 10),
   platformRootDomain: process.env.PLATFORM_ROOT_DOMAIN ?? 'stokalms.local',
+  apiPublicUrl: process.env.API_PUBLIC_URL ?? `http://localhost:${process.env.API_PORT ?? '3001'}/api/v1`,
 
   database: {
     url: process.env.DATABASE_URL ?? '',
