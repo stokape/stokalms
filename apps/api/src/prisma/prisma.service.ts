@@ -35,7 +35,7 @@ import { PrismaClient, Prisma } from '@prisma/client';
 // PrismaClient (ej. tx.course.findMany(...)) pero atado a esa transaccion.
 type PrismaTransactionClient = Omit<
   PrismaClient,
-  '$connect' | '$disconnect' | '$on' | '$transaction' | '$extends'
+  '$connect' | '$disconnect' | '$on' | '$transaction' | '$extends' | '$use'
 >;
 
 @Injectable()

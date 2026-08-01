@@ -59,6 +59,7 @@ model Tenant {
   terms               Term[]
   gradingScales       GradingScale[]
   certificateTemplates CertificateTemplate[]
+  certificates        Certificate[]
   features            TenantFeature[]
   auditLogs           AuditLog[]
 
