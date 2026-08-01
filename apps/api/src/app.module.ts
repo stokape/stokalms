@@ -28,6 +28,7 @@ import { AuthModule } from './auth/auth.module';
 import { RbacModule } from './rbac/rbac.module';
 import { AcademicModule } from './modules/academic/academic.module';
 import { EnrollmentModule } from './modules/enrollment/enrollment.module';
+import { GradebookModule } from './modules/gradebook/gradebook.module';
 
 @Module({
   imports: [
@@ -64,6 +65,9 @@ import { EnrollmentModule } from './modules/enrollment/enrollment.module';
 
     // Matricula individual (ver src/modules/enrollment/).
     EnrollmentModule,
+
+    // Evaluaciones, calificaciones y notas finales (ver src/modules/gradebook/).
+    GradebookModule,
   ],
 })
 export class AppModule implements NestModule {

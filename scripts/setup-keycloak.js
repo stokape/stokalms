@@ -21,8 +21,10 @@
 //      aplicacion que habla con Keycloak deberia tener su propia identidad
 //      y su propio secreto — si el frontend se viera comprometido, revocar
 //      SU cliente no afecta al backend, y viceversa.
-//   4) Un usuario de prueba (maria@stoka-lms.test / Maria12345!) para poder
-//      probar el login de punta a punta sin depender de una cuenta real.
+//   4) Dos usuarios de prueba (ver TEST_USERS mas abajo: una "docente" y un
+//      "estudiante") para poder probar el login, y flujos que necesitan DOS
+//      personas distintas (ej. Evaluaciones: quien crea el examen no puede
+//      ser quien lo rinde), sin depender de cuentas reales.
 //
 // Como se usa: "npm run keycloak:setup" (ver el script en package.json,
 // raiz del repo). Requiere que "docker compose up -d" ya tenga Keycloak
@@ -40,15 +42,28 @@ const WEB_CLIENT_ID = 'stoka-web';
 const ADMIN_USER = 'admin';
 const ADMIN_PASSWORD = 'admin_dev_password';
 
-// Datos del usuario de prueba que este script crea, para poder validar el
-// login real (ver apps/api/src/auth/) sin tener que registrar una cuenta.
-const TEST_USER = {
-  username: 'maria@stoka-lms.test',
-  email: 'maria@stoka-lms.test',
-  firstName: 'Maria',
-  lastName: 'Estudiante',
-  password: 'Maria12345!',
-};
+// Usuarios de prueba que este script crea, para poder validar el login real
+// (ver apps/api/src/auth/) sin tener que registrar una cuenta. Se usan DOS
+// personas (no solo Maria) porque, al probar el modulo de Evaluaciones,
+// quien CREA un examen (docente) y quien lo RINDE (estudiante) no pueden
+// ser la misma persona sin volver confuso el escenario de prueba — ver
+// apps/api/src/modules/gradebook/.
+const TEST_USERS = [
+  {
+    username: 'maria@stoka-lms.test',
+    email: 'maria@stoka-lms.test',
+    firstName: 'Maria',
+    lastName: 'Docente',
+    password: 'Maria12345!',
+  },
+  {
+    username: 'carlos.estudiante@stoka-lms.test',
+    email: 'carlos.estudiante@stoka-lms.test',
+    firstName: 'Carlos',
+    lastName: 'Estudiante',
+    password: 'Carlos12345!',
+  },
+];
 
 async function main() {
   console.log(`[keycloak-setup] Conectando a ${KEYCLOAK_BASE_URL}...`);
@@ -79,7 +94,9 @@ async function main() {
   });
   const webClientSecret = await getClientSecret(adminToken, webClientUuid);
 
-  await ensureTestUser(adminToken);
+  for (const testUser of TEST_USERS) {
+    await ensureTestUser(adminToken, testUser);
+  }
 
   console.log('\n[keycloak-setup] Listo. Resumen:');
   console.log(`  Realm:               ${REALM_NAME}`);
@@ -87,7 +104,9 @@ async function main() {
   console.log(`  Secreto backend:     ${apiClientSecret}`);
   console.log(`  Cliente frontend:    ${WEB_CLIENT_ID}`);
   console.log(`  Secreto frontend:    ${webClientSecret}`);
-  console.log(`  Usuario de prueba:   ${TEST_USER.username} / ${TEST_USER.password}`);
+  for (const testUser of TEST_USERS) {
+    console.log(`  Usuario de prueba:   ${testUser.username} / ${testUser.password}`);
+  }
   console.log(
     '\n  Copia "Secreto backend" en KEYCLOAK_CLIENT_SECRET dentro de .env y apps/api/.env.',
   );
@@ -230,19 +249,19 @@ async function getClientSecret(adminToken, clientUuid) {
 }
 
 // ----------------------------------------------------------------------------
-// Crea el usuario de prueba "maria@stoka-lms.test", SOLO si no existe, y le
-// fija una contraseña PERMANENTE (temporary: false, para que no pida
+// Crea UN usuario de prueba (ver TEST_USERS, mas arriba), SOLO si no existe,
+// y le fija una contraseña PERMANENTE (temporary: false, para que no pida
 // cambiarla en el primer login durante las pruebas).
 // ----------------------------------------------------------------------------
-async function ensureTestUser(adminToken) {
+async function ensureTestUser(adminToken, testUser) {
   const list = await fetch(
-    `${KEYCLOAK_BASE_URL}/admin/realms/${REALM_NAME}/users?username=${encodeURIComponent(TEST_USER.username)}`,
+    `${KEYCLOAK_BASE_URL}/admin/realms/${REALM_NAME}/users?username=${encodeURIComponent(testUser.username)}`,
     { headers: adminHeaders(adminToken) },
   );
   const existing = await list.json();
 
   if (existing.length > 0) {
-    console.log(`[keycloak-setup] El usuario de prueba "${TEST_USER.username}" ya existia.`);
+    console.log(`[keycloak-setup] El usuario de prueba "${testUser.username}" ya existia.`);
     return;
   }
 
@@ -250,14 +269,14 @@ async function ensureTestUser(adminToken) {
     method: 'POST',
     headers: adminHeaders(adminToken),
     body: JSON.stringify({
-      username: TEST_USER.username,
-      email: TEST_USER.email,
-      firstName: TEST_USER.firstName,
-      lastName: TEST_USER.lastName,
+      username: testUser.username,
+      email: testUser.email,
+      firstName: testUser.firstName,
+      lastName: testUser.lastName,
       enabled: true,
       emailVerified: true,
       credentials: [
-        { type: 'password', value: TEST_USER.password, temporary: false },
+        { type: 'password', value: testUser.password, temporary: false },
       ],
     }),
   });
@@ -267,7 +286,7 @@ async function ensureTestUser(adminToken) {
       `No se pudo crear el usuario de prueba (HTTP ${create.status}).`,
     );
   }
-  console.log(`[keycloak-setup] Usuario de prueba "${TEST_USER.username}" creado.`);
+  console.log(`[keycloak-setup] Usuario de prueba "${testUser.username}" creado.`);
 }
 
 main().catch((err) => {

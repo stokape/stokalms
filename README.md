@@ -50,7 +50,8 @@ Stoka LMS/
             └── modules/
                 ├── health/       # Endpoint de salud
                 ├── academic/     # Periodos, Cursos, Secciones
-                └── enrollment/   # Matrícula individual
+                ├── enrollment/   # Matrícula individual
+                └── gradebook/    # Escalas, categorías, evaluaciones, entregas, notas
     └── web/                      # Frontend Next.js
         ├── auth.ts               # Configuración de NextAuth.js (proveedor Keycloak)
         └── app/
@@ -110,7 +111,16 @@ cd apps/web
 npm run dev
 ```
 
-El frontend queda en `http://localhost:3000`: el botón "Iniciar sesión" redirige a Keycloak (usuario de prueba: `maria@stoka-lms.test` / `Maria12345!`), y al volver muestra `/dashboard`, que llama a `GET /api/v1/auth/me` del backend con el token real de la sesión.
+El frontend queda en `http://localhost:3000`: el botón "Iniciar sesión" redirige a Keycloak, y al volver muestra `/dashboard`, que llama a `GET /api/v1/auth/me` del backend con el token real de la sesión.
+
+Usuarios de prueba que crea `npm run keycloak:setup` (ver `scripts/setup-keycloak.js`):
+
+| Usuario | Contraseña | Uso pensado |
+|---|---|---|
+| `maria@stoka-lms.test` | `Maria12345!` | Login básico / rol Estudiante de fábrica |
+| `carlos.estudiante@stoka-lms.test` | `Carlos12345!` | Estudiante "puro", para probar flujos donde el docente y el estudiante no pueden ser la misma persona (ej. rendir un examen) |
+
+Ningún usuario tiene rol asignado al crearse — hay que asignarlo manualmente en `user_roles` (ver ejemplos en el historial de commits) hasta que exista un panel de administración.
 
 Verificación rápida de que quedó bien:
 ```bash
@@ -138,14 +148,23 @@ Todos protegidos con `JwtAuthGuard` + `PermissionsGuard` (ver `docs/architecture
 | Cursos | `POST/GET /courses`, `GET/PATCH/DELETE /courses/:id` |
 | Secciones | `POST/GET /courses/:courseId/sections`, `GET/PATCH/DELETE /courses/:courseId/sections/:id` |
 | Matrícula | `POST/GET /courses/:courseId/sections/:sectionId/enrollments`, `PATCH .../enrollments/:id` (cambia estado: active/dropped/completed) |
+| Escalas de notas | `POST/GET /grading-scales`, `GET/PATCH/DELETE /grading-scales/:id` |
+| Categorías de calificación | `POST/GET /courses/:courseId/gradebook-categories`, `GET/PATCH/DELETE .../gradebook-categories/:id` |
+| Evaluaciones | `POST/GET /courses/:courseId/assessments`, `GET/PATCH/DELETE .../assessments/:id` |
+| Preguntas | `POST/GET /courses/:courseId/assessments/:assessmentId/questions`, `PATCH/DELETE .../questions/:id` (oculta `correctAnswer` a quien no tenga `assessment:edit`) |
+| Entregas | `POST/GET .../assessments/:assessmentId/submissions` (auto-califica mcq/tf/matching), `PATCH .../submissions/:id/answers/:questionId` (calificación manual de preguntas abiertas) |
+| Notas finales | `POST /courses/:courseId/gradebook/publish` (calcula y publica), `GET /courses/:courseId/grades` (vista completa o solo propia, según permisos) |
 
-Nota importante encontrada al probar contra la base real (no solo revisando el código): el `onDelete: Cascade` por defecto de Prisma borraba en cascada cursos/secciones/matrículas/notas/certificados al borrar su registro padre, sin avisar. Se cambió a `onDelete: Restrict` en toda la cadena académica (ver los comentarios en `schema.prisma`, empezando por el modelo `Course`), y se agregó un filtro global (`common/filters/prisma-exception.filter.ts`) que traduce ese error a un `409 Conflict` claro en vez de un `500` genérico.
+Notas importantes encontradas al probar contra el sistema real (no solo revisando el código):
+- El `onDelete: Cascade` por defecto de Prisma borraba en cascada cursos/secciones/matrículas/notas/certificados al borrar su registro padre, sin avisar. Se cambió a `onDelete: Restrict` en toda la cadena académica (ver los comentarios en `schema.prisma`, empezando por el modelo `Course`), y se agregó un filtro global (`common/filters/prisma-exception.filter.ts`) que traduce ese error a un `409 Conflict` claro en vez de un `500` genérico.
+- El `ValidationPipe` global (`forbidNonWhitelisted: true`) rechazaba el campo `answer` de una entrega porque no tenía ningún decorador de `class-validator` — cualquier campo de un DTO que acepte JSON libre necesita al menos `@IsDefined()` para no ser tratado como "no permitido" (ver `submit-assessment.dto.ts`).
+- La nota final de un curso (ponderada por categorías, con `dropLowest`) **no se guarda** en su propia tabla: se recalcula cada vez a partir de las notas individuales por evaluación, para evitar dos fuentes de verdad desincronizadas (ver `gradebook.service.ts`).
 
 ## Qué sigue
 
-Este es el cimiento del proyecto: estructura, entorno local, modelo de datos, aislamiento multi-tenant, **autenticación real contra Keycloak** (backend y frontend), **motor de permisos (Casbin)**, un **frontend Next.js con login funcional**, y los módulos de **Académico y Matrícula** — todo validado de punta a punta con datos reales. Los próximos pasos, en orden:
+Este es el cimiento del proyecto: estructura, entorno local, modelo de datos, aislamiento multi-tenant, **autenticación real contra Keycloak** (backend y frontend), **motor de permisos (Casbin)**, un **frontend Next.js con login funcional**, y los módulos de **Académico, Matrícula y Evaluaciones/Gradebook** — todo validado de punta a punta con datos reales (incluyendo el cálculo ponderado de la nota final). Los próximos pasos, en orden:
 
-1. Evaluaciones/Gradebook (exámenes, tareas, calificación, ponderación) y Certificados — ver `docs/architecture/04-flujos-criticos.md`.
+1. Certificados (generación automática, plantillas, verificación pública por QR) — ver `docs/architecture/04-flujos-criticos.md`, sección 4.3.
 2. Matrícula masiva (CSV/Excel) — hoy solo existe la individual.
 3. Panel de administración para asignar roles a usuarios (hoy se hace manualmente en la base de datos; ver el ejemplo en el historial de commits).
 4. Pantallas de negocio en el frontend (hoy solo existe la pantalla de prueba `/dashboard`).
