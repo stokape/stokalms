@@ -12,6 +12,13 @@
 // Como se usa: "npm run prisma:rls" (ver el script en apps/api/package.json).
 // Requiere que las tablas YA existan (es decir, que ya se haya corrido
 // "npm run prisma:migrate" al menos una vez).
+//
+// NOTA sobre variables de entorno: a diferencia del CLI de Prisma (que carga
+// ".env" automaticamente), este es un script de Node "a secas". El script en
+// package.json lo invoca como "node --env-file=.env prisma/apply-rls.js" —
+// esa bandera "--env-file" (nativa de Node 20+, sin depender del paquete
+// "dotenv") es la que realmente carga DATABASE_URL antes de que este archivo
+// se ejecute.
 // ============================================================================
 
 const fs = require('fs');

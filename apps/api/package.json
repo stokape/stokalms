@@ -14,7 +14,7 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
-    "prisma:rls": "node prisma/apply-rls.js"
+    "prisma:rls": "node --env-file=.env prisma/apply-rls.js"
   },
 
   "dependencies": {

@@ -28,7 +28,8 @@ import {
   OnModuleDestroy,
   OnModuleInit,
 } from '@nestjs/common';
-import { PrismaClient, Prisma } from '@prisma/client';
+import { ConfigService } from '@nestjs/config';
+import { PrismaClient } from '@prisma/client';
 
 // Tipo del "cliente transaccional" que Prisma pasa dentro de un
 // "$transaction(async (tx) => {...})". Tiene los mismos metodos que
@@ -44,6 +45,20 @@ export class PrismaService
   implements OnModuleInit, OnModuleDestroy
 {
   private readonly logger = new Logger(PrismaService.name);
+
+  constructor(configService: ConfigService) {
+    // "datasourceUrl" sobreescribe, SOLO para esta instancia del cliente, la
+    // URL que schema.prisma tomaria por defecto de DATABASE_URL. Aqui la
+    // apuntamos deliberadamente a RUNTIME_DATABASE_URL (el rol restringido
+    // "stoka_app", sin privilegios de superusuario) para que las politicas
+    // de Row-Level Security (ver rls-policies.sql) realmente se apliquen en
+    // cada consulta que haga el backend — con el usuario administrador de
+    // DATABASE_URL, PostgreSQL las ignora por completo (ver la explicacion
+    // detallada al final de apps/api/prisma/rls-policies.sql).
+    super({
+      datasourceUrl: configService.get<string>('database.runtimeUrl'),
+    });
+  }
 
   async onModuleInit() {
     // "$connect" abre el pool de conexiones hacia PostgreSQL usando

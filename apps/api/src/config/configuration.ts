@@ -21,7 +21,14 @@ export interface AppConfig {
   port: number;
   platformRootDomain: string;
   database: {
+    // Usuario administrador (superusuario): solo lo usa el CLI de Prisma
+    // para migraciones, nunca el backend en tiempo de ejecucion.
     url: string;
+    // Usuario restringido, SIN privilegios de superusuario: es el que usa
+    // PrismaService (ver src/prisma/prisma.service.ts) para que las
+    // politicas de Row-Level Security realmente se apliquen. Ver el
+    // comentario extenso sobre esto en apps/api/prisma/rls-policies.sql.
+    runtimeUrl: string;
   };
   redis: {
     url: string;
@@ -52,6 +59,7 @@ export default (): AppConfig => ({
 
   database: {
     url: process.env.DATABASE_URL ?? '',
+    runtimeUrl: process.env.RUNTIME_DATABASE_URL ?? '',
   },
 
   redis: {

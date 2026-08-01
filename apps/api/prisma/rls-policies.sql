@@ -54,8 +54,15 @@
 -- todavia — y comparar cualquier tenant_id contra NULL siempre da FALSE, asi
 -- que el efecto es "no devolver ninguna fila" en vez de romper la consulta.
 -- Esto es una decision de seguridad: ante la duda, no mostrar nada (fail closed).
-CREATE OR REPLACE FUNCTION app_current_tenant() RETURNS uuid AS $$
-  SELECT current_setting('app.current_tenant', true)::uuid;
+--
+-- Devuelve "text" (no "uuid"): Prisma genera las columnas "id"/"tenant_id"
+-- como "String @id @default(uuid())", que en PostgreSQL se traduce a una
+-- columna de tipo TEXT que CONTIENE un uuid como texto, no al tipo nativo
+-- "uuid" de Postgres. Si esta funcion devolviera "uuid", cada politica de
+-- abajo fallaria con el error "operator does not exist: text = uuid" (asi
+-- se detecto este detalle: probando la migracion real contra Postgres).
+CREATE OR REPLACE FUNCTION app_current_tenant() RETURNS text AS $$
+  SELECT current_setting('app.current_tenant', true);
 $$ LANGUAGE sql STABLE;
 
 
@@ -206,3 +213,61 @@ ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE audit_logs FORCE ROW LEVEL SECURITY;
 CREATE POLICY tenant_isolation ON audit_logs
   USING (tenant_id = app_current_tenant());
+
+
+-- ============================================================================
+-- ROL DE APLICACION RESTRINGIDO — esta seccion existe por un detalle de
+-- PostgreSQL que NO es obvio y que se descubrio probando esta migracion
+-- contra una base de datos real (no es teorico):
+--
+-- El usuario "stoka" (POSTGRES_USER en docker-compose.yml) es SUPERUSER,
+-- porque asi lo crea por defecto la imagen oficial de PostgreSQL. En
+-- PostgreSQL, los superusuarios (y cualquier rol con el atributo BYPASSRLS)
+-- se SALTAN todas las politicas de Row-Level Security SIEMPRE, sin importar
+-- "FORCE ROW LEVEL SECURITY" — esa opcion solo afecta al DUEÑO de la tabla
+-- cuando NO es superusuario. Como "stoka" crea las tablas (es su dueño) Y
+-- ademas es superuser, las politicas de arriba NO se aplicaban en absoluto
+-- al probarlas con ese usuario: todas las consultas veian TODOS los tenants.
+--
+-- LA SOLUCION es que el BACKEND (NestJS/Prisma en tiempo de ejecucion) se
+-- conecte con un rol nuevo, "stoka_app", que:
+--   - NO es superusuario.
+--   - NO tiene el atributo BYPASSRLS.
+--   - Solo tiene permiso para leer/escribir filas (no para crear/borrar
+--     tablas): las migraciones (prisma migrate) se siguen corriendo con el
+--     usuario "stoka" original, que si necesita permisos amplios para DDL.
+--
+-- Ver src/config/configuration.ts (variable RUNTIME_DATABASE_URL) y
+-- src/prisma/prisma.service.ts, donde el backend usa ESTE rol para toda
+-- consulta en tiempo de ejecucion, mientras que DATABASE_URL (con el
+-- usuario "stoka") queda reservado para migraciones y para este script.
+-- ============================================================================
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'stoka_app') THEN
+    CREATE ROLE stoka_app WITH LOGIN PASSWORD 'stoka_app_dev_password' NOSUPERUSER NOBYPASSRLS;
+  END IF;
+END
+$$;
+
+-- Permiso para "entrar" al esquema public (sin esto, ni siquiera puede ver
+-- que las tablas existen).
+GRANT USAGE ON SCHEMA public TO stoka_app;
+
+-- Permiso de lectura/escritura de FILAS (no de estructura) sobre todas las
+-- tablas que existen HOY en el esquema.
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO stoka_app;
+
+-- Lo mismo, pero para tablas que se creen en FUTURAS migraciones: sin esto,
+-- cada "prisma migrate dev" nuevo obligaria a volver a correr este GRANT a
+-- mano para la tabla recien creada.
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO stoka_app;
+
+-- Necesario si alguna tabla llegara a usar secuencias (ej. contadores
+-- autoincrementales); nuestro modelo usa UUIDs, pero se deja por seguridad
+-- ante columnas que se agreguen mas adelante.
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO stoka_app;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+  GRANT USAGE, SELECT ON SEQUENCES TO stoka_app;

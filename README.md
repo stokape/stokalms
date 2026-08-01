@@ -52,8 +52,10 @@ Requiere: **Node.js 20+** (ya instalado), **Docker Desktop** (para Postgres/Redi
 # 1. Instalar dependencias de todo el monorepo
 npm install
 
-# 2. Copiar la plantilla de variables de entorno
+# 2. Copiar la plantilla de variables de entorno (Prisma y NestJS la leen
+#    desde la carpeta de cada app, no desde la raiz, por eso se copia dos veces)
 cp .env.example .env
+cp .env.example apps/api/.env
 
 # 3. Levantar los servicios de infraestructura local
 npm run docker:up
@@ -62,12 +64,19 @@ npm run docker:up
 cd apps/api
 npm run prisma:migrate
 
-# 5. Activar el aislamiento multi-tenant (Row-Level Security)
+# 5. Activar el aislamiento multi-tenant (Row-Level Security).
+#    Esto tambien crea un rol de base de datos restringido ("stoka_app")
+#    que es el que usa el backend en tiempo real: en PostgreSQL, el usuario
+#    administrador (el de DATABASE_URL) es superusuario y SIEMPRE se salta
+#    Row-Level Security, sin importar como esten configuradas las politicas.
+#    Ver la explicacion completa en apps/api/prisma/rls-policies.sql.
 npm run prisma:rls
 
 # 6. Arrancar el backend en modo desarrollo (recarga en caliente)
 npm run dev
 ```
+
+Verificación rápida de que quedó bien: `curl http://localhost:3001/api/v1/health` debe responder `{"status":"ok",...}`.
 
 El backend queda disponible en `http://localhost:3001/api/v1/health`.
 
