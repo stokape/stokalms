@@ -7,10 +7,11 @@
 
 import { Module } from '@nestjs/common';
 import { EnrollmentController } from './enrollment.controller';
+import { MyEnrollmentsController } from './my-enrollments.controller';
 import { EnrollmentService } from './enrollment.service';
 
 @Module({
-  controllers: [EnrollmentController],
+  controllers: [EnrollmentController, MyEnrollmentsController],
   providers: [EnrollmentService],
 })
 export class EnrollmentModule {}

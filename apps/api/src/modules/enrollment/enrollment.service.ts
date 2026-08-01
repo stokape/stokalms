@@ -6,6 +6,7 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { TenantContextService } from '../../common/tenant/tenant-context.service';
+import { AuthenticatedUser } from '../../auth/auth.service';
 import { CreateEnrollmentDto } from './dto/create-enrollment.dto';
 import { UpdateEnrollmentStatusDto } from './dto/update-enrollment-status.dto';
 
@@ -120,6 +121,34 @@ export class EnrollmentService {
           email: e.userTenant.user.email,
           fullName: e.userTenant.user.fullName,
         },
+      }));
+    });
+  }
+
+  // "Mis matriculas": el punto de entrada de autoservicio para un
+  // Estudiante (o cualquier persona), que NO tiene "enrollment:view" (ese
+  // permiso es de Coordinador/Docente para ADMINISTRAR matriculas de
+  // otros) — ver un servicio (curso + seccion) donde YO estoy matriculado
+  // no deberia depender de un permiso administrativo, es simplemente MI
+  // propio dato. Por eso este metodo no pasa por PermissionsGuard (ver
+  // my-enrollments.controller.ts): esta acotado por construccion a
+  // "userTenantId = el de quien pregunta", nunca a otra persona.
+  async findMine(user: AuthenticatedUser) {
+    const tenantId = this.tenantContext.requireTenantId();
+
+    return this.prisma.withTenant(tenantId, async (tx) => {
+      const enrollments = await tx.enrollment.findMany({
+        where: { userTenantId: user.userTenantId },
+        include: { section: { include: { course: true } } },
+        orderBy: { enrolledAt: 'desc' },
+      });
+
+      return enrollments.map((e) => ({
+        id: e.id,
+        status: e.status,
+        enrolledAt: e.enrolledAt,
+        course: { id: e.section.course.id, code: e.section.course.code, title: e.section.course.title },
+        section: { id: e.section.id, name: e.section.name },
       }));
     });
   }
