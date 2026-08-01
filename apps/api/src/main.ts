@@ -24,6 +24,7 @@ import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
+import { PrismaExceptionFilter } from './common/filters/prisma-exception.filter';
 
 async function bootstrap() {
   // NestFactory.create construye la aplicacion completa: lee AppModule,
@@ -52,6 +53,13 @@ async function bootstrap() {
                        // query param se transforma en el numero 5 si el DTO espera un number).
     }),
   );
+
+  // Traduce errores de Prisma (ej. violacion de llave foranea al intentar
+  // borrar un registro que todavia tiene datos dependientes) a respuestas
+  // HTTP claras (409, 404...) en vez del generico 500 que NestJS daria por
+  // defecto. Ver common/filters/prisma-exception.filter.ts para el detalle
+  // completo, incluyendo el caso real que lo motivo.
+  app.useGlobalFilters(new PrismaExceptionFilter());
 
   // Puerto en el que el proceso de Node.js escucha conexiones HTTP.
   // process.env.API_PORT viene de ".env" (ver .env.example); si no esta

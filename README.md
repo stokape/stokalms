@@ -46,7 +46,11 @@ Stoka LMS/
             ├── common/tenant/    # Resolución del tenant activo por request
             ├── auth/             # Login (Keycloak) + aprovisionamiento JIT
             ├── rbac/             # Motor de permisos (Casbin) + guard
-            └── modules/          # Módulos de negocio (health, y los que siguen)
+            ├── common/filters/   # Traduce errores de Prisma a respuestas HTTP claras
+            └── modules/
+                ├── health/       # Endpoint de salud
+                ├── academic/     # Periodos, Cursos, Secciones
+                └── enrollment/   # Matrícula individual
     └── web/                      # Frontend Next.js
         ├── auth.ts               # Configuración de NextAuth.js (proveedor Keycloak)
         └── app/
@@ -124,12 +128,26 @@ curl -H "Authorization: Bearer <access_token>" -H "Host: sanmartin.localhost" \
 # {"userId":"...","tenantId":"...","email":"maria@stoka-lms.test",...}
 ```
 
+## Endpoints de negocio disponibles
+
+Todos protegidos con `JwtAuthGuard` + `PermissionsGuard` (ver `docs/architecture/03-rbac.md`):
+
+| Recurso | Endpoints |
+|---|---|
+| Periodos académicos | `POST/GET /terms`, `GET/PATCH/DELETE /terms/:id` |
+| Cursos | `POST/GET /courses`, `GET/PATCH/DELETE /courses/:id` |
+| Secciones | `POST/GET /courses/:courseId/sections`, `GET/PATCH/DELETE /courses/:courseId/sections/:id` |
+| Matrícula | `POST/GET /courses/:courseId/sections/:sectionId/enrollments`, `PATCH .../enrollments/:id` (cambia estado: active/dropped/completed) |
+
+Nota importante encontrada al probar contra la base real (no solo revisando el código): el `onDelete: Cascade` por defecto de Prisma borraba en cascada cursos/secciones/matrículas/notas/certificados al borrar su registro padre, sin avisar. Se cambió a `onDelete: Restrict` en toda la cadena académica (ver los comentarios en `schema.prisma`, empezando por el modelo `Course`), y se agregó un filtro global (`common/filters/prisma-exception.filter.ts`) que traduce ese error a un `409 Conflict` claro en vez de un `500` genérico.
+
 ## Qué sigue
 
-Este es el cimiento del proyecto: estructura, entorno local, modelo de datos, aislamiento multi-tenant, **autenticación real contra Keycloak** (backend y frontend), **motor de permisos (Casbin)** y un **frontend Next.js con login funcional** — todo validado de punta a punta con un usuario real. Los próximos pasos, en orden:
+Este es el cimiento del proyecto: estructura, entorno local, modelo de datos, aislamiento multi-tenant, **autenticación real contra Keycloak** (backend y frontend), **motor de permisos (Casbin)**, un **frontend Next.js con login funcional**, y los módulos de **Académico y Matrícula** — todo validado de punta a punta con datos reales. Los próximos pasos, en orden:
 
-1. Módulos de negocio: Académico (periodos/cursos/módulos), Matrícula, Evaluaciones/Gradebook, Certificados — reemplazando el controlador temporal `rbac-demo` (ver `apps/api/src/rbac/rbac-demo.controller.ts`).
-2. Panel de administración para asignar roles a usuarios (hoy se hace manualmente en la base de datos; ver el ejemplo en el historial de commits).
-3. Pantallas de negocio en el frontend (hoy solo existe la pantalla de prueba `/dashboard`).
+1. Evaluaciones/Gradebook (exámenes, tareas, calificación, ponderación) y Certificados — ver `docs/architecture/04-flujos-criticos.md`.
+2. Matrícula masiva (CSV/Excel) — hoy solo existe la individual.
+3. Panel de administración para asignar roles a usuarios (hoy se hace manualmente en la base de datos; ver el ejemplo en el historial de commits).
+4. Pantallas de negocio en el frontend (hoy solo existe la pantalla de prueba `/dashboard`).
 
 Ver el detalle completo de fases en [docs/architecture/06-roadmap.md](docs/architecture/06-roadmap.md).

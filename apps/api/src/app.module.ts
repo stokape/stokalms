@@ -26,6 +26,8 @@ import { TenantContextMiddleware } from './common/tenant/tenant-context.middlewa
 import { HealthModule } from './modules/health/health.module';
 import { AuthModule } from './auth/auth.module';
 import { RbacModule } from './rbac/rbac.module';
+import { AcademicModule } from './modules/academic/academic.module';
+import { EnrollmentModule } from './modules/enrollment/enrollment.module';
 
 @Module({
   imports: [
@@ -51,10 +53,17 @@ import { RbacModule } from './rbac/rbac.module';
     // Motor de permisos Casbin (ver src/rbac/ y ADR-005-rbac-engine.md).
     RbacModule,
 
-    // Primer modulo de negocio (endpoint de salud). Los siguientes modulos
-    // (Academico, Matricula, Evaluaciones, Certificados, RBAC...) se
-    // agregaran aqui en los proximos pasos de construccion del proyecto.
+    // Endpoint de salud.
     HealthModule,
+
+    // Estructura academica: periodos, cursos, secciones (ver
+    // src/modules/academic/ y docs/architecture/06-roadmap.md, Fase 1).
+    // Los siguientes modulos de negocio (Evaluaciones, Certificados) se
+    // agregaran aqui en los proximos pasos.
+    AcademicModule,
+
+    // Matricula individual (ver src/modules/enrollment/).
+    EnrollmentModule,
   ],
 })
 export class AppModule implements NestModule {

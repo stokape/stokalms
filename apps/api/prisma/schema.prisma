@@ -230,7 +230,15 @@ model Course {
   id              String   @id @default(uuid())
   tenantId        String   @map("tenant_id")
   termId          String   @map("term_id")
-  term            Term     @relation(fields: [termId], references: [id], onDelete: Cascade)
+  // onDelete: Restrict (no Cascade): borrar un periodo academico que
+  // TODAVIA tiene cursos NO debe arrastrar silenciosamente todo lo que
+  // cuelga de esos cursos (secciones, matriculas, notas, certificados...).
+  // Postgres rechaza el DELETE del Term con un error explicito mientras
+  // existan cursos asociados — el desafectado que se encuentre este error
+  // primero debe borrar/mover los cursos a proposito. Se detecto esto
+  // probando de verdad: un DELETE de prueba en el modulo Academico borro un
+  // curso y su seccion en cascada sin avisar, con la config por defecto.
+  term            Term     @relation(fields: [termId], references: [id], onDelete: Restrict)
   code            String
   title           String
   // Escala de notas que usa ESTE curso (cada tenant puede tener varias
@@ -255,7 +263,11 @@ model Section {
   // en el modelo UserRole, mas arriba, y ADR-001-multi-tenancy.md).
   tenantId String @map("tenant_id")
   courseId String @map("course_id")
-  course   Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  // onDelete: Restrict — ver la nota extensa en Course.term, mismo
+  // razonamiento: una seccion es donde hay estudiantes MATRICULADOS
+  // (Enrollment); no debe poder desaparecer en cascada solo porque alguien
+  // borro el curso.
+  course   Course @relation(fields: [courseId], references: [id], onDelete: Restrict)
   name     String
   // Horario de la seccion en JSON (dias, horas, aula) — flexible porque
   // cada institucion arma sus horarios de forma distinta.
@@ -345,7 +357,10 @@ model Enrollment {
   // Denormalizado para RLS directa (ver ADR-001-multi-tenancy.md).
   tenantId     String   @map("tenant_id")
   sectionId    String   @map("section_id")
-  section      Section  @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  // onDelete: Restrict — una matricula es un registro academico (arrastra
+  // entregas, notas, asistencia, certificados); no debe poder perderse en
+  // cascada por borrar la seccion (ver la nota extensa en Course.term).
+  section      Section  @relation(fields: [sectionId], references: [id], onDelete: Restrict)
   userTenantId String   @map("user_tenant_id")
   userTenant   UserTenant @relation(fields: [userTenantId], references: [id], onDelete: Cascade)
   // "active" | "dropped" | "completed" — "completed" es lo que puede disparar
@@ -374,7 +389,9 @@ model GradebookCategory {
   // Denormalizado para RLS directa (ver ADR-001-multi-tenancy.md).
   tenantId   String @map("tenant_id")
   courseId   String @map("course_id")
-  course     Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  // onDelete: Restrict — protege la estructura de ponderacion de notas
+  // (ver la nota extensa en Course.term).
+  course     Course @relation(fields: [courseId], references: [id], onDelete: Restrict)
   name       String
   // Peso de esta categoria en la nota final del curso, en porcentaje (0-100).
   weightPct  Float  @map("weight_pct")
@@ -394,7 +411,10 @@ model Assessment {
   // Denormalizado para RLS directa (ver ADR-001-multi-tenancy.md).
   tenantId            String  @map("tenant_id")
   courseId            String  @map("course_id")
-  course              Course  @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  // onDelete: Restrict — un curso con examenes/tareas ya creados (y
+  // posiblemente ya calificados) no debe poder borrarse en cascada (ver la
+  // nota extensa en Course.term).
+  course              Course  @relation(fields: [courseId], references: [id], onDelete: Restrict)
   gradebookCategoryId String  @map("gradebook_category_id")
   gradebookCategory   GradebookCategory @relation(fields: [gradebookCategoryId], references: [id])
   // "exam" | "assignment" | "forum" | "rubric"
@@ -440,9 +460,13 @@ model Submission {
   // Denormalizado para RLS directa (ver ADR-001-multi-tenancy.md).
   tenantId      String   @map("tenant_id")
   assessmentId  String   @map("assessment_id")
-  assessment    Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  // onDelete: Restrict (ambas relaciones) — un Submission es evidencia
+  // academica real (la entrega/intento de un estudiante, con su nota). Ni
+  // borrar el Assessment ni borrar el Enrollment deben poder arrastrar en
+  // cascada entregas ya calificadas (ver la nota extensa en Course.term).
+  assessment    Assessment @relation(fields: [assessmentId], references: [id], onDelete: Restrict)
   enrollmentId  String   @map("enrollment_id")
-  enrollment    Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  enrollment    Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Restrict)
   // Cada intento crea una fila NUEVA (nunca se sobreescribe una anterior),
   // para preservar el historial completo de intentos (ver 04-flujos-criticos.md, 4.2).
   attemptNumber Int      @default(1) @map("attempt_number")
@@ -526,7 +550,9 @@ model AttendanceRecord {
   // Denormalizado para RLS directa (ver ADR-001-multi-tenancy.md).
   tenantId     String   @map("tenant_id")
   enrollmentId String   @map("enrollment_id")
-  enrollment   Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  // onDelete: Restrict — registro de asistencia real (ver la nota extensa
+  // en Course.term).
+  enrollment   Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Restrict)
   sessionDate  DateTime @map("session_date")
   // "present" | "absent" | "late" | "excused"
   status       String
@@ -567,7 +593,11 @@ model Certificate {
   tenantId          String   @map("tenant_id")
   tenant            Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   enrollmentId      String   @map("enrollment_id")
-  enrollment        Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  // onDelete: Restrict — un certificado emitido es un documento con valor
+  // legal/de verificacion publica (ver docs/architecture/04-flujos-criticos.md,
+  // 4.3): NUNCA debe poder desaparecer por un borrado en cascada de otra
+  // tabla. Se anula (campo "revoked"), nunca se borra.
+  enrollment        Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Restrict)
   templateId        String   @map("template_id")
   template          CertificateTemplate @relation(fields: [templateId], references: [id])
   // Codigo UNICO EN TODA LA PLATAFORMA (no solo dentro del tenant), porque
