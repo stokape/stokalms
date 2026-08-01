@@ -17,7 +17,7 @@ Todo el código de este repositorio implementa las decisiones documentadas ahí 
 | Backend | NestJS (TypeScript) + Prisma | Ver [ADR-002](docs/architecture/adr/ADR-002-stack-backend.md) |
 | Identidad/SSO | Keycloak | Ver [ADR-003](docs/architecture/adr/ADR-003-auth-identity.md) |
 | Aislamiento multi-tenant | PostgreSQL Row-Level Security | Ver [ADR-001](docs/architecture/adr/ADR-001-multi-tenancy.md) |
-| Frontend (próximo paso) | Next.js, en Vercel | — |
+| Frontend | Next.js 16 (App Router) + NextAuth.js v5, en Vercel | — |
 | Backend hosting | Railway (mismo contenedor Docker migrable a AWS/K8s después) | Ver [07-infraestructura.md](docs/architecture/07-infraestructura.md) |
 | Archivos | MinIO en local / Cloudflare R2 en producción | — |
 
@@ -47,6 +47,12 @@ Stoka LMS/
             ├── auth/             # Login (Keycloak) + aprovisionamiento JIT
             ├── rbac/             # Motor de permisos (Casbin) + guard
             └── modules/          # Módulos de negocio (health, y los que siguen)
+    └── web/                      # Frontend Next.js
+        ├── auth.ts               # Configuración de NextAuth.js (proveedor Keycloak)
+        └── app/
+            ├── page.tsx          # Inicio (login/logout)
+            ├── dashboard/        # Página protegida: llama a /auth/me del backend
+            └── api/auth/[...nextauth]/route.ts  # Rutas de NextAuth.js
 ```
 
 ## Cómo levantar el entorno de desarrollo
@@ -82,17 +88,25 @@ npm run prisma:rls
 #    "sanmartin.localhost" ya registrados para poder probar sin configurar nada mas)
 npm run prisma:seed
 
-# 7. Configurar Keycloak (realm "stoka-dev", cliente "stoka-api" y un
-#    usuario de prueba). Requiere Keycloak arriba (paso 3). Al terminar
-#    imprime un "Client Secret": copialo en KEYCLOAK_CLIENT_SECRET dentro
-#    de .env y apps/api/.env.
+# 7. Configurar Keycloak: crea el realm "stoka-dev", el cliente del backend
+#    ("stoka-api"), el cliente del frontend ("stoka-web") y un usuario de
+#    prueba. Requiere Keycloak arriba (paso 3). Al terminar imprime DOS
+#    secretos: el del backend va en KEYCLOAK_CLIENT_SECRET (.env y
+#    apps/api/.env), el del frontend va en AUTH_KEYCLOAK_SECRET
+#    (apps/web/.env.local, ver apps/web/.env.example).
 cd ..
 npm run keycloak:setup
 
 # 8. Arrancar el backend en modo desarrollo (recarga en caliente)
 cd apps/api
 npm run dev
+
+# 9. En OTRA terminal: arrancar el frontend
+cd apps/web
+npm run dev
 ```
+
+El frontend queda en `http://localhost:3000`: el botón "Iniciar sesión" redirige a Keycloak (usuario de prueba: `maria@stoka-lms.test` / `Maria12345!`), y al volver muestra `/dashboard`, que llama a `GET /api/v1/auth/me` del backend con el token real de la sesión.
 
 Verificación rápida de que quedó bien:
 ```bash
@@ -112,10 +126,10 @@ curl -H "Authorization: Bearer <access_token>" -H "Host: sanmartin.localhost" \
 
 ## Qué sigue
 
-Este es el cimiento del proyecto: estructura, entorno local, modelo de datos, aislamiento multi-tenant, **autenticación real contra Keycloak** y **motor de permisos (Casbin)** ya funcionando de punta a punta. Los próximos pasos, en orden:
+Este es el cimiento del proyecto: estructura, entorno local, modelo de datos, aislamiento multi-tenant, **autenticación real contra Keycloak** (backend y frontend), **motor de permisos (Casbin)** y un **frontend Next.js con login funcional** — todo validado de punta a punta con un usuario real. Los próximos pasos, en orden:
 
-1. Frontend Next.js (`apps/web`) con login contra Keycloak.
-2. Módulos de negocio: Académico (periodos/cursos/módulos), Matrícula, Evaluaciones/Gradebook, Certificados — reemplazando el controlador temporal `rbac-demo` (ver `apps/api/src/rbac/rbac-demo.controller.ts`).
-3. Panel de administración para asignar roles a usuarios (hoy se hace manualmente en la base de datos; ver el ejemplo en el historial de commits).
+1. Módulos de negocio: Académico (periodos/cursos/módulos), Matrícula, Evaluaciones/Gradebook, Certificados — reemplazando el controlador temporal `rbac-demo` (ver `apps/api/src/rbac/rbac-demo.controller.ts`).
+2. Panel de administración para asignar roles a usuarios (hoy se hace manualmente en la base de datos; ver el ejemplo en el historial de commits).
+3. Pantallas de negocio en el frontend (hoy solo existe la pantalla de prueba `/dashboard`).
 
 Ver el detalle completo de fases en [docs/architecture/06-roadmap.md](docs/architecture/06-roadmap.md).

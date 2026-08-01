@@ -14,9 +14,14 @@
 // QUE CREA (idempotente: se puede correr varias veces sin duplicar nada):
 //   1) El realm "stoka-dev" (el "espacio" de identidad de desarrollo; en
 //      produccion cada tenant podria tener su propio realm, ver ADR-003).
-//   2) El cliente "stoka-api" DENTRO de ese realm: es la aplicacion (nuestro
-//      backend) que le pide a Keycloak "valida este usuario por mi".
-//   3) Un usuario de prueba (maria@stoka-lms.test / Maria12345!) para poder
+//   2) El cliente "stoka-api" DENTRO de ese realm: representa al BACKEND
+//      (nuestra API), que le pide a Keycloak "valida este usuario por mi".
+//   3) El cliente "stoka-web": representa al FRONTEND (apps/web, Next.js
+//      con NextAuth.js). Es un cliente APARTE del backend porque cada
+//      aplicacion que habla con Keycloak deberia tener su propia identidad
+//      y su propio secreto — si el frontend se viera comprometido, revocar
+//      SU cliente no afecta al backend, y viceversa.
+//   4) Un usuario de prueba (maria@stoka-lms.test / Maria12345!) para poder
 //      probar el login de punta a punta sin depender de una cuenta real.
 //
 // Como se usa: "npm run keycloak:setup" (ver el script en package.json,
@@ -27,6 +32,7 @@
 const KEYCLOAK_BASE_URL = process.env.KEYCLOAK_BASE_URL ?? 'http://localhost:8080';
 const REALM_NAME = process.env.KEYCLOAK_REALM ?? 'stoka-dev';
 const CLIENT_ID = process.env.KEYCLOAK_CLIENT_ID ?? 'stoka-api';
+const WEB_CLIENT_ID = 'stoka-web';
 
 // Credenciales del ADMINISTRADOR de Keycloak (no confundir con un usuario de
 // la aplicacion): son las mismas que arrancan el contenedor en
@@ -49,17 +55,44 @@ async function main() {
   const adminToken = await getAdminToken();
 
   await ensureRealm(adminToken);
-  const clientUuid = await ensureClient(adminToken);
-  const clientSecret = await getClientSecret(adminToken, clientUuid);
+
+  const apiClientUuid = await ensureClient(adminToken, CLIENT_ID, {
+    // El backend SI necesita "password grant" (ver mas abajo) para poder
+    // probar el login por script/curl sin un navegador de por medio.
+    directAccessGrantsEnabled: true,
+    redirectUris: ['http://localhost:3000/*'],
+    webOrigins: ['http://localhost:3000'],
+  });
+  const apiClientSecret = await getClientSecret(adminToken, apiClientUuid);
+
+  const webClientUuid = await ensureClient(adminToken, WEB_CLIENT_ID, {
+    // El frontend usa el flujo estandar (Authorization Code) a traves de
+    // NextAuth.js, que corre en el SERVIDOR de Next.js — por eso este
+    // cliente SI puede ser confidencial (con secreto), a diferencia de una
+    // SPA pura que corre solo en el navegador. Ver apps/web/src/auth.ts.
+    directAccessGrantsEnabled: false,
+    // Esta es la URL exacta a la que Keycloak redirige de vuelta despues
+    // del login; "callback/keycloak" es la convencion que usa NextAuth.js
+    // para el proveedor configurado como "keycloak".
+    redirectUris: ['http://localhost:3000/api/auth/callback/keycloak'],
+    webOrigins: ['http://localhost:3000'],
+  });
+  const webClientSecret = await getClientSecret(adminToken, webClientUuid);
+
   await ensureTestUser(adminToken);
 
   console.log('\n[keycloak-setup] Listo. Resumen:');
-  console.log(`  Realm:            ${REALM_NAME}`);
-  console.log(`  Client ID:        ${CLIENT_ID}`);
-  console.log(`  Client Secret:    ${clientSecret}`);
-  console.log(`  Usuario de prueba: ${TEST_USER.username} / ${TEST_USER.password}`);
+  console.log(`  Realm:               ${REALM_NAME}`);
+  console.log(`  Cliente backend:     ${CLIENT_ID}`);
+  console.log(`  Secreto backend:     ${apiClientSecret}`);
+  console.log(`  Cliente frontend:    ${WEB_CLIENT_ID}`);
+  console.log(`  Secreto frontend:    ${webClientSecret}`);
+  console.log(`  Usuario de prueba:   ${TEST_USER.username} / ${TEST_USER.password}`);
   console.log(
-    '\n  Copia "Client Secret" en KEYCLOAK_CLIENT_SECRET dentro de tu .env y apps/api/.env.',
+    '\n  Copia "Secreto backend" en KEYCLOAK_CLIENT_SECRET dentro de .env y apps/api/.env.',
+  );
+  console.log(
+    '  Copia "Secreto frontend" en AUTH_KEYCLOAK_SECRET dentro de apps/web/.env.local.',
   );
 }
 
@@ -138,19 +171,21 @@ async function ensureRealm(adminToken) {
 }
 
 // ----------------------------------------------------------------------------
-// Crea el cliente "stoka-api" dentro del realm, SOLO si no existe. Devuelve
-// el "id" interno (UUID) que Keycloak le asigna, necesario para las
-// siguientes llamadas (ej. leer su client secret).
+// Crea un cliente dentro del realm, SOLO si no existe. Devuelve el "id"
+// interno (UUID) que Keycloak le asigna, necesario para las siguientes
+// llamadas (ej. leer su client secret). "options" permite que el backend y
+// el frontend (que se crean con configuraciones distintas, ver mas arriba)
+// reutilicen esta misma funcion.
 // ----------------------------------------------------------------------------
-async function ensureClient(adminToken) {
+async function ensureClient(adminToken, clientId, options) {
   const list = await fetch(
-    `${KEYCLOAK_BASE_URL}/admin/realms/${REALM_NAME}/clients?clientId=${CLIENT_ID}`,
+    `${KEYCLOAK_BASE_URL}/admin/realms/${REALM_NAME}/clients?clientId=${clientId}`,
     { headers: adminHeaders(adminToken) },
   );
   const existing = await list.json();
 
   if (existing.length > 0) {
-    console.log(`[keycloak-setup] El cliente "${CLIENT_ID}" ya existia.`);
+    console.log(`[keycloak-setup] El cliente "${clientId}" ya existia.`);
     return existing[0].id;
   }
 
@@ -158,37 +193,30 @@ async function ensureClient(adminToken) {
     method: 'POST',
     headers: adminHeaders(adminToken),
     body: JSON.stringify({
-      clientId: CLIENT_ID,
+      clientId,
       protocol: 'openid-connect',
-      // "confidential" (no publico): el backend SI puede guardar un secreto
-      // de forma segura (a diferencia de una SPA en el navegador), por eso
-      // "publicClient: false" — ver ADR-003-auth-identity.md.
+      // "confidential" (no publico) para AMBOS clientes: tanto el backend
+      // como el frontend (Next.js/NextAuth) corren del lado del servidor y
+      // pueden guardar un secreto de forma segura — ver ADR-003-auth-identity.md.
       publicClient: false,
-      // Permite el flujo "usuario+contraseña directos" (Resource Owner
-      // Password Credentials). Solo se habilita para poder PROBAR el login
-      // por script/Postman durante desarrollo; el frontend real (fase
-      // siguiente) usara "Authorization Code + PKCE", el flujo recomendado
-      // para aplicaciones con interfaz de usuario.
-      directAccessGrantsEnabled: true,
       standardFlowEnabled: true,
       serviceAccountsEnabled: false,
-      redirectUris: ['http://localhost:3000/*'],
-      webOrigins: ['http://localhost:3000'],
+      ...options,
     }),
   });
 
   if (!create.ok) {
-    throw new Error(`No se pudo crear el cliente "${CLIENT_ID}" (HTTP ${create.status}).`);
+    throw new Error(`No se pudo crear el cliente "${clientId}" (HTTP ${create.status}).`);
   }
 
   // Keycloak no devuelve el objeto creado en el body; hay que volver a
   // consultarlo para obtener su "id" interno.
   const recheck = await fetch(
-    `${KEYCLOAK_BASE_URL}/admin/realms/${REALM_NAME}/clients?clientId=${CLIENT_ID}`,
+    `${KEYCLOAK_BASE_URL}/admin/realms/${REALM_NAME}/clients?clientId=${clientId}`,
     { headers: adminHeaders(adminToken) },
   );
   const [created] = await recheck.json();
-  console.log(`[keycloak-setup] Cliente "${CLIENT_ID}" creado.`);
+  console.log(`[keycloak-setup] Cliente "${clientId}" creado.`);
   return created.id;
 }
 
