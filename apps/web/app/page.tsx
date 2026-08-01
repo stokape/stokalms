@@ -30,10 +30,13 @@ export default async function Home() {
           {/* Antes apuntaba a "/dashboard" (la pantalla de PRUEBA con el
              JSON crudo de /auth/me) — ahora que existen pantallas de
              negocio reales (ver app/(app)/), el destino natural despues de
-             iniciar sesion es "Cursos". "/dashboard" sigue existiendo y
-             accesible desde el menu de esas pantallas ("Diagnostico
-             tecnico"), para quien necesite confirmar que el token es
-             aceptado por el backend. */}
+             iniciar sesion es "Cursos". "/dashboard" sigue existiendo
+             (para quien necesite confirmar que el token es aceptado por
+             el backend), pero deliberadamente SIN enlace desde el menu de
+             negocio: mezclada con la navegacion normal, esa pantalla de
+             JSON crudo confundia a quien no sabe que es una pantalla
+             tecnica (se detecto probando con un usuario real). Se llega
+             a ella escribiendo la URL a mano. */}
           <a
             href="/cursos"
             className="rounded-full bg-foreground px-6 py-3 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc]"
