@@ -9,6 +9,7 @@ import { TenantContextService } from '../../common/tenant/tenant-context.service
 import { AuthenticatedUser } from '../../auth/auth.service';
 import { CreateEnrollmentDto } from './dto/create-enrollment.dto';
 import { UpdateEnrollmentStatusDto } from './dto/update-enrollment-status.dto';
+import { BulkEnrollDto } from './dto/bulk-enroll.dto';
 
 @Injectable()
 export class EnrollmentService {
@@ -88,6 +89,44 @@ export class EnrollmentService {
         data: { tenantId, sectionId, userTenantId: userTenant.id, status: 'active' },
       });
     });
+  }
+
+  // Matricula MASIVA: una fila por estudiante, tipicamente desde un CSV que
+  // la institucion sube (ver el permiso "enrollment:bulk_import", ya
+  // sembrado en prisma/seed.js). Cada fila corre en SU PROPIA llamada a
+  // "create()" (su propia transaccion), no todas dentro de una unica
+  // transaccion — si una fila falla (email invalido, cupo lleno, ya
+  // matriculado), NO debe arrastrar a las demas filas ya procesadas
+  // correctamente: quien sube un CSV de 50 estudiantes necesita saber
+  // CUALES 49 entraron bien y CUAL 1 fallo, no un rollback total por un
+  // solo error tipográfico.
+  async bulkCreate(courseId: string, sectionId: string, dto: BulkEnrollDto) {
+    const results: Array<{ email: string; status: 'matriculado' | 'error'; message?: string }> = [];
+    const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    for (const row of dto.rows) {
+      // El formato se valida ACA (no con "@IsEmail()" en el DTO, ver la
+      // nota extensa en bulk-enroll.dto.ts) para que una fila con un email
+      // mal escrito quede como un error MAS en la lista de resultados, sin
+      // tumbar las filas validas que la acompañan en el mismo archivo.
+      if (!EMAIL_PATTERN.test(row.email)) {
+        results.push({ email: row.email, status: 'error', message: 'El email no tiene un formato válido.' });
+        continue;
+      }
+
+      try {
+        await this.create(courseId, sectionId, { email: row.email, fullName: row.fullName });
+        results.push({ email: row.email, status: 'matriculado' });
+      } catch (err) {
+        results.push({
+          email: row.email,
+          status: 'error',
+          message: err instanceof Error ? err.message : 'Error inesperado.',
+        });
+      }
+    }
+
+    return { results };
   }
 
   async findAllBySection(courseId: string, sectionId: string) {

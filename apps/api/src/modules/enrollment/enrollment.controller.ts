@@ -12,6 +12,7 @@ import { RequirePermission } from '../../rbac/require-permission.decorator';
 import { EnrollmentService } from './enrollment.service';
 import { CreateEnrollmentDto } from './dto/create-enrollment.dto';
 import { UpdateEnrollmentStatusDto } from './dto/update-enrollment-status.dto';
+import { BulkEnrollDto } from './dto/bulk-enroll.dto';
 
 @Controller('courses/:courseId/sections/:sectionId/enrollments')
 @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -32,6 +33,16 @@ export class EnrollmentController {
   @Get()
   findAll(@Param('courseId') courseId: string, @Param('sectionId') sectionId: string) {
     return this.enrollmentService.findAllBySection(courseId, sectionId);
+  }
+
+  @RequirePermission('enrollment', 'bulk_import')
+  @Post('bulk')
+  bulkCreate(
+    @Param('courseId') courseId: string,
+    @Param('sectionId') sectionId: string,
+    @Body() dto: BulkEnrollDto,
+  ) {
+    return this.enrollmentService.bulkCreate(courseId, sectionId, dto);
   }
 
   // Cambiar el estado (ej. retirar -> "dropped") requiere el mismo permiso

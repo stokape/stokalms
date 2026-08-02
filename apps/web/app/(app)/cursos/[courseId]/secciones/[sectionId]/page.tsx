@@ -11,7 +11,7 @@
 import Link from 'next/link';
 import { requireAccessToken, apiFetch, toErrorMessage } from '@/lib/api';
 import { ErrorBanner } from '@/components/ErrorBanner';
-import { matricular, cambiarEstadoMatricula } from './actions';
+import { matricular, matricularCSV, cambiarEstadoMatricula } from './actions';
 
 interface Section {
   id: string;
@@ -35,10 +35,13 @@ export default async function SectionDetailPage({
   searchParams,
 }: {
   params: Promise<{ courseId: string; sectionId: string }>;
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; bulkOk?: string; bulkErrors?: string }>;
 }) {
   const { courseId, sectionId } = await params;
-  const { error } = await searchParams;
+  const { error, bulkOk, bulkErrors } = await searchParams;
+  const parsedBulkErrors: Array<{ email: string; message?: string }> = bulkErrors
+    ? JSON.parse(bulkErrors)
+    : [];
   const token = await requireAccessToken();
 
   let section: Section;
@@ -63,6 +66,25 @@ export default async function SectionDetailPage({
       {error && (
         <div className="mb-6">
           <ErrorBanner message={decodeURIComponent(error)} />
+        </div>
+      )}
+
+      {bulkOk !== undefined && (
+        <div className="mb-6 rounded-lg bg-green-50 px-4 py-3 text-sm text-green-700 dark:bg-green-950 dark:text-green-300">
+          <p>
+            Se matricularon {bulkOk} estudiantes desde el archivo
+            {parsedBulkErrors.length > 0 &&
+              ` (${parsedBulkErrors.length} ${parsedBulkErrors.length === 1 ? 'fila' : 'filas'} con error)`}.
+          </p>
+          {parsedBulkErrors.length > 0 && (
+            <ul className="mt-2 list-disc pl-5 text-red-700 dark:text-red-400">
+              {parsedBulkErrors.map((e, i) => (
+                <li key={i}>
+                  {e.email}: {e.message}
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
 
@@ -142,6 +164,26 @@ export default async function SectionDetailPage({
           className="rounded-full bg-foreground px-4 py-2 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc]"
         >
           Matricular
+        </button>
+      </form>
+
+      <h2 className="mt-10 mb-3 text-lg font-medium">Matricular varios a la vez (CSV)</h2>
+      <p className="mb-3 text-sm text-zinc-500">
+        Un archivo de texto con dos columnas separadas por coma: <code>email,nombre completo</code>
+        , una fila por estudiante (el nombre solo hace falta para quien todavía no tiene cuenta). Si
+        alguna fila falla (email repetido, cupo lleno), el resto se matricula igual — al final se
+        muestra un detalle de qué filas fallaron y por qué.
+      </p>
+      <form
+        action={matricularCSV.bind(null, courseId, sectionId)}
+        className="flex max-w-sm flex-col gap-3"
+      >
+        <input name="file" type="file" accept=".csv,text/csv" required className="text-sm" />
+        <button
+          type="submit"
+          className="self-start rounded-full border border-zinc-300 px-4 py-2 text-sm hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
+        >
+          Subir CSV
         </button>
       </form>
     </div>
