@@ -35,6 +35,7 @@ import { CertificatesModule } from './modules/certificates/certificates.module';
 import { TenantRegistrationModule } from './modules/tenant-registration/tenant-registration.module';
 import { TenantSettingsModule } from './modules/tenant/tenant-settings.module';
 import { UserManagementModule } from './modules/user-management/user-management.module';
+import { ProfileModule } from './modules/profile/profile.module';
 
 @Module({
   imports: [
@@ -99,6 +100,10 @@ import { UserManagementModule } from './modules/user-management/user-management.
     // Panel de administracion: ver miembros del tenant y asignarles/quitarles
     // roles (ver src/modules/user-management/).
     UserManagementModule,
+
+    // "Mi perfil": ver datos personales, actualizar solo la foto (ver
+    // src/modules/profile/).
+    ProfileModule,
   ],
 })
 export class AppModule implements NestModule {

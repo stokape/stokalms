@@ -20,6 +20,14 @@ export class CreateAssessmentDto {
   @IsUUID()
   gradebookCategoryId: string;
 
+  // A que Modulo del curso pertenece (ej. el examen del Modulo 2) — opcional,
+  // para que una evaluacion pueda seguir existiendo "a nivel de curso" sin
+  // atarse a ningun modulo en particular (ver el comentario extenso en
+  // schema.prisma, modelo Assessment).
+  @IsOptional()
+  @IsUUID()
+  moduleId?: string;
+
   @IsNumber()
   @Min(0)
   maxPoints: number;

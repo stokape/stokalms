@@ -38,11 +38,23 @@ export class AssessmentService {
         );
       }
 
+      // Mismo motivo que con la categoria: sin esta verificacion, se podria
+      // enlazar la evaluacion a un modulo de OTRO curso adivinando su UUID.
+      if (dto.moduleId) {
+        const module = await tx.module.findUnique({ where: { id: dto.moduleId } });
+        if (!module || module.courseId !== courseId) {
+          throw new NotFoundException(
+            `No existe el modulo "${dto.moduleId}" en el curso "${courseId}".`,
+          );
+        }
+      }
+
       return tx.assessment.create({
         data: {
           tenantId,
           courseId,
           gradebookCategoryId: dto.gradebookCategoryId,
+          moduleId: dto.moduleId,
           type: dto.type,
           maxPoints: dto.maxPoints,
           maxAttempts: dto.maxAttempts ?? 1,

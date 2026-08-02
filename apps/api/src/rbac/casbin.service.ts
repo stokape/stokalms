@@ -133,4 +133,36 @@ export class CasbinService implements OnModuleInit {
 
     return this.enforcer.enforce(userId, `tenant:${tenantId}`, resource, action);
   }
+
+  // ---------------------------------------------------------------------
+  // getPermissions: lista COMPLETA de "recurso:accion" que esta persona
+  // puede hacer (opcionalmente, tambien considerando el alcance de un curso
+  // especifico) — pensado para que el FRONTEND pueda ocultar botones/enlaces
+  // de acciones que el backend igual rechazaria con un 403 (ver
+  // auth.controller.ts, "GET /auth/me" y "GET /auth/permissions").
+  //
+  // Antes de esto, cada pantalla mostraba SIEMPRE los formularios de
+  // crear/eliminar y dejaba que el 403 del backend los bloqueara — un
+  // criterio aceptable cuando cada pantalla se prueba una por una, pero
+  // confuso para una persona real: un Estudiante veia botones de "Crear
+  // modulo" o enlaces a "Configuracion de marca" que nunca iban a funcionar.
+  //
+  // No se cachea: recorre el catalogo COMPLETO de permisos (unas 50 filas)
+  // y pregunta al enforcer por cada uno — barato porque el enforcer ya vive
+  // en memoria (ver la nota de loadPolicies(), arriba), sin ninguna consulta
+  // a base de datos de por medio en este metodo.
+  // ---------------------------------------------------------------------
+  async getPermissions(userId: string, tenantId: string, courseId?: string): Promise<string[]> {
+    const catalog = await this.prisma.permission.findMany();
+    const allowed: string[] = [];
+
+    for (const permission of catalog) {
+      const canDo = await this.can(userId, tenantId, permission.resource, permission.action, courseId);
+      if (canDo) {
+        allowed.push(`${permission.resource}:${permission.action}`);
+      }
+    }
+
+    return allowed;
+  }
 }

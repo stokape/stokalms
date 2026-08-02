@@ -101,7 +101,31 @@ model User {
   // de autenticacion (proximo paso) esto convive con el login via Keycloak.
   passwordHash String?  @map("password_hash")
   fullName     String   @map("full_name")
-  createdAt    DateTime @default(now()) @map("created_at")
+  // "firstName"/"lastName" se completan SOLOS la primera vez que la persona
+  // inicia sesion (ver auth.service.ts, findOrProvisionUser), a partir de
+  // los claims "given_name"/"family_name" que ya trae el token de Keycloak
+  // — son DISTINTOS de "fullName" (que sigue siendo el nombre "generico"
+  // usado al matricular por email antes de que esa persona inicie sesion
+  // ninguna vez) y existen para la pantalla de "Mi perfil", que necesita
+  // mostrar nombre y apellido por separado.
+  firstName String? @map("first_name")
+  lastName  String? @map("last_name")
+  // Datos de contacto/residencia — hoy SOLO se completan a mano en la base
+  // de datos (no hay pantalla de edicion todavia: ver profile.controller.ts,
+  // que a proposito solo permite actualizar la foto). Se guardan aqui, en
+  // el User GLOBAL (no en UserTenant), porque son datos de la PERSONA, no
+  // de su membresia en un tenant especifico.
+  phone      String?
+  address    String?
+  department String? // Departamento (division administrativa peruana).
+  province   String?
+  district   String?
+  // KEY dentro del almacenamiento de archivos (MinIO/S3, ver storage.service.ts),
+  // NO una URL directa — mismo patron que Resource.storageUrl: el bucket es
+  // privado, asi que "Mi perfil" pide una URL firmada de corta duracion
+  // para mostrarla (ver profile.service.ts).
+  avatarKey String? @map("avatar_key")
+  createdAt DateTime @default(now()) @map("created_at")
 
   memberships UserTenant[]
   auditLogs   AuditLog[]
@@ -120,6 +144,11 @@ model UserTenant {
   // "active" | "suspended" | "invited" — controla si esta persona puede
   // iniciar sesion dentro de ESTE tenant en particular.
   status   String @default("active")
+  // "Fecha de inscripcion" que ve la propia persona en "Mi perfil" — es
+  // CUANDO SE UNIO A ESTE TENANT especificamente (no la fecha global de
+  // "createdAt" de User, que podria ser de otra institucion si esa persona
+  // participa en mas de una, ver docs/architecture/02-modelo-de-datos.md).
+  createdAt DateTime @default(now()) @map("created_at")
 
   roles       UserRole[]
   enrollments Enrollment[]
@@ -295,7 +324,12 @@ model Module {
   title    String
   order    Int    @default(0)
 
-  lessons Lesson[]
+  lessons     Lesson[]
+  // Evaluaciones (examenes/tareas) que pertenecen a ESTE modulo en
+  // particular — ver el comentario extenso en el modelo Assessment,
+  // campo "moduleId": es OPCIONAL a proposito, para no romper evaluaciones
+  // ya creadas antes de que este campo existiera.
+  assessments Assessment[]
   // Modulos que este modulo exige tener completos antes de desbloquearse
   // (ver docs/guia-para-no-tecnicos.md, seccion 2, ejemplo de TechFuturo).
   requiredBy   ModulePrerequisite[] @relation("RequiredModule")
@@ -422,6 +456,14 @@ model Assessment {
   course              Course  @relation(fields: [courseId], references: [id], onDelete: Restrict)
   gradebookCategoryId String  @map("gradebook_category_id")
   gradebookCategory   GradebookCategory @relation(fields: [gradebookCategoryId], references: [id])
+  // A que Modulo pertenece esta evaluacion DENTRO del curso (ej. el examen
+  // del Modulo 2) — OPCIONAL: onDelete SetNull (no Restrict) porque borrar
+  // un modulo no deberia impedirse solo porque tiene una evaluacion ya
+  // calificada colgando; simplemente esa evaluacion pasa a "sin modulo"
+  // (sigue perteneciendo al curso). Nulo tambien cubre las evaluaciones
+  // creadas ANTES de que este campo existiera.
+  moduleId            String? @map("module_id")
+  module              Module? @relation(fields: [moduleId], references: [id], onDelete: SetNull)
   // "exam" | "assignment" | "forum" | "rubric"
   type        String
   // Configuracion especifica del tipo (ej. auto_publish, ventana de tiempo,
@@ -436,6 +478,7 @@ model Assessment {
 
   @@index([tenantId])
   @@index([courseId])
+  @@index([moduleId])
   @@map("assessments")
 }
 

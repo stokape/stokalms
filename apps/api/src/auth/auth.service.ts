@@ -82,11 +82,34 @@ export class AuthService {
     // principio de la explicacion en rls-policies.sql), asi que esta
     // consulta puede hacerse con el cliente normal, sin pasar por
     // "withTenant" — buscamos/creamos la persona sin importar el tenant.
+    //
+    // "firstName"/"lastName" se completan al CREAR y, si todavia estan
+    // vacios (cuentas creadas ANTES de que estos campos existieran, ver la
+    // migracion "add_profile_fields_and_module_assessments"), tambien se
+    // "rellenan" la primera vez que se detectan vacios — pero NUNCA se
+    // sobreescribe un valor que ya este cargado: son datos que la pantalla
+    // de "Mi perfil" muestra pero no deja editar (ver profile.controller.ts),
+    // y un cambio futuro de nombre en Keycloak no deberia pisarlos en
+    // silencio.
     const user = await this.prisma.user.upsert({
       where: { email },
       update: {},
-      create: { email, fullName },
+      create: {
+        email,
+        fullName,
+        firstName: payload.given_name,
+        lastName: payload.family_name,
+      },
     });
+
+    if (!user.firstName && !user.lastName && (payload.given_name || payload.family_name)) {
+      await this.prisma.user.update({
+        where: { id: user.id },
+        data: { firstName: payload.given_name, lastName: payload.family_name },
+      });
+      user.firstName = payload.given_name ?? null;
+      user.lastName = payload.family_name ?? null;
+    }
 
     // "user_tenants" SI tiene Row-Level Security: la busqueda/creacion de la
     // membresia debe correr con el tenant activo fijado (ver
