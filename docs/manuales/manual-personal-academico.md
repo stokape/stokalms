@@ -30,8 +30,11 @@ Administrador que lo haga — hoy esa pantalla no está disponible para el rol D
 ² El contenido y las evaluaciones de un curso las gestiona quien lo dicta (Docente) o un Administrador
 de entidad — un Coordinador académico no tiene acceso a esas dos pantallas en absoluto (ni para ver).
 
-Si intentás algo que tu rol no permite, la plataforma te va a mostrar un mensaje claro de "no tienes
-permiso" en lugar de dejarte continuar — no es un error del sistema, es una protección a propósito.
+El menú de arriba solo muestra los enlaces que tu rol puede usar — si no ves "Plantillas de
+certificado", "Configuración de marca" o "Usuarios y roles", es porque tu rol no los necesita, no un
+error. Igualmente, si intentás algo que tu rol no permite (por ejemplo, escribiendo la dirección a
+mano), la plataforma te va a mostrar un mensaje claro de "no tienes permiso" en lugar de dejarte
+continuar.
 
 ## Ver los cursos de tu institución
 
@@ -58,6 +61,10 @@ lección podés agregar **Recursos** (archivos o enlaces).
 
 Los archivos y enlaces que subas quedan disponibles para cualquiera matriculado en el curso, con un
 enlace de descarga/visualización directo.
+
+Un módulo también puede agrupar sus propias **tareas y evaluaciones** — al entrar a un módulo vas a
+ver, además de sus lecciones, la sección "Tareas y evaluaciones de este módulo" con un enlace para
+crear una evaluación nueva ya ubicada ahí (en vez de quedar "suelta" a nivel del curso).
 
 ## Gestionar la matrícula de una sección
 
@@ -100,8 +107,9 @@ Si tenés una lista grande (por ejemplo, todo un salón), no hace falta cargarlo
 
 ## Ver las notas finales de un curso
 
-1. Entrá al detalle de un curso.
-2. Hacé clic en **"Ver notas finales del curso"**.
+1. Hacé clic en **"Notas"**, en el menú de arriba, para ver todos los cursos de un vistazo (o entrá al
+   detalle de un curso y hacé clic en **"Ver notas finales del curso"** — llegás al mismo lugar).
+2. Elegí el curso que te interesa.
 3. Vas a ver una tabla con cada estudiante y su nota final, ya calculada según la escala y las
    categorías de calificación de ese curso.
 
@@ -204,6 +212,14 @@ quedó.
 4. Para quitarle un rol, hacé clic en **"Quitar"** al lado del rol correspondiente.
 
 Los cambios quedan vigentes al instante — la persona no necesita cerrar sesión ni esperar nada.
+
+## Ver y actualizar tu perfil
+
+1. Hacé clic en **"Mi perfil"**, en el menú de arriba.
+2. Vas a ver tu nombre, apellido, email, número de contacto, dirección, departamento, provincia,
+   distrito y la fecha en la que te uniste a la institución — son de **solo lectura** desde acá.
+3. Lo único que podés cambiar vos mismo es tu **foto**: elegí una imagen y hacé clic en **"Subir
+   foto"**.
 
 ## Si no encontrás una pantalla que esperabas
 

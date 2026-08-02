@@ -41,9 +41,9 @@ rendirla de nuevo.
 
 ## Ver tus notas
 
-1. Andá a **"Mis matrículas"**.
-2. Al lado del curso que te interesa, hacé clic en **"Mis notas"**.
-3. Vas a ver tu nota final de ese curso, ya calculada, con la escala que usa tu institución (por
+1. Hacé clic en **"Notas"**, en el menú de arriba (o entrá por "Mis matrículas" y hacé clic en
+   **"Mis notas"** al lado del curso que te interesa — llegás al mismo lugar).
+2. Vas a ver tu nota final de ese curso, ya calculada, con la escala que usa tu institución (por
    ejemplo, sobre 20 puntos, sobre 100, o en letras).
 
 Notas importantes:
@@ -59,11 +59,10 @@ Notas importantes:
 Los certificados solo se emiten para cursos que ya **completaste** por completo (no para cursos en
 curso o en los que te retiraste).
 
-1. Andá a **"Mis matrículas"**.
-2. Si un curso dice "Completado", vas a ver un enlace **"Mis certificados"** al lado — hacé clic ahí.
-3. Vas a ver la lista de certificados emitidos para esa matrícula, con la fecha y si están
-   **Vigentes** o **Revocados**.
-4. Hacé clic en **"Descargar PDF"** para bajar el archivo del certificado a tu computadora.
+1. Hacé clic en **"Mis certificados"**, en el menú de arriba — vas a ver TODOS tus certificados de
+   una sola vez, agrupados por curso (no hace falta entrar curso por curso).
+2. Cada uno muestra la fecha de emisión y si está **Vigente** o **Revocado**.
+3. Hacé clic en **"Descargar PDF"** para bajar el archivo del certificado a tu computadora.
 
 ### Cómo demostrarle a alguien que tu certificado es auténtico
 
@@ -77,6 +76,15 @@ certificado es auténtico sin necesitar una cuenta en la plataforma:
 
 Esa página va a mostrar tu nombre, el curso, la institución, la fecha de emisión, y si el certificado
 sigue vigente o fue revocado — sin mostrar tus notas ni ningún otro dato tuyo.
+
+## Ver y actualizar tu perfil
+
+1. Hacé clic en **"Mi perfil"**, en el menú de arriba.
+2. Vas a ver tu nombre, apellido, email, número de contacto, dirección, departamento, provincia,
+   distrito y la fecha en la que te uniste a la institución. Estos datos son de **solo lectura** desde
+   acá — si alguno está mal o falta, pedile a quien administra tu institución que lo corrija.
+3. Lo único que podés cambiar vos mismo es tu **foto**: elegí una imagen y hacé clic en **"Subir
+   foto"**.
 
 ## Si no encontrás un botón o una pantalla que esperabas
 

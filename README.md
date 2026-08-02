@@ -58,7 +58,8 @@ Stoka LMS/
                 ├── certificates/ # Plantillas, emisión, revocación y verificación pública
                 ├── tenant-registration/ # Alta de instituciones nuevas (solicitud pública + aprobación)
                 ├── tenant/       # Nombre y marca (logo, fondo) del tenant activo
-                └── user-management/ # Panel de administración: asignar/quitar roles a usuarios del tenant
+                ├── user-management/ # Panel de administración: asignar/quitar roles a usuarios del tenant
+                └── profile/      # "Mi perfil": datos personales (solo lectura) + subir la foto
             └── auth/
                 ├── jwt.strategy.ts          # Valida el token + resuelve el usuario DENTRO de un tenant
                 └── platform-jwt.strategy.ts # Valida el token SIN exigir un tenant (admin de plataforma)
@@ -76,11 +77,14 @@ Stoka LMS/
             │   │       ├── modulos/            # Contenido del curso: módulos, lecciones, subir/ver recursos
             │   │       ├── evaluaciones/       # Crear preguntas, rendir examen, calificar entregas abiertas
             │   │       └── secciones/[id]/     # Matricular (individual o CSV masivo), cambiar estado
+            │   ├── notas/                          # "Notas" como sección propia (todos los cursos o los propios)
             │   ├── mis-matriculas/      # Autoservicio: "en qué cursos estoy matriculado"
+            │   ├── mis-certificados/              # Certificados propios, agrupados por curso
             │   ├── matriculas/[id]/certificados/  # Certificados de una matrícula
             │   ├── plantillas-certificado/        # Catálogo de plantillas (+ detalle/editar)
             │   ├── configuracion-marca/           # Nombre, logo y fondo de la institución
-            │   └── usuarios/                      # Asignar/quitar roles a usuarios del tenant
+            │   ├── usuarios/                      # Asignar/quitar roles a usuarios del tenant
+            │   └── perfil/                        # Datos personales (solo lectura) + subir la foto
             ├── registro-institucion/  # Formulario PÚBLICO de alta de una institución nueva
             ├── admin-plataforma/solicitudes/  # Aprobar/rechazar altas (admin de PLATAFORMA)
             ├── verify/[code]/    # Verificación PÚBLICA de un certificado (sin login)
@@ -257,7 +261,7 @@ Todos protegidos con `JwtAuthGuard` + `PermissionsGuard` (ver `docs/architecture
 | Contenido del curso | `POST/GET /courses/:courseId/modules`, `GET/PATCH/DELETE .../modules/:id`; `POST/GET .../modules/:moduleId/lessons`, `GET/PATCH/DELETE .../lessons/:id`; `POST .../lessons/:lessonId/resources` (sube un archivo real a MinIO/S3), `POST .../resources/link` (recurso externo, ej. clase en vivo), `GET .../resources` (incluye `downloadUrl` firmado), `GET .../resources/:id/download`, `DELETE .../resources/:id` |
 | Escalas de notas | `POST/GET /grading-scales`, `GET/PATCH/DELETE /grading-scales/:id` |
 | Categorías de calificación | `POST/GET /courses/:courseId/gradebook-categories`, `GET/PATCH/DELETE .../gradebook-categories/:id` |
-| Evaluaciones | `POST/GET /courses/:courseId/assessments`, `GET/PATCH/DELETE .../assessments/:id` |
+| Evaluaciones | `POST/GET /courses/:courseId/assessments` (acepta `moduleId` opcional, para anidarla dentro de un módulo), `GET/PATCH/DELETE .../assessments/:id` |
 | Preguntas | `POST/GET /courses/:courseId/assessments/:assessmentId/questions`, `PATCH/DELETE .../questions/:id` (oculta `correctAnswer` a quien no tenga `assessment:edit`) |
 | Entregas | `POST/GET .../assessments/:assessmentId/submissions` (auto-califica mcq/tf/matching), `PATCH .../submissions/:id/answers/:questionId` (calificación manual de preguntas abiertas) |
 | Notas finales | `POST /courses/:courseId/gradebook/publish` (calcula y publica), `GET /courses/:courseId/grades` (vista completa o solo propia, según permisos) |
@@ -267,6 +271,8 @@ Todos protegidos con `JwtAuthGuard` + `PermissionsGuard` (ver `docs/architecture
 | Alta de instituciones | `POST /tenant-registration-requests` (**sin autenticación**), `GET /tenant-registration-requests`, `PATCH .../:id/approve`, `PATCH .../:id/reject` (estas tres requieren `PlatformAdminGuard`, no `PermissionsGuard` — ver más arriba) |
 | Tenant activo | `GET /tenant/public` (**sin autenticación**, devuelve `null` si no hay tenant resuelto por el Host), `GET /tenant` (`tenant:view`), `PATCH /tenant` (`tenant:edit`, nombre + marca) |
 | Usuarios y roles | `GET /users` (miembros del tenant con sus roles), `GET /roles` (roles disponibles), `POST/DELETE /users/:userTenantId/roles` (asignar/quitar, con alcance opcional a un curso) — permiso `role:view`/`role:assign`, hoy solo Administrador de entidad y Super Admin |
+| Permisos del usuario actual | `GET /auth/me` (incluye `permissions: string[]`, alcance tenant), `GET /auth/permissions?courseId=` (version acotada a un curso especifico) — el frontend los usa para OCULTAR botones/enlaces que el rol actual no puede usar, ver `lib/api.ts` |
+| Mi perfil | `GET /profile` (datos personales + `enrolledAt`), `POST /profile/photo` (sube una imagen real a MinIO/S3; es lo ÚNICO editable desde ahí) — sin permiso administrativo, acotado por construcción a quien hace el pedido |
 
 Notas importantes encontradas al probar contra el sistema real (no solo revisando el código):
 - El `onDelete: Cascade` por defecto de Prisma borraba en cascada cursos/secciones/matrículas/notas/certificados al borrar su registro padre, sin avisar. Se cambió a `onDelete: Restrict` en toda la cadena académica (ver los comentarios en `schema.prisma`, empezando por el modelo `Course`), y se agregó un filtro global (`common/filters/prisma-exception.filter.ts`) que traduce ese error a un `409 Conflict` claro en vez de un `500` genérico.
@@ -282,6 +288,8 @@ Notas importantes encontradas al probar contra el sistema real (no solo revisand
 - **Matrícula masiva**: se probó a propósito que un archivo con una fila de email inválido y otra ya matriculada NO bloquee las filas válidas del mismo lote — cada fila corre en su propia transacción (`enrollment.service.ts`, `bulkCreate`) y el formato del email se valida a mano ahí mismo, no con `@IsEmail()` en el DTO (esa validación es global y habría rechazado el request ENTERO por una sola fila con typo).
 - **Subida de archivos como recurso de lección**: sube el archivo entero a memoria antes de reenviarlo a MinIO/S3 (mismo tipo de simplificación de MVP que la generación síncrona de certificados) — `STORAGE_MAX_UPLOAD_MB` (ver `.env.example`) pone un techo mientras no haga falta pasar a streaming/subida directa desde el navegador.
 - Un examen con preguntas de opción múltiple/emparejamiento se auto-califica comparando la respuesta contra `correctAnswer` **por posición** dentro de un array, no como conjunto (`gradebook.util.ts`, `deepEqual`) — tanto la pantalla de crear preguntas como la de rendir el examen arman los ids de opciones siempre en el mismo orden de aparición para que ese detalle nunca cause una calificación incorrecta por simple cambio de orden.
+- **UI consciente del rol real, no solo el backend**: hasta ahora cada pantalla mostraba siempre sus botones de crear/eliminar y dejaba que el 403 del backend los bloqueara — funcional, pero confuso para una persona real (un Estudiante veía "Crear módulo" o "Configuración de marca" en el menú, ninguno de los cuales iba a funcionar). Se agregó `GET /auth/permissions` (`casbin.service.ts`, `getPermissions`) para que el frontend pueda preguntar "¿qué puede hacer este rol?" y ocultar controles inútiles — probado en vivo con los 7 usuarios de prueba (uno por rol), confirmando que cada uno ve exactamente lo que su rol permite.
+- `firstName`/`lastName` (para "Mi perfil") se completan solos con los claims `given_name`/`family_name` que Keycloak ya incluye en el token — incluso para cuentas creadas ANTES de que estos campos existieran, se hizo un backfill en el primer login posterior a la migración (`auth.service.ts`, `findOrProvisionUser`), sin sobreescribir nunca un valor que ya estuviera cargado.
 
 ## Qué sigue
 
@@ -292,6 +300,7 @@ Este es el cimiento del proyecto: estructura, entorno local, modelo de datos, ai
 3. Clases en vivo integradas (hoy se resuelve con un recurso de tipo "link" a Zoom/Meet/YouTube, ver `content` módulo) y notificaciones por email (nueva calificación, certificado emitido).
 4. Facturación/planes por institución — hoy `Tenant.plan` existe en el modelo pero no hay ningún flujo de cobro; necesario antes de operar con instituciones reales pagando.
 5. Reportes/analítica para la institución (avance, finalización, uso) y SCORM/LTI para interoperar con contenido ya existente en otras plataformas.
+6. Panel de administración para editar los datos de contacto/residencia de un miembro (teléfono, dirección, departamento/provincia/distrito) — hoy `User` tiene esas columnas y "Mi perfil" las muestra, pero no existe ninguna pantalla para completarlas (solo a mano en la base de datos).
 
 Manuales de uso por rol, primeros pasos y resolución de problemas para personas no técnicas: ver [docs/manuales/](docs/manuales/README.md) (cubren exactamente lo que ya existe en pantalla; se amplían a medida que se agreguen las pantallas de la lista de arriba).
 
