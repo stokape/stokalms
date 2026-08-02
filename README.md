@@ -52,11 +52,13 @@ Stoka LMS/
             └── modules/
                 ├── health/       # Endpoint de salud
                 ├── academic/     # Periodos, Cursos, Secciones
-                ├── enrollment/   # Matrícula individual
+                ├── content/      # Módulos, Lecciones y Recursos (video/PDF/SCORM/enlaces) de un curso
+                ├── enrollment/   # Matrícula individual y masiva (CSV)
                 ├── gradebook/    # Escalas, categorías, evaluaciones, entregas, notas
                 ├── certificates/ # Plantillas, emisión, revocación y verificación pública
                 ├── tenant-registration/ # Alta de instituciones nuevas (solicitud pública + aprobación)
-                └── tenant/       # Nombre y marca (logo, fondo) del tenant activo
+                ├── tenant/       # Nombre y marca (logo, fondo) del tenant activo
+                └── user-management/ # Panel de administración: asignar/quitar roles a usuarios del tenant
             └── auth/
                 ├── jwt.strategy.ts          # Valida el token + resuelve el usuario DENTRO de un tenant
                 └── platform-jwt.strategy.ts # Valida el token SIN exigir un tenant (admin de plataforma)
@@ -70,10 +72,15 @@ Stoka LMS/
             ├── (app)/            # Pantallas de negocio, todas con el mismo layout+nav
             │   ├── layout.tsx           # Barra de navegación + comprobación de sesión
             │   ├── cursos/              # Lista y detalle de cursos/secciones
+            │   │   └── [courseId]/
+            │   │       ├── modulos/            # Contenido del curso: módulos, lecciones, subir/ver recursos
+            │   │       ├── evaluaciones/       # Crear preguntas, rendir examen, calificar entregas abiertas
+            │   │       └── secciones/[id]/     # Matricular (individual o CSV masivo), cambiar estado
             │   ├── mis-matriculas/      # Autoservicio: "en qué cursos estoy matriculado"
             │   ├── matriculas/[id]/certificados/  # Certificados de una matrícula
             │   ├── plantillas-certificado/        # Catálogo de plantillas (+ detalle/editar)
-            │   └── configuracion-marca/           # Nombre, logo y fondo de la institución
+            │   ├── configuracion-marca/           # Nombre, logo y fondo de la institución
+            │   └── usuarios/                      # Asignar/quitar roles a usuarios del tenant
             ├── registro-institucion/  # Formulario PÚBLICO de alta de una institución nueva
             ├── admin-plataforma/solicitudes/  # Aprobar/rechazar altas (admin de PLATAFORMA)
             ├── verify/[code]/    # Verificación PÚBLICA de un certificado (sin login)
@@ -231,8 +238,9 @@ Todos protegidos con `JwtAuthGuard` + `PermissionsGuard` (ver `docs/architecture
 | Periodos académicos | `POST/GET /terms`, `GET/PATCH/DELETE /terms/:id` |
 | Cursos | `POST/GET /courses`, `GET/PATCH/DELETE /courses/:id` |
 | Secciones | `POST/GET /courses/:courseId/sections`, `GET/PATCH/DELETE /courses/:courseId/sections/:id` |
-| Matrícula | `POST/GET /courses/:courseId/sections/:sectionId/enrollments`, `PATCH .../enrollments/:id` (cambia estado: active/dropped/completed) |
+| Matrícula | `POST/GET /courses/:courseId/sections/:sectionId/enrollments`, `PATCH .../enrollments/:id` (cambia estado: active/dropped/completed), `POST .../enrollments/bulk` (matrícula masiva: una fila por estudiante, cada una en su propia transacción para que un error no arrastre a las demás) |
 | Mis matrículas | `GET /enrollments/mine` — sin permiso administrativo, siempre acotado a las matrículas de quien pregunta (ver `my-enrollments.controller.ts`) |
+| Contenido del curso | `POST/GET /courses/:courseId/modules`, `GET/PATCH/DELETE .../modules/:id`; `POST/GET .../modules/:moduleId/lessons`, `GET/PATCH/DELETE .../lessons/:id`; `POST .../lessons/:lessonId/resources` (sube un archivo real a MinIO/S3), `POST .../resources/link` (recurso externo, ej. clase en vivo), `GET .../resources` (incluye `downloadUrl` firmado), `GET .../resources/:id/download`, `DELETE .../resources/:id` |
 | Escalas de notas | `POST/GET /grading-scales`, `GET/PATCH/DELETE /grading-scales/:id` |
 | Categorías de calificación | `POST/GET /courses/:courseId/gradebook-categories`, `GET/PATCH/DELETE .../gradebook-categories/:id` |
 | Evaluaciones | `POST/GET /courses/:courseId/assessments`, `GET/PATCH/DELETE .../assessments/:id` |
@@ -244,6 +252,7 @@ Todos protegidos con `JwtAuthGuard` + `PermissionsGuard` (ver `docs/architecture
 | Verificación pública | `GET /verify/:codigo` — **sin autenticación**, sin tenant conocido de antemano (ver la nota extensa en `rls-policies.sql` sobre `find_certificate_tenant`); devuelve solo nombre, curso, institución, fecha y si está vigente |
 | Alta de instituciones | `POST /tenant-registration-requests` (**sin autenticación**), `GET /tenant-registration-requests`, `PATCH .../:id/approve`, `PATCH .../:id/reject` (estas tres requieren `PlatformAdminGuard`, no `PermissionsGuard` — ver más arriba) |
 | Tenant activo | `GET /tenant/public` (**sin autenticación**, devuelve `null` si no hay tenant resuelto por el Host), `GET /tenant` (`tenant:view`), `PATCH /tenant` (`tenant:edit`, nombre + marca) |
+| Usuarios y roles | `GET /users` (miembros del tenant con sus roles), `GET /roles` (roles disponibles), `POST/DELETE /users/:userTenantId/roles` (asignar/quitar, con alcance opcional a un curso) — permiso `role:view`/`role:assign`, hoy solo Administrador de entidad y Super Admin |
 
 Notas importantes encontradas al probar contra el sistema real (no solo revisando el código):
 - El `onDelete: Cascade` por defecto de Prisma borraba en cascada cursos/secciones/matrículas/notas/certificados al borrar su registro padre, sin avisar. Se cambió a `onDelete: Restrict` en toda la cadena académica (ver los comentarios en `schema.prisma`, empezando por el modelo `Course`), y se agregó un filtro global (`common/filters/prisma-exception.filter.ts`) que traduce ese error a un `409 Conflict` claro en vez de un `500` genérico.
@@ -255,16 +264,20 @@ Notas importantes encontradas al probar contra el sistema real (no solo revisand
 - Cada pantalla del frontend (`apps/web/app/(app)/.../actions.ts`) usa Server Actions de Next.js para las mutaciones (matricular, emitir/revocar certificado, crear plantilla) — se probaron de punta a punta simulando el POST real que produce un formulario sin JavaScript (progressive enhancement), no solo revisando que la pantalla cargue datos.
 - **El frontend y el backend son dos servicios separados** — cuando el frontend llama a la API, lo hace hacia una URL fija (`STOKA_API_URL`), así que el header `Host` que ve el backend SIEMPRE reflejaba ese destino fijo, nunca el subdominio real que el navegador de la persona estaba visitando. Sin esto, TODAS las instituciones habrían visto siempre la marca del tenant de desarrollo. Se corrigió reenviando el Host original (leído con `headers()` de `next/headers`) en un header aparte, `X-Tenant-Host`, que `tenant-context.middleware.ts` prioriza sobre su propio `Host` (ver la nota extensa ahí y en `apps/web/lib/api.ts`).
 - La aprobación de una institución necesita a alguien que NO es "de" ningún tenant (por definición, la institución todavía no existe) — el modelo de permisos por tenant (Casbin + dominios `tenant:<id>`) no tiene forma de expresar eso. Se resolvió con una segunda estrategia JWT (`platform-jwt.strategy.ts`) que valida el mismo token de Keycloak pero SIN pasar por el aprovisionamiento que exige un tenant resuelto, más una lista fija de emails autorizados (`PLATFORM_ADMIN_EMAILS`) — una simplificación deliberada del MVP, documentada en el propio guard.
+- El modelo `Assessment` no tiene un campo de título propio (solo tipo, categoría, puntaje) — la pantalla de Evaluaciones usa el JSON libre `config.title` como convención de UI en vez de migrar el esquema para algo puramente cosmético.
+- **Matrícula masiva**: se probó a propósito que un archivo con una fila de email inválido y otra ya matriculada NO bloquee las filas válidas del mismo lote — cada fila corre en su propia transacción (`enrollment.service.ts`, `bulkCreate`) y el formato del email se valida a mano ahí mismo, no con `@IsEmail()` en el DTO (esa validación es global y habría rechazado el request ENTERO por una sola fila con typo).
+- **Subida de archivos como recurso de lección**: sube el archivo entero a memoria antes de reenviarlo a MinIO/S3 (mismo tipo de simplificación de MVP que la generación síncrona de certificados) — `STORAGE_MAX_UPLOAD_MB` (ver `.env.example`) pone un techo mientras no haga falta pasar a streaming/subida directa desde el navegador.
+- Un examen con preguntas de opción múltiple/emparejamiento se auto-califica comparando la respuesta contra `correctAnswer` **por posición** dentro de un array, no como conjunto (`gradebook.util.ts`, `deepEqual`) — tanto la pantalla de crear preguntas como la de rendir el examen arman los ids de opciones siempre en el mismo orden de aparición para que ese detalle nunca cause una calificación incorrecta por simple cambio de orden.
 
 ## Qué sigue
 
-Este es el cimiento del proyecto: estructura, entorno local, modelo de datos, aislamiento multi-tenant, **autenticación real contra Keycloak** (backend y frontend), **motor de permisos (Casbin)**, los módulos de **Académico, Matrícula, Evaluaciones/Gradebook y Certificados**, **alta de instituciones nuevas + personalización de marca**, y un **frontend Next.js con pantallas de negocio reales** (cursos, matrícula, notas, certificados, verificación pública, registro de instituciones) — todo validado de punta a punta con datos reales. Los próximos pasos, en orden:
+Este es el cimiento del proyecto: estructura, entorno local, modelo de datos, aislamiento multi-tenant, **autenticación real contra Keycloak** (backend y frontend), **motor de permisos (Casbin)**, los módulos de **Académico, Contenido de curso, Matrícula (individual y masiva), Evaluaciones/Gradebook y Certificados**, **alta de instituciones nuevas + personalización de marca**, un **panel de administración de roles**, y un **frontend Next.js con pantallas de negocio reales** para todo lo anterior — todo validado de punta a punta con datos reales, incluida la subida de archivos. Los próximos pasos, en orden:
 
 1. Integrar la API de administración de Keycloak al aprobar una institución — hoy el Administrador de entidad recién creado existe en la base de datos de Stoka LMS pero todavía necesita que alguien le cree su usuario en Keycloak a mano (ver la limitación conocida más arriba).
 2. Cola de generación de certificados (BullMQ + worker separado) — hoy la emisión es SÍNCRONA dentro del request (ver la nota de simplificación del MVP en `certificate-renderer.service.ts`); pasar a una cola es trabajo de infraestructura genuino que se justifica cuando el volumen de emisiones lo requiera.
-3. Matrícula masiva (CSV/Excel) — hoy solo existe la individual.
-4. Panel de administración para asignar roles a usuarios (hoy se hace manualmente en la base de datos; ver el ejemplo en el historial de commits).
-5. Pantallas de negocio para Evaluaciones (crear preguntas, rendir un examen, calificar a mano) — hoy esos flujos solo existen como endpoints de API, probados con `curl`.
+3. Clases en vivo integradas (hoy se resuelve con un recurso de tipo "link" a Zoom/Meet/YouTube, ver `content` módulo) y notificaciones por email (nueva calificación, certificado emitido).
+4. Facturación/planes por institución — hoy `Tenant.plan` existe en el modelo pero no hay ningún flujo de cobro; necesario antes de operar con instituciones reales pagando.
+5. Reportes/analítica para la institución (avance, finalización, uso) y SCORM/LTI para interoperar con contenido ya existente en otras plataformas.
 
 Manuales de uso por rol, primeros pasos y resolución de problemas para personas no técnicas: ver [docs/manuales/](docs/manuales/README.md) (cubren exactamente lo que ya existe en pantalla; se amplían a medida que se agreguen las pantallas de la lista de arriba).
 

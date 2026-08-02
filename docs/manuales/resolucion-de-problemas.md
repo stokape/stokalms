@@ -77,6 +77,13 @@ Otra institución ya eligió ese mismo subdominio (o ya hay otra solicitud pendi
 [Inscribir tu institución](inscribir-tu-institucion.md) y elegí una variante (por ejemplo, agregando la
 ciudad o una sigla).
 
+## Subí un CSV de matrícula masiva y algunas filas quedaron con error
+
+Es normal: el resto del archivo se procesa igual, aunque alguna fila tenga un problema. Revisá el
+detalle que aparece debajo del mensaje de éxito — dice exactamente qué fila falló y por qué (email mal
+escrito, esa persona ya estaba matriculada, o la sección ya no tiene cupo). Corregí solo esas filas y
+volvé a subir un archivo nuevo con ellas.
+
 ## La sesión se cierra sola / me pide iniciar sesión de nuevo sin avisar
 
 Por seguridad, la sesión tiene un tiempo límite. Si pasó bastante tiempo sin usar la plataforma, es

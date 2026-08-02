@@ -13,6 +13,32 @@ sesión ninguna vez, primero seguí la guía [Primeros pasos](primeros-pasos.md)
 Si la lista aparece vacía y esperabas ver algún curso, significa que todavía no te matricularon —
 avisale al coordinador académico de tu institución.
 
+## Ver el contenido de un curso
+
+1. Hacé clic en **"Cursos"**, en el menú de arriba, y entrá al curso que te interesa.
+2. Hacé clic en **"Ver contenido del curso"**.
+3. Vas a ver los **módulos** del curso (por ejemplo, "Módulo 1 - Introducción"); entrá a uno para ver
+   sus **lecciones**.
+4. Dentro de una lección vas a encontrar el texto que escribió tu docente y, más abajo, los
+   **recursos** adjuntos: videos, PDFs, u otros archivos para descargar, o enlaces (por ejemplo, a una
+   clase en vivo por Zoom/Meet) — hacé clic para abrirlos.
+
+## Rendir un examen
+
+1. Andá a **"Cursos"** → el curso correspondiente → **"Ver evaluaciones"**.
+2. Elegí la evaluación que querés rendir.
+3. Si todavía te queda algún intento disponible, vas a ver el botón **"Rendir examen"** — hacé clic
+   ahí.
+4. Respondé cada pregunta según su tipo (opción múltiple, verdadero/falso, emparejar elementos, o
+   respuesta abierta) y hacé clic en **"Entregar"** al final.
+5. Las preguntas de opción múltiple, verdadero/falso y emparejamiento se corrigen **solas, al
+   instante**. Las de respuesta abierta las corrige tu docente a mano — mientras tanto, tu entrega va
+   a figurar como "pendiente de revisión" y tu nota final de esa evaluación no va a estar disponible
+   todavía.
+
+Una vez que uses todos los intentos permitidos para una evaluación, la plataforma ya no te va a dejar
+rendirla de nuevo.
+
 ## Ver tus notas
 
 1. Andá a **"Mis matrículas"**.
@@ -54,8 +80,4 @@ sigue vigente o fue revocado — sin mostrar tus notas ni ningún otro dato tuyo
 
 ## Si no encontrás un botón o una pantalla que esperabas
 
-Hoy la plataforma todavía no tiene, en pantalla, cómo rendir un examen ni ver el contenido de un curso
-(lecciones, videos, materiales) — esas partes están en construcción. Si tu docente te pidió rendir una
-evaluación, seguí las instrucciones que te haya dado por fuera de la plataforma mientras tanto.
-
-Para cualquier otro problema, revisá la guía [Resolución de problemas](resolucion-de-problemas.md).
+Para cualquier problema, revisá la guía [Resolución de problemas](resolucion-de-problemas.md).

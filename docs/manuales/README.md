@@ -13,10 +13,12 @@ del proyecto.
 2. [Primeros pasos](primeros-pasos.md) — cómo conseguir tu cuenta, iniciar sesión por primera vez y
    entender el menú principal. Empezá por acá si tu institución ya existe pero vos nunca usaste la
    plataforma.
-3. [Manual para Estudiantes](manual-estudiante.md) — ver tus matrículas, tus notas y tus certificados.
+3. [Manual para Estudiantes](manual-estudiante.md) — ver tus matrículas, el contenido de un curso,
+   rendir un examen, tus notas y tus certificados.
 4. [Manual para Docentes, Coordinadores académicos y Administradores](manual-personal-academico.md) —
-   gestionar la matrícula de una sección, ver notas finales, emitir/revocar certificados, crear
-   plantillas y personalizar el nombre/logo/fondo de la institución.
+   subir contenido de un curso, gestionar la matrícula (individual o masiva por CSV), crear
+   evaluaciones y calificar, ver notas finales, emitir/revocar certificados, crear plantillas,
+   personalizar el nombre/logo/fondo de la institución y asignar roles a otras personas.
 5. [Resolución de problemas](resolucion-de-problemas.md) — qué hacer ante los inconvenientes más
    comunes (no poder iniciar sesión, mensajes de "no tienes permiso", certificados, etc.).
 
@@ -25,10 +27,9 @@ del proyecto.
 Estos manuales describen ÚNICAMENTE lo que ya existe como pantalla real en la plataforma. Todavía no
 cubren (porque todavía no tienen pantalla, solo existen para quien programa el sistema):
 
-- Crear cursos, períodos académicos o el contenido de un curso (lecciones, materiales).
-- Rendir un examen o calificar una entrega manualmente.
-- Matrícula masiva (cargar muchos estudiantes a la vez desde un archivo).
-- Un panel para asignar roles a otras personas (hoy lo hace quien administra técnicamente la
-  plataforma).
+- Crear cursos o períodos académicos nuevos.
+- Clases en vivo integradas (hoy se resuelve agregando un enlace externo a Zoom/Meet como recurso de
+  una lección) y notificaciones automáticas por email.
+- Facturación o planes pagos por institución.
 
 A medida que esas pantallas se construyan, se va a agregar su manual correspondiente acá.
