@@ -76,7 +76,35 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <form
             action={async () => {
               'use server';
-              await signOut();
+              // "signOut()" solo (a secas) borra la COOKIE de NextAuth —
+              // Keycloak sigue creyendo que la sesion de SSO sigue activa
+              // (su propia cookie, en localhost:8080, no se toca). Sin este
+              // paso extra, entrar de nuevo a "Iniciar sesion" te loguea
+              // SOLO A LA MISMA persona sin pedir usuario/contraseña, algo
+              // que pasa desapercibido con una cuenta pero se vuelve muy
+              // confuso al alternar entre los 7 usuarios de prueba (uno por
+              // rol, ver README) para probar cada rol por separado.
+              //
+              // La solucion es el logout "RP-initiated" del protocolo OIDC:
+              // redirigir al "end_session_endpoint" de Keycloak, pasandole
+              // el id_token de ESTA sesion como prueba de quien esta
+              // cerrando sesion ("id_token_hint") — Keycloak exige ese dato
+              // para saber a que sesion de SSO cerrarle la cookie.
+              const session = await auth();
+              const idToken = session?.idToken;
+              await signOut({ redirect: false });
+
+              const issuer = process.env.AUTH_KEYCLOAK_ISSUER;
+              if (issuer && idToken) {
+                const logoutUrl = new URL(`${issuer}/protocol/openid-connect/logout`);
+                logoutUrl.searchParams.set('id_token_hint', idToken);
+                logoutUrl.searchParams.set(
+                  'post_logout_redirect_uri',
+                  process.env.AUTH_URL ?? 'http://localhost:3000',
+                );
+                redirect(logoutUrl.toString());
+              }
+              redirect('/');
             }}
           >
             <button type="submit" className="text-zinc-500 underline">

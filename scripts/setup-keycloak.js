@@ -129,6 +129,21 @@ async function main() {
     // para el proveedor configurado como "keycloak".
     redirectUris: ['http://localhost:3000/api/auth/callback/keycloak'],
     webOrigins: ['http://localhost:3000'],
+    // Desde Keycloak 18, el logout "RP-initiated" (redirigir al
+    // "end_session_endpoint" para cerrar TAMBIEN la sesion de SSO, no solo
+    // la cookie de NextAuth — ver app/(app)/layout.tsx, boton "Cerrar
+    // sesion") exige que el "post_logout_redirect_uri" este en esta lista
+    // aparte de "redirectUris" de arriba; si no coincide, Keycloak devuelve
+    // un error en vez de redirigir de vuelta a la aplicacion.
+    attributes: { 'post.logout.redirect.uris': 'http://localhost:3000/*' },
+  });
+  // "ensureClient" solo CREA si no existia — si alguien corre este script
+  // sobre un Keycloak que ya tenia el cliente "stoka-web" de ANTES de que
+  // se agregara el logout RP-initiated, el atributo de arriba nunca se
+  // aplicaria. Este paso lo actualiza de todas formas, siempre, sin
+  // importar si el cliente era nuevo o ya existia (PUT es idempotente).
+  await ensureClientAttributes(adminToken, webClientUuid, {
+    'post.logout.redirect.uris': 'http://localhost:3000/*',
   });
   const webClientSecret = await getClientSecret(adminToken, webClientUuid);
 
@@ -275,6 +290,38 @@ async function ensureClient(adminToken, clientId, options) {
   const [created] = await recheck.json();
   console.log(`[keycloak-setup] Cliente "${clientId}" creado.`);
   return created.id;
+}
+
+// ----------------------------------------------------------------------------
+// Fusiona "attributes" nuevos en un cliente YA EXISTENTE (a diferencia de
+// "ensureClient", que solo actua la primera vez que el cliente se crea).
+// Keycloak no tiene un "PATCH" parcial para clientes: hay que leer la
+// representacion completa, mezclar los atributos nuevos encima, y mandar
+// TODO de vuelta con PUT — mandar solo "attributes" borraria el resto de la
+// configuracion del cliente (redirectUris, etc.) sin querer.
+// ----------------------------------------------------------------------------
+async function ensureClientAttributes(adminToken, clientUuid, attributes) {
+  const get = await fetch(
+    `${KEYCLOAK_BASE_URL}/admin/realms/${REALM_NAME}/clients/${clientUuid}`,
+    { headers: adminHeaders(adminToken) },
+  );
+  const client = await get.json();
+
+  const update = await fetch(
+    `${KEYCLOAK_BASE_URL}/admin/realms/${REALM_NAME}/clients/${clientUuid}`,
+    {
+      method: 'PUT',
+      headers: adminHeaders(adminToken),
+      body: JSON.stringify({
+        ...client,
+        attributes: { ...client.attributes, ...attributes },
+      }),
+    },
+  );
+
+  if (!update.ok) {
+    throw new Error(`No se pudieron actualizar los atributos del cliente (HTTP ${update.status}).`);
+  }
 }
 
 async function getClientSecret(adminToken, clientUuid) {

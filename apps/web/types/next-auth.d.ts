@@ -18,6 +18,10 @@ import type { DefaultSession } from 'next-auth';
 declare module 'next-auth' {
   interface Session {
     accessToken?: string;
+    // Ver auth.ts (callback "jwt") y app/(app)/layout.tsx (boton "Cerrar
+    // sesion"): Keycloak lo exige como "id_token_hint" para cerrar tambien
+    // su propia sesion de SSO, no solo la cookie de NextAuth.
+    idToken?: string;
     user?: DefaultSession['user'];
   }
 }
@@ -25,5 +29,6 @@ declare module 'next-auth' {
 declare module 'next-auth/jwt' {
   interface JWT {
     accessToken?: string;
+    idToken?: string;
   }
 }

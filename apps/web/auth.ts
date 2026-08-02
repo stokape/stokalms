@@ -52,16 +52,24 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     async jwt({ token, account }) {
       if (account) {
         token.accessToken = account.access_token;
+        // "id_token" (JWT distinto del access_token, pensado para IDENTIFICAR
+        // a la persona, no para autorizar llamadas a una API) es lo que
+        // Keycloak exige como "id_token_hint" al cerrar sesion de verdad (ver
+        // app/(app)/layout.tsx, el boton "Cerrar sesion") — sin guardarlo
+        // aca, se pierde apenas termina este login y no hay forma de pedirlo
+        // de nuevo mas tarde.
+        token.idToken = account.id_token;
       }
       return token;
     },
 
     // "session" define que datos quedan accesibles cuando el resto de la
     // aplicacion llama a "auth()" (ver app/dashboard/page.tsx). Sin este
-    // callback, "accessToken" quedaria atrapado dentro del JWT interno de
-    // NextAuth y nunca llegaria al codigo de nuestras paginas.
+    // callback, "accessToken"/"idToken" quedarian atrapados dentro del JWT
+    // interno de NextAuth y nunca llegarian al codigo de nuestras paginas.
     async session({ session, token }) {
       session.accessToken = token.accessToken as string | undefined;
+      session.idToken = token.idToken as string | undefined;
       return session;
     },
   },
