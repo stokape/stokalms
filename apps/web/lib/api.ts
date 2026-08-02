@@ -115,6 +115,39 @@ export async function apiFetchPublic<T>(path: string, init: RequestInit = {}): P
   return parseJsonBody<T>(response);
 }
 
+// Version para SUBIR ARCHIVOS (multipart/form-data), usada por las pantallas
+// de contenido de curso (ver content/actions.ts). A proposito NO fija
+// "Content-Type" a mano: si se lo pusieramos como "multipart/form-data" a
+// secas, faltaria el "boundary" que separa cada campo dentro del body, y el
+// backend (FileInterceptor de Nest/multer) no podria parsear nada — fetch
+// arma ese header completo, con el boundary correcto, SOLO si se lo deja
+// que lo decida solo a partir del objeto FormData.
+export async function apiFetchUpload<T>(
+  accessToken: string,
+  path: string,
+  formData: FormData,
+): Promise<T> {
+  const response = await fetch(`${API_URL}${path}`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      ...(await getTenantHostHeader()),
+    },
+    body: formData,
+    cache: 'no-store',
+  });
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}) as { message?: string });
+    throw new ApiError(
+      body.message ?? `El backend respondio con un error inesperado (${response.status}).`,
+      response.status,
+    );
+  }
+
+  return parseJsonBody<T>(response);
+}
+
 // GET /tenant/public (ver tenant.controller.ts) devuelve el cuerpo
 // LITERALMENTE VACIO (no la palabra "null") cuando no hay ningun tenant
 // resuelto por el Host del request — "response.json()" directo rompe con

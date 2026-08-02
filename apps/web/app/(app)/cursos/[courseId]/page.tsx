@@ -127,7 +127,13 @@ export default async function CourseDetailPage({
         </div>
       )}
 
-      <div className="mb-8">
+      <div className="mb-8 flex flex-wrap gap-3">
+        <Link
+          href={`/cursos/${courseId}/modulos`}
+          className="rounded-full border border-zinc-300 px-4 py-2 text-sm hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
+        >
+          Ver contenido del curso
+        </Link>
         <Link
           href={`/cursos/${courseId}/notas`}
           className="rounded-full border border-zinc-300 px-4 py-2 text-sm hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900"

@@ -28,6 +28,7 @@ import { AuthModule } from './auth/auth.module';
 import { RbacModule } from './rbac/rbac.module';
 import { StorageModule } from './common/storage/storage.module';
 import { AcademicModule } from './modules/academic/academic.module';
+import { ContentModule } from './modules/content/content.module';
 import { EnrollmentModule } from './modules/enrollment/enrollment.module';
 import { GradebookModule } from './modules/gradebook/gradebook.module';
 import { CertificatesModule } from './modules/certificates/certificates.module';
@@ -71,6 +72,10 @@ import { TenantSettingsModule } from './modules/tenant/tenant-settings.module';
     // Los siguientes modulos de negocio (Evaluaciones, Certificados) se
     // agregaran aqui en los proximos pasos.
     AcademicModule,
+
+    // Contenido de cada curso: modulos, lecciones y recursos (video, PDF,
+    // paquetes SCORM, enlaces externos) — ver src/modules/content/.
+    ContentModule,
 
     // Matricula individual (ver src/modules/enrollment/).
     EnrollmentModule,

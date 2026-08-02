@@ -47,6 +47,12 @@ export interface AppConfig {
     accessKey: string;
     secretKey: string;
     forcePathStyle: boolean;
+    // Tamaño máximo (en MB) de un archivo subido como recurso de lección
+    // (video, PDF, paquete SCORM...) — ver resource.controller.ts. Sin este
+    // límite, multer aceptaría cualquier tamaño y un archivo enorme podría
+    // agotar la memoria del proceso (el MVP sube a memoria antes de
+    // reenviar a MinIO/S3, ver la nota extensa en resource.controller.ts).
+    maxUploadMb: number;
   };
   keycloak: {
     baseUrl: string;
@@ -92,6 +98,7 @@ export default (): AppConfig => ({
     secretKey: process.env.STORAGE_SECRET_KEY ?? '',
     // "true"/"false" llega como texto desde el .env; lo convertimos a boolean real.
     forcePathStyle: process.env.STORAGE_FORCE_PATH_STYLE === 'true',
+    maxUploadMb: parseInt(process.env.STORAGE_MAX_UPLOAD_MB ?? '100', 10),
   },
 
   keycloak: {
