@@ -43,17 +43,20 @@ const ADMIN_USER = 'admin';
 const ADMIN_PASSWORD = 'admin_dev_password';
 
 // Usuarios de prueba que este script crea, para poder validar el login real
-// (ver apps/api/src/auth/) sin tener que registrar una cuenta. Se usan DOS
-// personas (no solo Maria) porque, al probar el modulo de Evaluaciones,
-// quien CREA un examen (docente) y quien lo RINDE (estudiante) no pueden
-// ser la misma persona sin volver confuso el escenario de prueba — ver
-// apps/api/src/modules/gradebook/.
+// (ver apps/api/src/auth/) sin tener que registrar una cuenta. Hay UNO por
+// cada rol base del sistema (ver SYSTEM_ROLES en prisma/seed.js) para poder
+// probar cada rol de forma AISLADA (ver que ve/no ve exactamente ESE rol,
+// sin la confusion de una cuenta con varios roles a la vez encima). La
+// asignacion del rol correspondiente a cada cuenta NO la hace este script
+// (Keycloak no sabe nada de roles de Stoka LMS) — se hace una sola vez
+// desde el panel "Usuarios y roles" (o via API) despues del primer login de
+// cada cuenta, que es lo que crea su fila en la base de datos de Stoka LMS.
 const TEST_USERS = [
   {
     username: 'maria@stoka-lms.test',
     email: 'maria@stoka-lms.test',
     firstName: 'Maria',
-    lastName: 'Docente',
+    lastName: 'Administradora',
     password: 'Maria12345!',
   },
   {
@@ -62,6 +65,41 @@ const TEST_USERS = [
     firstName: 'Carlos',
     lastName: 'Estudiante',
     password: 'Carlos12345!',
+  },
+  {
+    username: 'superadmin@stoka-lms.test',
+    email: 'superadmin@stoka-lms.test',
+    firstName: 'Sofia',
+    lastName: 'SuperAdmin',
+    password: 'SuperAdmin12345!',
+  },
+  {
+    username: 'coordinador@stoka-lms.test',
+    email: 'coordinador@stoka-lms.test',
+    firstName: 'Carlos',
+    lastName: 'Coordinador',
+    password: 'Coordinador12345!',
+  },
+  {
+    username: 'docente@stoka-lms.test',
+    email: 'docente@stoka-lms.test',
+    firstName: 'Diego',
+    lastName: 'Docente',
+    password: 'Docente12345!',
+  },
+  {
+    username: 'padre@stoka-lms.test',
+    email: 'padre@stoka-lms.test',
+    firstName: 'Pedro',
+    lastName: 'Apoderado',
+    password: 'Padre12345!',
+  },
+  {
+    username: 'auditor@stoka-lms.test',
+    email: 'auditor@stoka-lms.test',
+    firstName: 'Andrea',
+    lastName: 'Auditora',
+    password: 'Auditor12345!',
   },
 ];
 

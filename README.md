@@ -140,14 +140,28 @@ npm run dev
 
 El frontend queda en `http://localhost:3000`: el botón "Iniciar sesión" redirige a Keycloak, y al volver muestra `/dashboard`, que llama a `GET /api/v1/auth/me` del backend con el token real de la sesión.
 
-Usuarios de prueba que crea `npm run keycloak:setup` (ver `scripts/setup-keycloak.js`):
+Usuarios de prueba que crea `npm run keycloak:setup` (ver `scripts/setup-keycloak.js`) — uno por cada
+rol base del sistema, cada uno con **un solo rol asignado** (para poder probar cada rol aislado, sin la
+confusión de una cuenta con varios roles a la vez encima):
 
-| Usuario | Contraseña | Uso pensado |
+| Usuario | Contraseña | Rol asignado |
 |---|---|---|
-| `maria@stoka-lms.test` | `Maria12345!` | Login básico / rol Estudiante de fábrica |
-| `carlos.estudiante@stoka-lms.test` | `Carlos12345!` | Estudiante "puro", para probar flujos donde el docente y el estudiante no pueden ser la misma persona (ej. rendir un examen) |
+| `superadmin@stoka-lms.test` | `SuperAdmin12345!` | Super Admin |
+| `maria@stoka-lms.test` | `Maria12345!` | Administrador de entidad |
+| `coordinador@stoka-lms.test` | `Coordinador12345!` | Coordinador académico |
+| `docente@stoka-lms.test` | `Docente12345!` | Docente |
+| `carlos.estudiante@stoka-lms.test` | `Carlos12345!` | Estudiante |
+| `padre@stoka-lms.test` | `Padre12345!` | Padre/Apoderado |
+| `auditor@stoka-lms.test` | `Auditor12345!` | Auditor/Invitado |
 
-Ningún usuario tiene rol asignado al crearse — hay que asignarlo manualmente en `user_roles` (ver ejemplos en el historial de commits) hasta que exista un panel de administración.
+`maria@stoka-lms.test` está además en `PLATFORM_ADMIN_EMAILS`, así que también puede aprobar/rechazar
+altas de instituciones en `/admin-plataforma/solicitudes` — eso es independiente de su rol de tenant.
+
+Este script SOLO crea las cuentas en Keycloak (login) — el rol de cada una se asigna, una única vez,
+desde el panel **"Usuarios y roles"** (`/usuarios`, necesita que la cuenta ya haya iniciado sesión al
+menos una vez) o vía `POST /users/:userTenantId/roles`. Si volvés a sembrar la base de datos desde cero
+(`npm run prisma:seed` en una base nueva), las cuentas de Keycloak siguen existiendo pero hay que
+volver a asignarles su rol.
 
 Verificación rápida de que quedó bien:
 ```bash
@@ -171,9 +185,9 @@ Con el backend (`apps/api`, paso 8) y el frontend (`apps/web`, paso 9) corriendo
 
 1. Abrí `http://localhost:3000` en el navegador.
 2. Clic en "Iniciar sesión" → te redirige a la pantalla de login de Keycloak.
-3. Entrá con `maria@stoka-lms.test` / `Maria12345!` (rol de personal — coordinadora/docente/admin, ver
-   la tabla de usuarios de prueba más abajo) o con `carlos.estudiante@stoka-lms.test` / `Carlos12345!`
-   (estudiante "puro").
+3. Entrá con `maria@stoka-lms.test` / `Maria12345!` (Administrador de entidad: ve todas las pantallas)
+   o con cualquiera de los otros usuarios de prueba (ver la tabla más abajo) para probar un rol
+   específico de forma aislada.
 4. Te trae de vuelta a la plataforma, con esta navegación disponible:
    - **Cursos** — lista de cursos → entrás a una sección para ver quién está matriculado, cambiar su
      estado o matricular a alguien nuevo (necesita permiso de personal; un estudiante ve un mensaje de
