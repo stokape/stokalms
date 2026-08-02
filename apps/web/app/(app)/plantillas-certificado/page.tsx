@@ -6,7 +6,7 @@
 // ============================================================================
 
 import Link from 'next/link';
-import { requireAccessToken, apiFetch, toErrorMessage } from '@/lib/api';
+import { requireAccessToken, apiFetch, toErrorMessage, getPermissions, can } from '@/lib/api';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { crearPlantilla } from './actions';
 
@@ -47,6 +47,9 @@ export default async function PlantillasCertificadoPage({
     return <ErrorBanner message={toErrorMessage(err)} />;
   }
 
+  const permissions = await getPermissions(token);
+  const canCreate = can(permissions, 'certificate_template', 'create');
+
   return (
     <div className="mx-auto max-w-3xl">
       <h1 className="mb-6 text-2xl font-semibold">Plantillas de certificado</h1>
@@ -71,35 +74,39 @@ export default async function PlantillasCertificadoPage({
         </ul>
       )}
 
-      <h2 className="mb-3 text-lg font-medium">Crear plantilla</h2>
-      <p className="mb-3 text-sm text-zinc-500">
-        El diseño se escribe en HTML. Usa <code>{'{{studentName}}'}</code>,{' '}
-        <code>{'{{courseTitle}}'}</code>, <code>{'{{issueDate}}'}</code>,{' '}
-        <code>{'{{verificationCode}}'}</code> y <code>{'{{qrCode}}'}</code> donde quieras que
-        aparezcan esos datos — se reemplazan automáticamente al emitir cada certificado.
-      </p>
-      <form action={crearPlantilla} className="flex max-w-xl flex-col gap-3">
-        <input
-          name="name"
-          type="text"
-          required
-          placeholder="Nombre de la plantilla (ej. Certificado estándar)"
-          className="rounded border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
-        />
-        <textarea
-          name="htmlTemplate"
-          required
-          rows={12}
-          defaultValue={PLANTILLA_DE_EJEMPLO}
-          className="rounded border border-zinc-300 px-3 py-2 font-mono text-xs dark:border-zinc-700 dark:bg-zinc-900"
-        />
-        <button
-          type="submit"
-          className="self-start rounded-full bg-foreground px-4 py-2 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc]"
-        >
-          Crear plantilla
-        </button>
-      </form>
+      {canCreate && (
+        <>
+          <h2 className="mb-3 text-lg font-medium">Crear plantilla</h2>
+          <p className="mb-3 text-sm text-zinc-500">
+            El diseño se escribe en HTML. Usa <code>{'{{studentName}}'}</code>,{' '}
+            <code>{'{{courseTitle}}'}</code>, <code>{'{{issueDate}}'}</code>,{' '}
+            <code>{'{{verificationCode}}'}</code> y <code>{'{{qrCode}}'}</code> donde quieras que
+            aparezcan esos datos — se reemplazan automáticamente al emitir cada certificado.
+          </p>
+          <form action={crearPlantilla} className="flex max-w-xl flex-col gap-3">
+            <input
+              name="name"
+              type="text"
+              required
+              placeholder="Nombre de la plantilla (ej. Certificado estándar)"
+              className="rounded border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
+            />
+            <textarea
+              name="htmlTemplate"
+              required
+              rows={12}
+              defaultValue={PLANTILLA_DE_EJEMPLO}
+              className="rounded border border-zinc-300 px-3 py-2 font-mono text-xs dark:border-zinc-700 dark:bg-zinc-900"
+            />
+            <button
+              type="submit"
+              className="self-start rounded-full bg-foreground px-4 py-2 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc]"
+            >
+              Crear plantilla
+            </button>
+          </form>
+        </>
+      )}
     </div>
   );
 }

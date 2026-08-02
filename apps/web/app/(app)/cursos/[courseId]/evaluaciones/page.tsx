@@ -10,7 +10,7 @@
 // ============================================================================
 
 import Link from 'next/link';
-import { requireAccessToken, apiFetch, toErrorMessage } from '@/lib/api';
+import { requireAccessToken, apiFetch, toErrorMessage, getCoursePermissions, can } from '@/lib/api';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { crearCategoria, crearEvaluacion, eliminarEvaluacion } from './actions';
 
@@ -32,6 +32,11 @@ interface GradebookCategory {
   name: string;
 }
 
+interface CourseModule {
+  id: string;
+  title: string;
+}
+
 const TYPE_LABELS: Record<string, string> = {
   exam: 'Examen',
   assignment: 'Tarea',
@@ -44,10 +49,10 @@ export default async function EvaluacionesDelCursoPage({
   searchParams,
 }: {
   params: Promise<{ courseId: string }>;
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; moduleId?: string }>;
 }) {
   const { courseId } = await params;
-  const { error } = await searchParams;
+  const { error, moduleId: preselectedModuleId } = await searchParams;
   const token = await requireAccessToken();
 
   let course: Course;
@@ -61,6 +66,10 @@ export default async function EvaluacionesDelCursoPage({
     return <ErrorBanner message={toErrorMessage(err)} />;
   }
 
+  const permissions = await getCoursePermissions(token, courseId);
+  const canCreate = can(permissions, 'assessment', 'create');
+  const canDelete = can(permissions, 'assessment', 'delete');
+
   // Las categorias (ver gradebook-category.controller.ts) son un permiso
   // aparte ("gradebook_category:view") que un Estudiante no tiene — en un
   // try/catch separado, mismo criterio que la escala de notas en
@@ -71,6 +80,17 @@ export default async function EvaluacionesDelCursoPage({
     categories = await apiFetch<GradebookCategory[]>(token, `/courses/${courseId}/gradebook-categories`);
   } catch {
     categories = null;
+  }
+
+  // Modulos del curso, para poder anidar la evaluacion nueva en uno de
+  // ellos (ver modulos/[moduleId]/page.tsx, que enlaza aca con
+  // "?moduleId=..." para preseleccionarlo). Mismo criterio try/catch: si
+  // falla, la evaluacion simplemente se crea "suelta" a nivel de curso.
+  let modules: CourseModule[] | null = null;
+  try {
+    modules = await apiFetch<CourseModule[]>(token, `/courses/${courseId}/modules`);
+  } catch {
+    modules = null;
   }
 
   return (
@@ -99,17 +119,19 @@ export default async function EvaluacionesDelCursoPage({
                   {a.maxAttempts === 1 ? 'intento' : 'intentos'})
                 </span>
               </Link>
-              <form action={eliminarEvaluacion.bind(null, courseId, a.id)}>
-                <button type="submit" className="text-xs text-red-600 underline dark:text-red-400">
-                  Eliminar
-                </button>
-              </form>
+              {canDelete && (
+                <form action={eliminarEvaluacion.bind(null, courseId, a.id)}>
+                  <button type="submit" className="text-xs text-red-600 underline dark:text-red-400">
+                    Eliminar
+                  </button>
+                </form>
+              )}
             </li>
           ))}
         </ul>
       )}
 
-      {categories && categories.length === 0 && (
+      {canCreate && categories && categories.length === 0 && (
         <>
           <h2 className="mb-3 text-lg font-medium">Primero creá una categoría de notas</h2>
           <p className="mb-3 text-sm text-zinc-500">
@@ -151,7 +173,7 @@ export default async function EvaluacionesDelCursoPage({
         </>
       )}
 
-      {categories && categories.length > 0 && (
+      {canCreate && categories && categories.length > 0 && (
         <>
           <h2 className="mb-3 text-lg font-medium">Crear una evaluación nueva</h2>
           <form action={crearEvaluacion.bind(null, courseId)} className="flex max-w-xl flex-col gap-3">
@@ -184,6 +206,20 @@ export default async function EvaluacionesDelCursoPage({
                 ))}
               </select>
             </div>
+            {modules && modules.length > 0 && (
+              <select
+                name="moduleId"
+                defaultValue={preselectedModuleId ?? ''}
+                className="rounded border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
+              >
+                <option value="">Sin módulo (queda a nivel del curso)</option>
+                {modules.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.title}
+                  </option>
+                ))}
+              </select>
+            )}
             <div className="flex gap-2">
               <input
                 name="maxPoints"

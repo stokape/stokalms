@@ -6,14 +6,15 @@
 // "submission:grade" — el backend ya filtra esto, ver submission.service.ts
 // findAllByAssessment) con calificación manual de respuestas abiertas.
 //
-// El formulario de "agregar pregunta" se muestra siempre, sin intentar
-// adivinar el rol de antemano — mismo criterio ya usado en
-// cursos/[courseId]/modulos/page.tsx: el backend es quien realmente lo
-// permite o no (403), no hace falta duplicar esa lógica en el frontend.
+// El formulario de "agregar pregunta" se oculta segun "canSeeAnswers"
+// (misma señal que ya calcula el backend para decidir si mostrar
+// "correctAnswer", ver question.service.ts — ambas cosas dependen del
+// MISMO permiso, "assessment:edit") y "Rendir examen" segun
+// "submission:create" (ver lib/api.ts, getCoursePermissions).
 // ============================================================================
 
 import Link from 'next/link';
-import { requireAccessToken, apiFetch, toErrorMessage } from '@/lib/api';
+import { requireAccessToken, apiFetch, toErrorMessage, getCoursePermissions, can } from '@/lib/api';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { crearPregunta, eliminarPregunta, calificarRespuesta } from './actions';
 
@@ -116,6 +117,10 @@ export default async function EvaluacionDetallePage({
   const attemptsUsed = submissions?.length ?? 0;
   const canAttempt = attemptsUsed < assessment.maxAttempts;
 
+  const permissions = await getCoursePermissions(token, courseId);
+  const canSubmit = can(permissions, 'submission', 'create');
+  const canGrade = can(permissions, 'submission', 'grade');
+
   return (
     <div className="mx-auto max-w-3xl">
       <Link
@@ -138,22 +143,24 @@ export default async function EvaluacionDetallePage({
         </div>
       )}
 
-      <div className="mb-8">
-        {submissions && canAttempt && (
-          <Link
-            href={`/cursos/${courseId}/evaluaciones/${assessmentId}/rendir`}
-            className="rounded-full bg-foreground px-4 py-2 text-sm text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc]"
-          >
-            Rendir examen
-          </Link>
-        )}
-        {submissions && !canAttempt && (
-          <p className="text-sm text-zinc-500">
-            Ya usaste tus {assessment.maxAttempts}{' '}
-            {assessment.maxAttempts === 1 ? 'intento' : 'intentos'} permitidos.
-          </p>
-        )}
-      </div>
+      {canSubmit && (
+        <div className="mb-8">
+          {submissions && canAttempt && (
+            <Link
+              href={`/cursos/${courseId}/evaluaciones/${assessmentId}/rendir`}
+              className="rounded-full bg-foreground px-4 py-2 text-sm text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc]"
+            >
+              Rendir examen
+            </Link>
+          )}
+          {submissions && !canAttempt && (
+            <p className="text-sm text-zinc-500">
+              Ya usaste tus {assessment.maxAttempts}{' '}
+              {assessment.maxAttempts === 1 ? 'intento' : 'intentos'} permitidos.
+            </p>
+          )}
+        </div>
+      )}
 
       <h2 className="mb-3 text-lg font-medium">Preguntas</h2>
       {questions.length === 0 ? (
@@ -175,16 +182,20 @@ export default async function EvaluacionDetallePage({
                   </p>
                 )}
               </div>
-              <form action={eliminarPregunta.bind(null, courseId, assessmentId, q.id)}>
-                <button type="submit" className="text-xs text-red-600 underline dark:text-red-400">
-                  Eliminar
-                </button>
-              </form>
+              {canSeeAnswers && (
+                <form action={eliminarPregunta.bind(null, courseId, assessmentId, q.id)}>
+                  <button type="submit" className="text-xs text-red-600 underline dark:text-red-400">
+                    Eliminar
+                  </button>
+                </form>
+              )}
             </li>
           ))}
         </ul>
       )}
 
+      {canSeeAnswers && (
+      <>
       <h2 className="mb-3 text-lg font-medium">Agregar una pregunta</h2>
       <form
         action={crearPregunta.bind(null, courseId, assessmentId)}
@@ -304,6 +315,8 @@ export default async function EvaluacionDetallePage({
           Agregar pregunta
         </button>
       </form>
+      </>
+      )}
 
       {submissions && (
         <>
@@ -340,6 +353,8 @@ export default async function EvaluacionDetallePage({
                               Puntaje: {a.score}
                               {a.feedback && ` · ${a.feedback}`}
                             </p>
+                          ) : !canGrade ? (
+                            <p className="text-zinc-500">Pendiente de revisión.</p>
                           ) : (
                             <form
                               action={calificarRespuesta.bind(

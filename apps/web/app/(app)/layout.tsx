@@ -22,11 +22,12 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { auth, signOut } from '@/auth';
-import { apiFetch } from '@/lib/api';
+import { apiFetch, can, type Permissions } from '@/lib/api';
 
 interface StokaUser {
   fullName: string;
   email: string;
+  permissions: string[];
 }
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -37,14 +38,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   // Si /auth/me falla (ej. el backend esta caido), no tiene sentido
   // bloquear TODA la navegacion por eso — se muestra la barra igual, sin
-  // nombre, y cada pagina hija va a mostrar su propio error al intentar
-  // cargar sus datos.
+  // nombre y sin ningun enlace que dependa de permisos, y cada pagina hija
+  // va a mostrar su propio error al intentar cargar sus datos.
   let me: StokaUser | null = null;
   try {
     me = await apiFetch<StokaUser>(session.accessToken, '/auth/me');
   } catch {
     me = null;
   }
+  const permissions: Permissions = new Set(me?.permissions ?? []);
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -54,20 +56,38 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             Stoka LMS
           </Link>
           <nav className="flex flex-wrap gap-4 text-sm text-zinc-600 dark:text-zinc-400">
+            {/* "Cursos" y "Notas": todos los roles del sistema tienen al
+                menos "course:view" y "grade:view"/"grade:view_own" (ver
+                prisma/seed.js) — se muestran siempre. */}
             <Link href="/cursos" className="hover:underline">
               Cursos
+            </Link>
+            <Link href="/notas" className="hover:underline">
+              Notas
             </Link>
             <Link href="/mis-matriculas" className="hover:underline">
               Mis matrículas
             </Link>
-            <Link href="/plantillas-certificado" className="hover:underline">
-              Plantillas de certificado
+            <Link href="/mis-certificados" className="hover:underline">
+              Mis certificados
             </Link>
-            <Link href="/configuracion-marca" className="hover:underline">
-              Configuración de marca
-            </Link>
-            <Link href="/usuarios" className="hover:underline">
-              Usuarios y roles
+            {can(permissions, 'certificate_template', 'view') && (
+              <Link href="/plantillas-certificado" className="hover:underline">
+                Plantillas de certificado
+              </Link>
+            )}
+            {can(permissions, 'tenant', 'edit') && (
+              <Link href="/configuracion-marca" className="hover:underline">
+                Configuración de marca
+              </Link>
+            )}
+            {can(permissions, 'role', 'view') && (
+              <Link href="/usuarios" className="hover:underline">
+                Usuarios y roles
+              </Link>
+            )}
+            <Link href="/perfil" className="hover:underline">
+              Mi perfil
             </Link>
           </nav>
         </div>

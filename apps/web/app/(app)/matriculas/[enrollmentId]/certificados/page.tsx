@@ -14,7 +14,7 @@
 // ============================================================================
 
 import Link from 'next/link';
-import { requireAccessToken, apiFetch, toErrorMessage } from '@/lib/api';
+import { requireAccessToken, apiFetch, toErrorMessage, getPermissions, can } from '@/lib/api';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { emitirCertificado, revocarCertificado } from './actions';
 
@@ -59,6 +59,9 @@ export default async function CertificadosDeMatriculaPage({
     templates = null;
   }
 
+  const permissions = await getPermissions(token);
+  const canRevoke = can(permissions, 'certificate', 'revoke');
+
   return (
     <div className="mx-auto max-w-3xl">
       <Link href="/mis-matriculas" className="text-sm text-zinc-500 hover:underline">
@@ -99,7 +102,7 @@ export default async function CertificadosDeMatriculaPage({
                 <a href={c.downloadUrl} className="text-sm underline" target="_blank" rel="noreferrer">
                   Descargar PDF
                 </a>
-                {!c.revoked && (
+                {!c.revoked && canRevoke && (
                   <form action={revocarCertificado.bind(null, enrollmentId, c.id)}>
                     <button type="submit" className="text-xs text-red-600 underline dark:text-red-400">
                       Revocar

@@ -168,3 +168,54 @@ async function parseJsonBody<T>(response: Response): Promise<T> {
 export function toErrorMessage(err: unknown): string {
   return err instanceof ApiError ? err.message : 'Ocurrio un error inesperado. Intenta de nuevo.';
 }
+
+// ============================================================================
+// Permisos del usuario actual — para OCULTAR botones/enlaces que su rol no
+// puede usar (ver auth.controller.ts, "GET /auth/me" y "GET /auth/permissions").
+//
+// Antes, cada pantalla mostraba SIEMPRE los formularios de crear/eliminar y
+// dejaba que el 403 del backend los bloqueara — aceptable para probar una
+// pantalla a la vez, pero confuso para una persona real (un Estudiante veia
+// botones de "Crear módulo" o el enlace "Configuración de marca" que nunca
+// iban a funcionar). El backend sigue siendo la autoridad real (estas
+// funciones NUNCA reemplazan los guards del backend, solo evitan mostrar
+// controles inutiles).
+// ============================================================================
+
+export type Permissions = Set<string>;
+
+// Version TENANT-WIDE (sin curso especifico) — para decidir que enlaces de
+// navegacion mostrar (ver app/(app)/layout.tsx). Devuelve un Set vacio si
+// falla (nunca bloquea la pagina por esto: sin permisos, simplemente no se
+// muestra nada que dependa de ellos).
+export async function getPermissions(accessToken: string): Promise<Permissions> {
+  try {
+    const me = await apiFetch<{ permissions: string[] }>(accessToken, '/auth/me');
+    return new Set(me.permissions);
+  } catch {
+    return new Set();
+  }
+}
+
+// Version ACOTADA A UN CURSO: un Docente puede tener un rol asignado SOLO
+// para un curso puntual (ver docs/architecture/03-rbac.md, seccion 3.4) —
+// las pantallas anidadas bajo un curso (modulos, evaluaciones, secciones)
+// necesitan esta version para no ocultar controles que SI deberian verse.
+export async function getCoursePermissions(
+  accessToken: string,
+  courseId: string,
+): Promise<Permissions> {
+  try {
+    const { permissions } = await apiFetch<{ permissions: string[] }>(
+      accessToken,
+      `/auth/permissions?courseId=${courseId}`,
+    );
+    return new Set(permissions);
+  } catch {
+    return new Set();
+  }
+}
+
+export function can(permissions: Permissions, resource: string, action: string): boolean {
+  return permissions.has(`${resource}:${action}`);
+}

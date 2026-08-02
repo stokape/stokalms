@@ -17,7 +17,7 @@
 // ============================================================================
 
 import Link from 'next/link';
-import { requireAccessToken, apiFetch, toErrorMessage } from '@/lib/api';
+import { requireAccessToken, apiFetch, toErrorMessage, getPermissions, can } from '@/lib/api';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { editarPlantilla, eliminarPlantilla } from './actions';
 
@@ -44,6 +44,10 @@ export default async function PlantillaDetallePage({
   } catch (err) {
     return <ErrorBanner message={toErrorMessage(err)} />;
   }
+
+  const permissions = await getPermissions(token);
+  const canEdit = can(permissions, 'certificate_template', 'edit');
+  const canDelete = can(permissions, 'certificate_template', 'delete');
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -75,42 +79,50 @@ export default async function PlantillaDetallePage({
         className="mb-8 h-96 w-full rounded-lg border border-zinc-300 bg-white dark:border-zinc-700"
       />
 
-      <h2 className="mb-3 text-lg font-medium">Editar</h2>
-      <form
-        action={editarPlantilla.bind(null, templateId)}
-        className="mb-8 flex max-w-xl flex-col gap-3"
-      >
-        <input
-          name="name"
-          type="text"
-          required
-          defaultValue={template.name}
-          className="rounded border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
-        />
-        <textarea
-          name="htmlTemplate"
-          required
-          rows={12}
-          defaultValue={template.htmlTemplate}
-          className="rounded border border-zinc-300 px-3 py-2 font-mono text-xs dark:border-zinc-700 dark:bg-zinc-900"
-        />
-        <button
-          type="submit"
-          className="self-start rounded-full bg-foreground px-4 py-2 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc]"
-        >
-          Guardar cambios
-        </button>
-      </form>
+      {canEdit && (
+        <>
+          <h2 className="mb-3 text-lg font-medium">Editar</h2>
+          <form
+            action={editarPlantilla.bind(null, templateId)}
+            className="mb-8 flex max-w-xl flex-col gap-3"
+          >
+            <input
+              name="name"
+              type="text"
+              required
+              defaultValue={template.name}
+              className="rounded border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
+            />
+            <textarea
+              name="htmlTemplate"
+              required
+              rows={12}
+              defaultValue={template.htmlTemplate}
+              className="rounded border border-zinc-300 px-3 py-2 font-mono text-xs dark:border-zinc-700 dark:bg-zinc-900"
+            />
+            <button
+              type="submit"
+              className="self-start rounded-full bg-foreground px-4 py-2 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc]"
+            >
+              Guardar cambios
+            </button>
+          </form>
+        </>
+      )}
 
-      <h2 className="mb-3 text-lg font-medium">Eliminar plantilla</h2>
-      <p className="mb-3 text-sm text-zinc-500">
-        Solo se puede eliminar si NINGÚN certificado fue emitido todavía con esta plantilla.
-      </p>
-      <form action={eliminarPlantilla.bind(null, templateId)}>
-        <button type="submit" className="text-sm text-red-600 underline dark:text-red-400">
-          Eliminar esta plantilla
-        </button>
-      </form>
+      {canDelete && (
+        <>
+          <h2 className="mb-3 text-lg font-medium">Eliminar plantilla</h2>
+          <p className="mb-3 text-sm text-zinc-500">
+            Solo se puede eliminar si NINGÚN certificado fue emitido todavía con esta plantilla.
+          </p>
+          <form action={eliminarPlantilla.bind(null, templateId)}>
+            <button type="submit" className="text-sm text-red-600 underline dark:text-red-400">
+              Eliminar esta plantilla
+            </button>
+          </form>
+        </>
+      )}
     </div>
   );
 }

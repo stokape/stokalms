@@ -35,6 +35,7 @@ export async function crearEvaluacion(courseId: string, formData: FormData) {
   const maxAttempts = Number(formData.get('maxAttempts') ?? 1);
   const title = String(formData.get('title') ?? '').trim();
   const autoPublish = formData.get('autoPublish') === 'on';
+  const moduleId = String(formData.get('moduleId') ?? '').trim();
 
   try {
     await apiFetch(token, `/courses/${courseId}/assessments`, {
@@ -44,6 +45,7 @@ export async function crearEvaluacion(courseId: string, formData: FormData) {
         gradebookCategoryId,
         maxPoints,
         maxAttempts,
+        moduleId: moduleId || undefined,
         config: { title: title || undefined, autoPublish },
       }),
     });
