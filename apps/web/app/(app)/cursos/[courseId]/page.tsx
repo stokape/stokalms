@@ -135,6 +135,12 @@ export default async function CourseDetailPage({
           Ver contenido del curso
         </Link>
         <Link
+          href={`/cursos/${courseId}/evaluaciones`}
+          className="rounded-full border border-zinc-300 px-4 py-2 text-sm hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
+        >
+          Ver evaluaciones
+        </Link>
+        <Link
           href={`/cursos/${courseId}/notas`}
           className="rounded-full border border-zinc-300 px-4 py-2 text-sm hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
         >
