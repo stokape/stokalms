@@ -19,6 +19,7 @@ un rol a la vez):
 | Revocar un certificado | No | Sí | Sí |
 | Ver el catálogo de plantillas de certificado | Sí | Sí | Sí |
 | Crear una plantilla de certificado nueva | No | Sí | Sí |
+| Cambiar el nombre, logo y fondo de la institución | No | No | Sí |
 
 ¹ Si sos Docente y necesitás matricular o retirar a alguien, pedile a un Coordinador académico o
 Administrador que lo haga — hoy esa pantalla no está disponible para el rol Docente.
@@ -113,6 +114,21 @@ colores y datos van a aparecer.
 Si tu institución necesita un diseño más elaborado (con logo, colores institucionales, firmas
 digitalizadas), ese diseño se escribe en HTML — pedile ayuda a quien administra técnicamente tu
 instalación de Stoka LMS para armarlo la primera vez.
+
+## Personalizar el nombre, logo y fondo de tu institución
+
+*(Administrador de entidad)*
+
+1. Hacé clic en **"Configuración de marca"**, en el menú de arriba.
+2. Ahí podés cambiar:
+   - El **nombre** de la institución.
+   - La **URL del logo** (una dirección web donde esté guardada la imagen).
+   - Un **color de fondo** (por ejemplo, "#0f172a") o una **URL de imagen de fondo**.
+3. Hacé clic en **"Guardar cambios"**.
+
+Estos datos son lo primero que ve cualquier persona que entre a la dirección web de tu institución,
+antes de iniciar sesión — abrí la página de inicio en otra pestaña después de guardar para ver cómo
+quedó.
 
 ## Si no encontrás una pantalla que esperabas
 

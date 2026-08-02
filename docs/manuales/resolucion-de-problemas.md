@@ -64,6 +64,19 @@ El enlace de descarga es temporal (por seguridad, deja de funcionar después de 
 página de certificados de esa matrícula y hacé clic de nuevo en "Descargar PDF" para generar un enlace
 nuevo.
 
+## Inscribí mi institución y no recibo respuesta
+
+La solicitud de alta (ver [Inscribir tu institución](inscribir-tu-institucion.md)) no se aprueba sola
+ni al instante — alguien la tiene que revisar a mano, así que puede tardar. Si pasó bastante tiempo sin
+noticias, revisá que el email de contacto que dejaste esté bien escrito, y si tenés otro medio de
+contacto con Stoka LMS, escribí por ahí para confirmar que la solicitud llegó.
+
+## "El subdominio ya está en uso" al inscribir mi institución
+
+Otra institución ya eligió ese mismo subdominio (o ya hay otra solicitud pendiente con él). Volvé a
+[Inscribir tu institución](inscribir-tu-institucion.md) y elegí una variante (por ejemplo, agregando la
+ciudad o una sigla).
+
 ## La sesión se cierra sola / me pide iniciar sesión de nuevo sin avisar
 
 Por seguridad, la sesión tiene un tiempo límite. Si pasó bastante tiempo sin usar la plataforma, es

@@ -13,9 +13,29 @@
 // ============================================================================
 
 import { redirect } from 'next/navigation';
+import { headers } from 'next/headers';
 import { auth } from '@/auth';
 
 const API_URL = process.env.STOKA_API_URL ?? 'http://localhost:3001/api/v1';
+
+// El backend resuelve a que INSTITUCION pertenece un request mirando el
+// header "Host" (ver tenant-context.middleware.ts) — pero aca, quien
+// llama al backend no es el navegador de la persona, es este mismo
+// servidor de Next.js, hacia una URL FIJA (STOKA_API_URL). Sin esto,
+// "Host" siempre seria "localhost:3001" (o el dominio del backend en
+// produccion), sin importar que subdominio de institucion este visitando
+// alguien en su navegador — CUALQUIER personalizacion por tenant (marca
+// del home, etc.) veria siempre el mismo tenant.
+//
+// La solucion: leer el Host que SI vio Next.js al recibir el request
+// original del navegador (headers() de next/headers, disponible tanto en
+// Server Components como en Server Actions) y reenviarlo en un header
+// aparte, "X-Tenant-Host", que el backend prioriza sobre su propio "Host"
+// (ver la nota extensa en tenant-context.middleware.ts).
+async function getTenantHostHeader(): Promise<Record<string, string>> {
+  const incomingHost = (await headers()).get('host');
+  return incomingHost ? { 'X-Tenant-Host': incomingHost } : {};
+}
 
 // El backend (ver common/filters/prisma-exception.filter.ts y los
 // "throw new NotFoundException(...)" etc. de cada servicio) siempre
@@ -53,6 +73,7 @@ export async function apiFetch<T>(
     headers: {
       Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
+      ...(await getTenantHostHeader()),
       ...init.headers,
     },
     // Cada respuesta depende de QUIEN la pide (tenant + permisos del
@@ -69,20 +90,20 @@ export async function apiFetch<T>(
     );
   }
 
-  if (response.status === 204) {
-    return undefined as T;
-  }
-  return response.json() as Promise<T>;
+  return parseJsonBody<T>(response);
 }
 
-// Version SIN token, para las (poquisimas) llamadas publicas del frontend —
-// hoy, solo la pagina de verificacion de certificados (ver
-// app/verify/[code]/page.tsx), que refleja del lado del frontend el mismo
-// endpoint publico y sin autenticacion del backend
-// (GET /api/v1/verify/:codigo, ver
-// apps/api/src/modules/certificates/verify.controller.ts).
-export async function apiFetchPublic<T>(path: string): Promise<T> {
-  const response = await fetch(`${API_URL}${path}`, { cache: 'no-store' });
+// Version SIN token, para las (pocas) llamadas publicas del frontend: la
+// verificacion de certificados (GET /verify/:codigo) y el registro/consulta
+// de marca de una institucion (POST /tenant-registration-requests,
+// GET /tenant/public) — endpoints que el backend expone sin autenticacion
+// a proposito, ver la nota en cada uno.
+export async function apiFetchPublic<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const response = await fetch(`${API_URL}${path}`, {
+    ...init,
+    headers: { 'Content-Type': 'application/json', ...(await getTenantHostHeader()), ...init.headers },
+    cache: 'no-store',
+  });
 
   if (!response.ok) {
     const body = await response.json().catch(() => ({}) as { message?: string });
@@ -91,7 +112,20 @@ export async function apiFetchPublic<T>(path: string): Promise<T> {
       response.status,
     );
   }
-  return response.json() as Promise<T>;
+  return parseJsonBody<T>(response);
+}
+
+// GET /tenant/public (ver tenant.controller.ts) devuelve el cuerpo
+// LITERALMENTE VACIO (no la palabra "null") cuando no hay ningun tenant
+// resuelto por el Host del request — "response.json()" directo rompe con
+// un body vacio, por eso todo el parseo de JSON pasa por aca: si no hay
+// texto, se interpreta como "sin datos" en vez de fallar.
+async function parseJsonBody<T>(response: Response): Promise<T> {
+  if (response.status === 204) {
+    return undefined as T;
+  }
+  const text = await response.text();
+  return (text ? JSON.parse(text) : null) as T;
 }
 
 // Helper para las Server Actions de formularios (ver .../actions.ts en cada

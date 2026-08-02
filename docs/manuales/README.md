@@ -8,13 +8,16 @@ del proyecto.
 
 ## Índice
 
-1. [Primeros pasos](primeros-pasos.md) — cómo conseguir tu cuenta, iniciar sesión por primera vez y
-   entender el menú principal. Empezá por acá si nunca usaste la plataforma.
-2. [Manual para Estudiantes](manual-estudiante.md) — ver tus matrículas, tus notas y tus certificados.
-3. [Manual para Docentes, Coordinadores académicos y Administradores](manual-personal-academico.md) —
-   gestionar la matrícula de una sección, ver notas finales, emitir/revocar certificados y crear
-   plantillas.
-4. [Resolución de problemas](resolucion-de-problemas.md) — qué hacer ante los inconvenientes más
+1. [Inscribir tu institución](inscribir-tu-institucion.md) — si tu institución todavía NO tiene cuenta
+   en Stoka LMS: cómo completar el formulario de alta y qué pasa después de enviarlo.
+2. [Primeros pasos](primeros-pasos.md) — cómo conseguir tu cuenta, iniciar sesión por primera vez y
+   entender el menú principal. Empezá por acá si tu institución ya existe pero vos nunca usaste la
+   plataforma.
+3. [Manual para Estudiantes](manual-estudiante.md) — ver tus matrículas, tus notas y tus certificados.
+4. [Manual para Docentes, Coordinadores académicos y Administradores](manual-personal-academico.md) —
+   gestionar la matrícula de una sección, ver notas finales, emitir/revocar certificados, crear
+   plantillas y personalizar el nombre/logo/fondo de la institución.
+5. [Resolución de problemas](resolucion-de-problemas.md) — qué hacer ante los inconvenientes más
    comunes (no poder iniciar sesión, mensajes de "no tienes permiso", certificados, etc.).
 
 ## Qué cubren estos manuales hoy

@@ -63,6 +63,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             <Link href="/plantillas-certificado" className="hover:underline">
               Plantillas de certificado
             </Link>
+            <Link href="/configuracion-marca" className="hover:underline">
+              Configuración de marca
+            </Link>
           </nav>
         </div>
         <div className="flex items-center gap-4 text-sm">

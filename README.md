@@ -54,7 +54,12 @@ Stoka LMS/
                 ├── academic/     # Periodos, Cursos, Secciones
                 ├── enrollment/   # Matrícula individual
                 ├── gradebook/    # Escalas, categorías, evaluaciones, entregas, notas
-                └── certificates/ # Plantillas, emisión, revocación y verificación pública
+                ├── certificates/ # Plantillas, emisión, revocación y verificación pública
+                ├── tenant-registration/ # Alta de instituciones nuevas (solicitud pública + aprobación)
+                └── tenant/       # Nombre y marca (logo, fondo) del tenant activo
+            └── auth/
+                ├── jwt.strategy.ts          # Valida el token + resuelve el usuario DENTRO de un tenant
+                └── platform-jwt.strategy.ts # Valida el token SIN exigir un tenant (admin de plataforma)
     └── web/                      # Frontend Next.js
         ├── auth.ts               # Configuración de NextAuth.js (proveedor Keycloak)
         ├── lib/api.ts            # Único punto por el que el frontend llama al backend
@@ -67,7 +72,10 @@ Stoka LMS/
             │   ├── cursos/              # Lista y detalle de cursos/secciones
             │   ├── mis-matriculas/      # Autoservicio: "en qué cursos estoy matriculado"
             │   ├── matriculas/[id]/certificados/  # Certificados de una matrícula
-            │   └── plantillas-certificado/        # Catálogo de plantillas
+            │   ├── plantillas-certificado/        # Catálogo de plantillas (+ detalle/editar)
+            │   └── configuracion-marca/           # Nombre, logo y fondo de la institución
+            ├── registro-institucion/  # Formulario PÚBLICO de alta de una institución nueva
+            ├── admin-plataforma/solicitudes/  # Aprobar/rechazar altas (admin de PLATAFORMA)
             ├── verify/[code]/    # Verificación PÚBLICA de un certificado (sin login)
             └── api/auth/[...nextauth]/route.ts  # Rutas de NextAuth.js
 ```
@@ -176,6 +184,44 @@ permiso necesario (ver `docs/architecture/03-rbac.md`) — no un bug. Ningún us
 asignado al crearse (ver más abajo), así que hay que asignarlo a mano en `user_roles` para ver las
 pantallas de personal funcionando.
 
+## Alta de instituciones nuevas y marca
+
+Una institución NUEVA no crea su cuenta a sí misma de forma instantánea (se decidió así a propósito:
+sin billing todavía, no hay urgencia, y una revisión manual evita altas fraudulentas o duplicadas):
+
+1. Cualquiera completa el formulario público en `/registro-institucion` (nombre, subdominio deseado,
+   contacto) → crea una fila en `tenant_registration_requests` con estado `pending`.
+2. Alguien con permiso de **administrador de PLATAFORMA** (ver más abajo — es un concepto DISTINTO de
+   "Administrador de entidad", que es dentro de un tenant ya existente) entra a
+   `/admin-plataforma/solicitudes` y la aprueba o rechaza.
+3. Al aprobar (`tenant-registration.service.ts`): se crea el `Tenant`, su `TenantDomain`
+   (`<subdominio>.<PLATFORM_ROOT_DOMAIN>`), y a la persona de contacto se le crea su cuenta con el rol
+   "Administrador de entidad" — con permisos vigentes DE INMEDIATO (`CasbinService.reload()`), sin
+   esperar a que nadie reinicie el backend.
+
+**Quién puede aprobar — `PLATFORM_ADMIN_EMAILS`**: no es un rol más de RBAC por tenant (por definición,
+aprueba instituciones que TODAVÍA NO EXISTEN, así que no hay tenant en el que asignarle ese rol) — es
+una lista fija de emails en `.env` (ver `platform-jwt.strategy.ts` y `platform-admin.guard.ts`). Para
+probarlo en desarrollo, `maria@stoka-lms.test` ya está en esa lista.
+
+**Marca de cada institución**: un Administrador de entidad (permiso `tenant:edit`) entra a
+`/configuracion-marca` y define el nombre, el logo y el color/imagen de fondo de SU institución — se
+guardan en `Tenant.branding` (JSON) y son lo que ve cualquiera en el "home" público (`/`) de su
+subdominio, ANTES de iniciar sesión.
+
+**Limitación conocida (no resuelta todavía)**: aprobar una solicitud crea la cuenta de la institución
+en la base de datos de Stoka LMS, pero NO crea todavía su usuario en Keycloak (el proveedor de login)
+— hoy eso se sigue haciendo a mano, con `scripts/setup-keycloak.js` como referencia, hasta que se
+integre la API de administración de Keycloak a este flujo.
+
+**Cómo probarlo localmente sin editar tu archivo de hosts**: la resolución de tenant depende del
+header `Host`, que en desarrollo siempre es `localhost` sin importar qué institución "creas" que estás
+visitando. Para ver la marca de una institución recién aprobada, hacé el pedido con un header
+`Host` distinto:
+```bash
+curl -H "Host: <subdominio>.stokalms.local:3000" http://localhost:3000/
+```
+
 ## Endpoints de negocio disponibles
 
 Todos protegidos con `JwtAuthGuard` + `PermissionsGuard` (ver `docs/architecture/03-rbac.md`):
@@ -196,6 +242,8 @@ Todos protegidos con `JwtAuthGuard` + `PermissionsGuard` (ver `docs/architecture
 | Plantillas de certificado | `POST/GET /certificate-templates`, `GET/PATCH/DELETE /certificate-templates/:id` (recurso de tenant, no de curso) |
 | Certificados | `POST /enrollments/:enrollmentId/certificates` (emite; exige matrícula en estado `completed`), `GET /enrollments/:enrollmentId/certificates`, `GET /certificates/:id` (vista completa o solo propia), `PATCH /certificates/:id/revoke` (nunca se borra) |
 | Verificación pública | `GET /verify/:codigo` — **sin autenticación**, sin tenant conocido de antemano (ver la nota extensa en `rls-policies.sql` sobre `find_certificate_tenant`); devuelve solo nombre, curso, institución, fecha y si está vigente |
+| Alta de instituciones | `POST /tenant-registration-requests` (**sin autenticación**), `GET /tenant-registration-requests`, `PATCH .../:id/approve`, `PATCH .../:id/reject` (estas tres requieren `PlatformAdminGuard`, no `PermissionsGuard` — ver más arriba) |
+| Tenant activo | `GET /tenant/public` (**sin autenticación**, devuelve `null` si no hay tenant resuelto por el Host), `GET /tenant` (`tenant:view`), `PATCH /tenant` (`tenant:edit`, nombre + marca) |
 
 Notas importantes encontradas al probar contra el sistema real (no solo revisando el código):
 - El `onDelete: Cascade` por defecto de Prisma borraba en cascada cursos/secciones/matrículas/notas/certificados al borrar su registro padre, sin avisar. Se cambió a `onDelete: Restrict` en toda la cadena académica (ver los comentarios en `schema.prisma`, empezando por el modelo `Course`), y se agregó un filtro global (`common/filters/prisma-exception.filter.ts`) que traduce ese error a un `409 Conflict` claro en vez de un `500` genérico.
@@ -205,15 +253,18 @@ Notas importantes encontradas al probar contra el sistema real (no solo revisand
 - **Bug real encontrado probando con dos usuarios distintos**: `prisma/seed.js` solo AGREGABA permisos a los roles del sistema, nunca quitaba los que se retiraban de la lista. Al angostar el permiso de Estudiante de `certificate:view` (ver cualquier certificado del tenant) a `certificate:view_own` (solo el propio), la fila vieja de `view` seguía viva en la base de datos — un estudiante de prueba podía ver certificados ajenos conociendo el UUID de la matrícula. Se corrigió haciendo que el seed sea declarativo: al final de sembrar cada rol, borra cualquier `RolePermission` que ya no esté en la lista actual (ver el comentario extenso en `seed.js`).
 - **Bug de entorno real (Windows + Docker Desktop + WSL2)**: el backend fallaba al arrancar con `PrismaClientInitializationError: Can't reach database server at localhost:5432`, a pesar de que Postgres estaba sano (`pg_isready` y `Test-NetConnection` de Windows daban bien). La causa: Node a veces resuelve `localhost` a la dirección IPv6 `::1`, cuyo reenvío de puerto por WSL2 puede quedar en un estado roto sin que el resto del sistema lo note. Se corrigió usando `127.0.0.1` en vez de `localhost` en `DATABASE_URL`/`RUNTIME_DATABASE_URL` (ver `.env.example`), forzando IPv4 explícito.
 - Cada pantalla del frontend (`apps/web/app/(app)/.../actions.ts`) usa Server Actions de Next.js para las mutaciones (matricular, emitir/revocar certificado, crear plantilla) — se probaron de punta a punta simulando el POST real que produce un formulario sin JavaScript (progressive enhancement), no solo revisando que la pantalla cargue datos.
+- **El frontend y el backend son dos servicios separados** — cuando el frontend llama a la API, lo hace hacia una URL fija (`STOKA_API_URL`), así que el header `Host` que ve el backend SIEMPRE reflejaba ese destino fijo, nunca el subdominio real que el navegador de la persona estaba visitando. Sin esto, TODAS las instituciones habrían visto siempre la marca del tenant de desarrollo. Se corrigió reenviando el Host original (leído con `headers()` de `next/headers`) en un header aparte, `X-Tenant-Host`, que `tenant-context.middleware.ts` prioriza sobre su propio `Host` (ver la nota extensa ahí y en `apps/web/lib/api.ts`).
+- La aprobación de una institución necesita a alguien que NO es "de" ningún tenant (por definición, la institución todavía no existe) — el modelo de permisos por tenant (Casbin + dominios `tenant:<id>`) no tiene forma de expresar eso. Se resolvió con una segunda estrategia JWT (`platform-jwt.strategy.ts`) que valida el mismo token de Keycloak pero SIN pasar por el aprovisionamiento que exige un tenant resuelto, más una lista fija de emails autorizados (`PLATFORM_ADMIN_EMAILS`) — una simplificación deliberada del MVP, documentada en el propio guard.
 
 ## Qué sigue
 
-Este es el cimiento del proyecto: estructura, entorno local, modelo de datos, aislamiento multi-tenant, **autenticación real contra Keycloak** (backend y frontend), **motor de permisos (Casbin)**, los módulos de **Académico, Matrícula, Evaluaciones/Gradebook y Certificados**, y un **frontend Next.js con pantallas de negocio reales** (cursos, matrícula, notas, certificados, verificación pública) — todo validado de punta a punta con datos reales. Los próximos pasos, en orden:
+Este es el cimiento del proyecto: estructura, entorno local, modelo de datos, aislamiento multi-tenant, **autenticación real contra Keycloak** (backend y frontend), **motor de permisos (Casbin)**, los módulos de **Académico, Matrícula, Evaluaciones/Gradebook y Certificados**, **alta de instituciones nuevas + personalización de marca**, y un **frontend Next.js con pantallas de negocio reales** (cursos, matrícula, notas, certificados, verificación pública, registro de instituciones) — todo validado de punta a punta con datos reales. Los próximos pasos, en orden:
 
-1. Cola de generación de certificados (BullMQ + worker separado) — hoy la emisión es SÍNCRONA dentro del request (ver la nota de simplificación del MVP en `certificate-renderer.service.ts`); pasar a una cola es trabajo de infraestructura genuino que se justifica cuando el volumen de emisiones lo requiera.
-2. Matrícula masiva (CSV/Excel) — hoy solo existe la individual.
-3. Panel de administración para asignar roles a usuarios (hoy se hace manualmente en la base de datos; ver el ejemplo en el historial de commits).
-4. Pantallas de negocio para Evaluaciones (crear preguntas, rendir un examen, calificar a mano) — hoy esos flujos solo existen como endpoints de API, probados con `curl`.
+1. Integrar la API de administración de Keycloak al aprobar una institución — hoy el Administrador de entidad recién creado existe en la base de datos de Stoka LMS pero todavía necesita que alguien le cree su usuario en Keycloak a mano (ver la limitación conocida más arriba).
+2. Cola de generación de certificados (BullMQ + worker separado) — hoy la emisión es SÍNCRONA dentro del request (ver la nota de simplificación del MVP en `certificate-renderer.service.ts`); pasar a una cola es trabajo de infraestructura genuino que se justifica cuando el volumen de emisiones lo requiera.
+3. Matrícula masiva (CSV/Excel) — hoy solo existe la individual.
+4. Panel de administración para asignar roles a usuarios (hoy se hace manualmente en la base de datos; ver el ejemplo en el historial de commits).
+5. Pantallas de negocio para Evaluaciones (crear preguntas, rendir un examen, calificar a mano) — hoy esos flujos solo existen como endpoints de API, probados con `curl`.
 
 Manuales de uso por rol, primeros pasos y resolución de problemas para personas no técnicas: ver [docs/manuales/](docs/manuales/README.md) (cubren exactamente lo que ya existe en pantalla; se amplían a medida que se agreguen las pantallas de la lista de arriba).
 
