@@ -31,6 +31,8 @@ import { AcademicModule } from './modules/academic/academic.module';
 import { EnrollmentModule } from './modules/enrollment/enrollment.module';
 import { GradebookModule } from './modules/gradebook/gradebook.module';
 import { CertificatesModule } from './modules/certificates/certificates.module';
+import { TenantRegistrationModule } from './modules/tenant-registration/tenant-registration.module';
+import { TenantSettingsModule } from './modules/tenant/tenant-settings.module';
 
 @Module({
   imports: [
@@ -79,6 +81,14 @@ import { CertificatesModule } from './modules/certificates/certificates.module';
     // Plantillas, emision, revocacion y verificacion publica de
     // certificados (ver src/modules/certificates/).
     CertificatesModule,
+
+    // Alta de instituciones nuevas: formulario publico + aprobacion por un
+    // administrador de PLATAFORMA (ver src/modules/tenant-registration/).
+    TenantRegistrationModule,
+
+    // Datos del tenant activo (nombre, marca) y su version publica para
+    // el home de cada institucion (ver src/modules/tenant/).
+    TenantSettingsModule,
   ],
 })
 export class AppModule implements NestModule {

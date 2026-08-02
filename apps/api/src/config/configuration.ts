@@ -54,6 +54,16 @@ export interface AppConfig {
     clientId: string;
     clientSecret: string;
   };
+  // Lista fija de emails con permiso de "administrador de PLATAFORMA": la
+  // unica persona que puede aprobar/rechazar solicitudes de alta de una
+  // institucion nueva (ver platform-admin.guard.ts). Es una simplificacion
+  // deliberada del MVP — este rol NO vive en ningun tenant (por definicion,
+  // aprueba instituciones que todavia no existen), asi que no encaja en el
+  // modelo de permisos por tenant (Casbin + dominios "tenant:<id>"). Si en
+  // el futuro hace falta administrar varias personas de plataforma con
+  // distintos niveles de acceso, ese es el momento de modelar un dominio
+  // Casbin "platform" de verdad en vez de esta lista fija.
+  platformAdminEmails: string[];
 }
 
 // NestJS invoca esta funcion UNA vez al arrancar y guarda el objeto resultante
@@ -90,4 +100,9 @@ export default (): AppConfig => ({
     clientId: process.env.KEYCLOAK_CLIENT_ID ?? 'stoka-api',
     clientSecret: process.env.KEYCLOAK_CLIENT_SECRET ?? '',
   },
+
+  platformAdminEmails: (process.env.PLATFORM_ADMIN_EMAILS ?? '')
+    .split(',')
+    .map((email) => email.trim().toLowerCase())
+    .filter(Boolean),
 });

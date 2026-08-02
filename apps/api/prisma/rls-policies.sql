@@ -45,6 +45,12 @@
 --                        igual para toda la plataforma, no es dato de un tenant.
 --   role_permissions  -> tabla puente de un catalogo global; no expone datos
 --                        sensibles de un tenant especifico por si sola.
+--   tenant_registration_requests -> solicitudes de alta de una institucion
+--                        NUEVA (ver tenant-registration.service.ts): al
+--                        crearse todavia no existe ningun tenant al que
+--                        pertenecer, por eso ni siquiera tiene columna
+--                        "tenant_id" — es dato "de la plataforma", igual
+--                        que "tenants" o "tenant_domains".
 -- ----------------------------------------------------------------------------
 
 

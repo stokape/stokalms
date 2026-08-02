@@ -46,7 +46,12 @@ model Tenant {
   plan           String   @default("basico")
   // Configuracion de marca (logo, colores) en JSON: cambia con frecuencia y
   // es especifica de cada tenant, por eso no se modela como columnas fijas
-  // (ver docs/architecture/02-modelo-de-datos.md, seccion 2.2).
+  // (ver docs/architecture/02-modelo-de-datos.md, seccion 2.2). Forma
+  // esperada (ver tenant.service.ts y update-tenant-branding.dto.ts):
+  //   { "logoUrl"?: string, "backgroundColor"?: string, "backgroundImageUrl"?: string }
+  // Se usa para personalizar el "home" publico de CADA institucion (ver
+  // apps/web/app/page.tsx) — logo, nombre y fondo propios antes de
+  // iniciar sesion.
   branding       Json     @default("{}")
   defaultLocale  String   @default("es") @map("default_locale")
   timezone       String   @default("America/Lima")
@@ -645,4 +650,50 @@ model AuditLog {
 
   @@index([tenantId])
   @@map("audit_logs")
+}
+
+// ============================================================================
+// SOLICITUD DE ALTA DE INSTITUCION — el formulario publico de "inscribi tu
+// institucion" (ver apps/web/app/registro-institucion/) crea UNA de estas,
+// NO un Tenant directo. Se decidio que el alta quede pendiente de revision
+// manual (no autoservicio instantaneo): alguien de la plataforma (no de
+// ningun tenant en particular) la aprueba o rechaza a mano.
+//
+// POR QUE NO TIENE "tenantId" Y NO USA Row-Level Security: al momento de
+// crearse, todavia NO EXISTE ningun tenant al que pertenecer — es
+// exactamente el mismo caso que "tenants" o "tenant_domains" (ver el
+// principio de rls-policies.sql): esta tabla es "de la plataforma", no de
+// un inquilino especifico.
+//
+// QUIEN LA PUEDE APROBAR/RECHAZAR: no un Administrador de entidad (ese rol
+// es DENTRO de un tenant, y este tenant todavia no existe) — hace falta un
+// concepto nuevo, "administrador de PLATAFORMA", que no encaja en el
+// modelo de permisos por tenant (Casbin + dominios "tenant:<id>", ver
+// casbin.service.ts). La simplificacion de este MVP (ver
+// platform-admin.guard.ts) es una lista fija de emails autorizados
+// (PLATFORM_ADMIN_EMAILS en .env), no un rol mas en la base de datos — si
+// en el futuro hace falta administrar varias personas de plataforma con
+// distintos niveles, ESE es el momento de modelar un dominio Casbin
+// "platform" de verdad.
+model TenantRegistrationRequest {
+  id               String    @id @default(uuid())
+  institutionName  String    @map("institution_name")
+  // Subdominio deseado, ej. "instituto-sanmartin" (el dominio final
+  // completo se arma en el momento de aprobar, concatenando
+  // PLATFORM_ROOT_DOMAIN, ver tenant-registration.service.ts).
+  desiredSubdomain String    @map("desired_subdomain")
+  contactName      String    @map("contact_name")
+  contactEmail     String    @map("contact_email")
+  message          String?
+  // "pending" | "approved" | "rejected".
+  status           String    @default("pending")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  reviewedAt       DateTime? @map("reviewed_at")
+  rejectionReason  String?   @map("rejection_reason")
+  // Se completa recien al aprobar (ver tenant-registration.service.ts,
+  // metodo "approve"): el id del Tenant que se termino creando, para
+  // poder rastrear de que solicitud salio cada institucion.
+  createdTenantId  String?   @map("created_tenant_id")
+
+  @@map("tenant_registration_requests")
 }

@@ -13,6 +13,8 @@ import { PassportModule } from '@nestjs/passport';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './jwt.strategy';
+import { PlatformJwtStrategy } from './platform-jwt.strategy';
+import { PlatformAdminGuard } from './platform-admin.guard';
 import { TenantModule } from '../common/tenant/tenant.module';
 
 @Module({
@@ -20,10 +22,11 @@ import { TenantModule } from '../common/tenant/tenant.module';
   // saber a que tenant esta iniciando sesion la persona (ver auth.service.ts).
   imports: [PassportModule.register({ defaultStrategy: 'jwt' }), TenantModule],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy],
+  providers: [AuthService, JwtStrategy, PlatformJwtStrategy, PlatformAdminGuard],
   // Se exporta AuthService porque el motor de permisos (Casbin, proximo
   // paso) tambien necesita, en algunos flujos, resolver datos del usuario
-  // autenticado.
-  exports: [AuthService],
+  // autenticado. PlatformAdminGuard se exporta para que el modulo de
+  // solicitudes de alta (tenant-registration/) pueda protegerse con el.
+  exports: [AuthService, PlatformAdminGuard],
 })
 export class AuthModule {}
