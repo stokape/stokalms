@@ -66,6 +66,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             <Link href="/configuracion-marca" className="hover:underline">
               Configuración de marca
             </Link>
+            <Link href="/usuarios" className="hover:underline">
+              Usuarios y roles
+            </Link>
           </nav>
         </div>
         <div className="flex items-center gap-4 text-sm">

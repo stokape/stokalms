@@ -34,6 +34,7 @@ import { GradebookModule } from './modules/gradebook/gradebook.module';
 import { CertificatesModule } from './modules/certificates/certificates.module';
 import { TenantRegistrationModule } from './modules/tenant-registration/tenant-registration.module';
 import { TenantSettingsModule } from './modules/tenant/tenant-settings.module';
+import { UserManagementModule } from './modules/user-management/user-management.module';
 
 @Module({
   imports: [
@@ -94,6 +95,10 @@ import { TenantSettingsModule } from './modules/tenant/tenant-settings.module';
     // Datos del tenant activo (nombre, marca) y su version publica para
     // el home de cada institucion (ver src/modules/tenant/).
     TenantSettingsModule,
+
+    // Panel de administracion: ver miembros del tenant y asignarles/quitarles
+    // roles (ver src/modules/user-management/).
+    UserManagementModule,
   ],
 })
 export class AppModule implements NestModule {
