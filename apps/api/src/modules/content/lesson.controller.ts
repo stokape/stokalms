@@ -11,11 +11,14 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { PermissionsGuard } from '../../rbac/permissions.guard';
 import { RequirePermission } from '../../rbac/require-permission.decorator';
+import { CurrentUser } from '../../auth/current-user.decorator';
+import { AuthenticatedUser } from '../../auth/auth.service';
 import { LessonService } from './lesson.service';
 import { CreateLessonDto } from './dto/create-lesson.dto';
 import { UpdateLessonDto } from './dto/update-lesson.dto';
@@ -49,6 +52,31 @@ export class LessonController {
     @Param('id') id: string,
   ) {
     return this.lessonService.findOne(courseId, moduleId, id);
+  }
+
+  @RequirePermission('lesson', 'view')
+  @Post(':id/view')
+  registrarVista(
+    @Param('courseId') courseId: string,
+    @Param('moduleId') moduleId: string,
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.lessonService.registrarVista(courseId, moduleId, id, user);
+  }
+
+  // "Funcionalidades de IA" (plan Pro) — mismo permiso que editar la
+  // lección: quien puede cambiar el contenido es quien decide si le sirve
+  // generar preguntas a partir de el.
+  @RequirePermission('lesson', 'edit')
+  @Post(':id/generate-questions')
+  generateQuestions(
+    @Param('courseId') courseId: string,
+    @Param('moduleId') moduleId: string,
+    @Param('id') id: string,
+    @Query('count') count?: string,
+  ) {
+    return this.lessonService.generateQuestions(courseId, moduleId, id, count ? Number(count) : undefined);
   }
 
   @RequirePermission('lesson', 'edit')

@@ -1,0 +1,239 @@
+/* ============================================================================
+   stoka-theme.css — Reviste las pantallas de Keycloak (login, errores,
+   "olvidé mi contraseña"...) con los mismos colores/tipografía/radios de
+   borde que el resto de Stoka LMS (ver apps/web/app/globals.css, la fuente
+   de verdad de estos valores — si esos cambian, estos deben cambiar
+   IGUAL). Se carga DESPUES de "css/login.css" (ver theme.properties), asi
+   que solo hace falta sobreescribir lo que cambia de marca: colores,
+   tipografia, radios — el resto (estructura, accesibilidad, WebAuthn,
+   OTP, etc.) lo sigue resolviendo el CSS base de Keycloak sin tocarlo.
+
+   Por que colores fijos en vez de "prefers-color-scheme" atado al mismo
+   selector de tema que la app: esta pantalla vive en OTRO dominio/puerto
+   (el propio Keycloak, ver ADR-003-auth-identity.md) y no puede leer el
+   "data-theme" que fija el interruptor de la app (components/ThemeToggle.tsx)
+   — no comparten cookie ni localStorage entre origenes. Lo mas cercano sin
+   duplicar ese mecanismo es respetar la preferencia del SISTEMA operativo
+   (@media prefers-color-scheme), que es ademas el mismo valor por defecto
+   que la app usa la primera vez que alguien la visita (ver el script de
+   inicio en app/layout.tsx).
+   ============================================================================ */
+
+/* Raleway: misma tipografía de marca que "apps/web" (ver
+   "--font-raleway" en app/layout.tsx) — ahi se sirve auto-hospedada via
+   "next/font/google" (optimizado por Next.js), pero esta pantalla vive
+   en el origen de Keycloak, sin ese pipeline de build, asi que se trae
+   del CDN de Google Fonts directamente (unico request externo de todo
+   el tema — el resto de "stoka-theme.css" no depende de nada afuera).
+   Si Raleway tarda en cargar o el CDN no responde, "--stoka-font" ya
+   trae de respaldo la pila de fuentes del sistema (mas abajo), asi que
+   la pantalla nunca queda sin texto legible. */
+@import url('https://fonts.googleapis.com/css2?family=Raleway:wght@400;500;600;700;800&display=swap');
+
+:root {
+  /* Paleta de marca oficial (ver app/globals.css, la MISMA fuente de
+     verdad — brand kit "Opción 2"). */
+  --stoka-background: #f5f8fc;
+  --stoka-surface: #ffffff;
+  --stoka-foreground: #0d1b2a;
+  --stoka-muted: #58697f;
+  --stoka-border: #c5d1e3;
+  --stoka-primary: #1e90ff;
+  --stoka-primary-hover: #0f6dff;
+  --stoka-primary-foreground: #ffffff;
+  --stoka-primary-ring: rgba(30, 144, 255, 0.3);
+  --stoka-primary-tint: rgba(30, 144, 255, 0.08);
+  --stoka-danger: #dc2626;
+  --stoka-danger-bg: #fef2f2;
+  --stoka-shadow: 0 1px 2px rgba(13, 27, 42, 0.06), 0 1px 1px rgba(13, 27, 42, 0.04);
+  --stoka-font: 'Raleway', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --stoka-background: #0d1b2a;
+    --stoka-surface: #16283c;
+    --stoka-foreground: #e6e9ee;
+    --stoka-muted: #93a6c0;
+    --stoka-border: #24384d;
+    --stoka-primary: #4fa8ff;
+    --stoka-primary-hover: #7cc0ff;
+    --stoka-primary-foreground: #0d1b2a;
+    --stoka-primary-ring: rgba(79, 168, 255, 0.35);
+    --stoka-primary-tint: rgba(79, 168, 255, 0.12);
+    --stoka-danger: #f87171;
+    --stoka-danger-bg: #2a1010;
+    --stoka-shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 1px 1px rgba(0, 0, 0, 0.25);
+  }
+}
+
+/* ===== Fondo y tipografia base ===== */
+/* login.css pone una imagen de fondo (rayos diagonales) vía "background"
+   en el shorthand — hace falta repetir el shorthand completo (no alcanza
+   con "background-color") para reemplazarla del todo por un color solido,
+   consistente con el resto de la app (que nunca usa imágenes de fondo). */
+.login-pf body {
+  background: var(--stoka-background);
+}
+body {
+  font-family: var(--stoka-font);
+  color: var(--stoka-foreground);
+}
+
+/* ===== Encabezado / marca ("stoka-dev" -> texto real del realm, ver
+   "displayName" en scripts/setup-keycloak.js) ===== */
+#kc-header-wrapper {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1.1rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  text-transform: none;
+  color: var(--stoka-foreground);
+  text-shadow: none;
+}
+#kc-header-wrapper::before {
+  content: '';
+  display: inline-block;
+  width: 1.85rem;
+  height: 1.85rem;
+  background: url('../img/logo-mark.png') center / contain no-repeat;
+  flex-shrink: 0;
+}
+
+/* ===== Tarjeta ===== */
+.card-pf {
+  background: var(--stoka-surface);
+  border: 1px solid var(--stoka-border);
+  border-radius: 0.75rem;
+  box-shadow: var(--stoka-shadow);
+}
+.login-pf-header h1,
+#kc-page-title {
+  color: var(--stoka-foreground);
+  font-weight: 600;
+}
+
+/* ===== Campos de formulario ===== */
+label,
+.control-label {
+  color: var(--stoka-muted);
+  font-weight: 500;
+}
+/* El tema "keycloak" (legacy, ver theme.properties de mas arriba) usa las
+   clases de PatternFly ("pf-c-form-control"), NO las de Bootstrap
+   ("form-control") — se listan ambas por si alguna pantalla puntual (ej.
+   una plantilla de error) usa la otra convencion, pero la real en login,
+   registro y "olvidé mi contraseña" es "pf-c-form-control". */
+/* "!important" aca: PatternFly trae sus propias reglas para inputs DENTRO
+   de un "input-group" (ej. el de contraseña, que agrupa el campo con el
+   botón de mostrar/ocultar) con selectores compuestos mas especificos que
+   un simple ".pf-c-form-control" — sin esto, ese campo en particular se
+   quedaba con fondo blanco fijo en modo oscuro mientras el resto de los
+   campos si cambiaban, una inconsistencia visible entre campos del MISMO
+   formulario (confirmado a ojo comparando el campo de usuario contra el
+   de contraseña). */
+.pf-c-form-control,
+.form-control,
+input.pf-c-form-control,
+select.pf-c-form-control,
+textarea.pf-c-form-control,
+.pf-c-input-group .pf-c-form-control {
+  background: var(--stoka-surface) !important;
+  color: var(--stoka-foreground) !important;
+  border: 1px solid var(--stoka-border) !important;
+  border-radius: 0.5rem;
+  box-shadow: none;
+}
+.pf-c-form-control:focus,
+.form-control:focus {
+  outline: none;
+  border-color: var(--stoka-primary) !important;
+  box-shadow: 0 0 0 3px var(--stoka-primary-ring);
+}
+.checkbox label,
+.pf-c-check__label {
+  color: var(--stoka-foreground);
+}
+input[type='checkbox'] {
+  accent-color: var(--stoka-primary);
+}
+
+/* ===== Botones ===== */
+.btn-primary,
+.pf-c-button.pf-m-primary {
+  background: var(--stoka-primary);
+  border-color: var(--stoka-primary);
+  color: var(--stoka-primary-foreground);
+  border-radius: 0.5rem;
+  font-weight: 500;
+  text-shadow: none;
+  box-shadow: none;
+}
+.btn-primary:hover,
+.btn-primary:focus,
+.pf-c-button.pf-m-primary:hover,
+.pf-c-button.pf-m-primary:focus {
+  background: var(--stoka-primary-hover);
+  border-color: var(--stoka-primary-hover);
+}
+.pf-c-button.pf-m-control {
+  background: var(--stoka-surface) !important;
+  border-color: var(--stoka-border) !important;
+  border-radius: 0.5rem;
+  color: var(--stoka-muted);
+}
+.pf-c-button.pf-m-control:hover {
+  color: var(--stoka-foreground);
+}
+
+/* ===== Enlaces ===== */
+a,
+.pf-c-login__main-footer-links-item-link {
+  color: var(--stoka-primary);
+}
+a:hover {
+  color: var(--stoka-primary-hover);
+}
+
+/* ===== Alertas (credenciales invalidas, cuenta bloqueada, etc.) ===== */
+.pf-c-alert,
+.alert {
+  background: var(--stoka-danger-bg);
+  color: var(--stoka-danger);
+  border: none;
+  border-radius: 0.5rem;
+}
+.pf-c-alert .pf-c-alert__icon,
+.alert .pficon {
+  color: var(--stoka-danger);
+}
+
+/* ===== Enlace "Volver" (ver stoka-back-link.js) — un botón "secundario"
+   fijo en la esquina, mismo estilo que buttonClasses('secondary') en la
+   app (apps/web/components/ui/button-styles.ts). ===== */
+.stoka-back-link {
+  position: fixed;
+  top: 1.25rem;
+  left: 1.25rem;
+  z-index: 20;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.5rem 0.875rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--stoka-border);
+  background: var(--stoka-surface);
+  box-shadow: var(--stoka-shadow);
+  font-family: var(--stoka-font);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--stoka-foreground);
+  text-decoration: none;
+}
+.stoka-back-link:hover {
+  background: var(--stoka-primary-tint);
+  color: var(--stoka-foreground);
+  text-decoration: none;
+}

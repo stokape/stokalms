@@ -14,18 +14,43 @@ import { TenantContextService } from '../../common/tenant/tenant-context.service
 import { StorageService } from '../../common/storage/storage.service';
 import { LessonService } from './lesson.service';
 import { CreateLinkResourceDto } from './dto/create-link-resource.dto';
+import { UpdateResourceDto } from './dto/update-resource.dto';
 
 // Deduce el "type" del Resource (ver schema.prisma: "video" | "pdf" |
-// "scorm" | "link" | "doc") a partir del mimetype real del archivo subido,
-// para que el frontend sepa qué reproductor/ícono mostrar sin tener que
-// adivinarlo de la extensión del nombre de archivo.
+// "scorm" | "link" | "image" | "presentation" | "spreadsheet" | "document"
+// | "doc") a partir del mimetype real del archivo subido, para que el
+// frontend sepa qué ícono/etiqueta mostrar sin tener que adivinarlo de la
+// extensión del nombre de archivo. Cubre explícitamente los formatos que un
+// Docente sube como material de clase (PDF, PowerPoint, Excel, Word,
+// imágenes), además de video y paquetes SCORM — "doc" queda como comodín
+// para cualquier otro tipo de archivo no reconocido, sin bloquear la subida.
 function inferResourceType(mimeType: string): string {
   if (mimeType.startsWith('video/')) return 'video';
+  if (mimeType.startsWith('image/')) return 'image';
   if (mimeType === 'application/pdf') return 'pdf';
   // Los paquetes SCORM viajan como un .zip (imscp.xml adentro) — no hay un
   // mimetype propio de SCORM, así que zip es la mejor señal disponible sin
   // abrir el archivo a inspeccionar su contenido.
   if (mimeType === 'application/zip' || mimeType === 'application/x-zip-compressed') return 'scorm';
+  if (
+    mimeType === 'application/vnd.ms-powerpoint' ||
+    mimeType === 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+  ) {
+    return 'presentation';
+  }
+  if (
+    mimeType === 'application/vnd.ms-excel' ||
+    mimeType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+    mimeType === 'text/csv'
+  ) {
+    return 'spreadsheet';
+  }
+  if (
+    mimeType === 'application/msword' ||
+    mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+  ) {
+    return 'document';
+  }
   return 'doc';
 }
 
@@ -141,6 +166,40 @@ export class ResourceService {
   async getDownloadUrl(courseId: string, moduleId: string, lessonId: string, id: string) {
     const resource = await this.findOne(courseId, moduleId, lessonId, id);
     return this.withDownloadUrl(resource);
+  }
+
+  // Solo toca "metadata" (título/descripción) y, si el recurso es "link", su
+  // URL — nunca el archivo en si (ver la nota extensa en
+  // update-resource.dto.ts). Un recurso subido como archivo puede renombrarse
+  // pero no "re-apuntarse" a otro archivo desde aquí.
+  async update(
+    courseId: string,
+    moduleId: string,
+    lessonId: string,
+    id: string,
+    dto: UpdateResourceDto,
+  ) {
+    const resource = await this.findOne(courseId, moduleId, lessonId, id);
+    const tenantId = this.tenantContext.requireTenantId();
+
+    const currentMetadata = (resource.metadata as Record<string, unknown>) ?? {};
+    const metadata = {
+      ...currentMetadata,
+      ...(dto.title !== undefined && { title: dto.title }),
+      ...(dto.description !== undefined && { description: dto.description }),
+    };
+
+    const updated = await this.prisma.withTenant(tenantId, (tx) =>
+      tx.resource.update({
+        where: { id },
+        data: {
+          metadata: metadata as Prisma.InputJsonValue,
+          ...(dto.url !== undefined && resource.type === 'link' && { storageUrl: dto.url }),
+        },
+      }),
+    );
+
+    return this.withDownloadUrl(updated);
   }
 
   async remove(courseId: string, moduleId: string, lessonId: string, id: string) {

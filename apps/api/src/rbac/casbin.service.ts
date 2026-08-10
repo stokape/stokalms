@@ -9,7 +9,7 @@
 // guardan los datos.
 //
 // COMO SE MANTIENE SINCRONIZADO (simplificacion deliberada de esta primera
-// version): "loadPolicies()" se llama una vez al arrancar la aplicacion
+// version): "loadPolicies()" se llama una vez al iniciar la aplicacion
 // (onModuleInit) y se puede volver a llamar manualmente (por ahora, vía
 // "reload()") despues de que un Admin de entidad cambie roles/permisos desde
 // el panel. Una version mas avanzada (fase posterior, ver

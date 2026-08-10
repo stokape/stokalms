@@ -2,21 +2,54 @@
 // matriculas/[enrollmentId]/certificados/page.tsx — Certificados de UNA
 // matricula: sirve tanto para un Estudiante viendo los SUYOS (permiso
 // "certificate:view_own", ver CertificateService.assertCanViewCertificatesOf
-// en el backend) como para Coordinador/Docente emitiendo/revocando los de
-// cualquier estudiante (permiso amplio "certificate:view"/"issue"/"revoke").
+// en el backend) como para Coordinador (emite/revoca, "certificate:issue"/
+// "revoke") y Docente (solo MIRA, "certificate:view" sin "issue" — un
+// Docente no emite certificados, ver prisma/seed.js).
 //
-// El formulario de EMITIR necesita elegir una plantilla — para eso pide
-// tambien GET /certificate-templates, pero en un try/catch SEPARADO: un
-// Estudiante no tiene permiso para ver el catalogo de plantillas
-// (certificate_template:view), y eso NO deberia romper el resto de la
-// pagina (sus propios certificados si los puede ver) — simplemente no se
-// le muestra el formulario de emision, que de todas formas no podria usar.
+// EMITIR ya no pide elegir una plantilla a mano: usa la plantilla FIJA del
+// curso de esta matrícula (ver Course.certificateTemplateId, schema.prisma,
+// y certificate.service.ts, "issue") — si el curso todavía no tiene una
+// asignada, el backend rechaza la emisión con un mensaje claro señalando
+// que hay que asignarle una desde el curso (ver cursos/[courseId]/page.tsx).
 // ============================================================================
 
 import Link from 'next/link';
 import { requireAccessToken, apiFetch, toErrorMessage, getPermissions, can } from '@/lib/api';
 import { ErrorBanner } from '@/components/ErrorBanner';
+import { Button } from '@/components/ui/Button';
+import { getLocale } from '@/lib/locale';
 import { emitirCertificado, revocarCertificado } from './actions';
+
+const TEXT = {
+  es: {
+    back: '← Mis matrículas',
+    title: 'Certificados',
+    empty: 'Todavía no se emitió ningún certificado para esta matrícula.',
+    issuedOn: 'Emitido el',
+    revoked: 'Revocado',
+    active: 'Vigente',
+    viewVerification: 'Ver página de verificación pública',
+    downloadPdf: 'Descargar PDF',
+    revoke: 'Revocar',
+    issueNew: 'Emitir un nuevo certificado',
+    issueHelp: 'Se emite con la plantilla ya asignada al curso. Solo se puede emitir si la matrícula ya está en estado "Completado" y el curso tiene una plantilla asignada (esto último se configura desde el detalle del curso).',
+    issue: 'Emitir certificado',
+  },
+  en: {
+    back: '← My enrollments',
+    title: 'Certificates',
+    empty: 'No certificate has been issued for this enrollment yet.',
+    issuedOn: 'Issued on',
+    revoked: 'Revoked',
+    active: 'Active',
+    viewVerification: 'View public verification page',
+    downloadPdf: 'Download PDF',
+    revoke: 'Revoke',
+    issueNew: 'Issue a new certificate',
+    issueHelp: 'It\'s issued with the template already assigned to the course. It can only be issued if the enrollment is already "Completed" and the course has a template assigned (the latter is configured from the course detail page).',
+    issue: 'Issue certificate',
+  },
+};
 
 interface Certificate {
   id: string;
@@ -24,11 +57,6 @@ interface Certificate {
   issuedAt: string;
   revoked: boolean;
   downloadUrl: string;
-}
-
-interface CertificateTemplate {
-  id: string;
-  name: string;
 }
 
 export default async function CertificadosDeMatriculaPage({
@@ -41,6 +69,8 @@ export default async function CertificadosDeMatriculaPage({
   const { enrollmentId } = await params;
   const { error } = await searchParams;
   const token = await requireAccessToken();
+  const locale = await getLocale();
+  const t = TEXT[locale];
 
   let certificates: Certificate[];
   try {
@@ -49,25 +79,16 @@ export default async function CertificadosDeMatriculaPage({
     return <ErrorBanner message={toErrorMessage(err)} />;
   }
 
-  // Ver el comentario de arriba: si esto falla (tipicamente un Estudiante
-  // sin permiso para ver plantillas), simplemente no se ofrece el
-  // formulario de emision — no es un error que deba interrumpir la pagina.
-  let templates: CertificateTemplate[] | null = null;
-  try {
-    templates = await apiFetch<CertificateTemplate[]>(token, '/certificate-templates');
-  } catch {
-    templates = null;
-  }
-
   const permissions = await getPermissions(token);
   const canRevoke = can(permissions, 'certificate', 'revoke');
+  const canIssue = can(permissions, 'certificate', 'issue');
 
   return (
     <div className="mx-auto max-w-3xl">
       <Link href="/mis-matriculas" className="text-sm text-zinc-500 hover:underline">
-        &larr; Mis matrículas
+        {t.back}
       </Link>
-      <h1 className="mt-2 mb-6 text-2xl font-semibold">Certificados</h1>
+      <h1 className="mt-2 mb-6 text-2xl font-semibold">{t.title}</h1>
 
       {error && (
         <div className="mb-6">
@@ -76,9 +97,7 @@ export default async function CertificadosDeMatriculaPage({
       )}
 
       {certificates.length === 0 ? (
-        <p className="mb-8 text-zinc-500">
-          Todavía no se emitió ningún certificado para esta matrícula.
-        </p>
+        <p className="mb-8 text-zinc-500">{t.empty}</p>
       ) : (
         <ul className="mb-8 divide-y divide-zinc-200 dark:divide-zinc-800">
           {certificates.map((c) => (
@@ -86,26 +105,26 @@ export default async function CertificadosDeMatriculaPage({
               <div>
                 <p className="font-mono text-sm">{c.verificationCode}</p>
                 <p className="text-sm text-zinc-500">
-                  Emitido el {new Date(c.issuedAt).toLocaleDateString('es-PE', { dateStyle: 'long' })}
+                  {t.issuedOn} {new Date(c.issuedAt).toLocaleDateString(locale === 'en' ? 'en-US' : 'es-PE', { dateStyle: 'long' })}
                   {' · '}
                   {c.revoked ? (
-                    <span className="text-red-600 dark:text-red-400">Revocado</span>
+                    <span className="text-red-600 dark:text-red-400">{t.revoked}</span>
                   ) : (
-                    <span className="text-green-700 dark:text-green-400">Vigente</span>
+                    <span className="text-green-700 dark:text-green-400">{t.active}</span>
                   )}
                 </p>
                 <Link href={`/verify/${c.verificationCode}`} className="text-sm underline">
-                  Ver página de verificación pública
+                  {t.viewVerification}
                 </Link>
               </div>
               <div className="flex shrink-0 flex-col items-end gap-2">
                 <a href={c.downloadUrl} className="text-sm underline" target="_blank" rel="noreferrer">
-                  Descargar PDF
+                  {t.downloadPdf}
                 </a>
                 {!c.revoked && canRevoke && (
                   <form action={revocarCertificado.bind(null, enrollmentId, c.id)}>
                     <button type="submit" className="text-xs text-red-600 underline dark:text-red-400">
-                      Revocar
+                      {t.revoke}
                     </button>
                   </form>
                 )}
@@ -115,43 +134,13 @@ export default async function CertificadosDeMatriculaPage({
         </ul>
       )}
 
-      {templates && (
+      {canIssue && (
         <>
-          <h2 className="mb-3 text-lg font-medium">Emitir un nuevo certificado</h2>
-          {templates.length === 0 ? (
-            <p className="text-zinc-500">
-              Todavía no hay ninguna plantilla de certificado creada.{' '}
-              <Link href="/plantillas-certificado" className="underline">
-                Crear una plantilla
-              </Link>
-              .
-            </p>
-          ) : (
-            <>
-              <p className="mb-3 text-sm text-zinc-500">
-                Solo se puede emitir si la matrícula ya está en estado &quot;Completado&quot;.
-              </p>
-              <form action={emitirCertificado.bind(null, enrollmentId)} className="flex max-w-sm flex-col gap-3">
-                <select
-                  name="templateId"
-                  required
-                  className="rounded border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
-                >
-                  {templates.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="submit"
-                  className="rounded-full bg-foreground px-4 py-2 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc]"
-                >
-                  Emitir certificado
-                </button>
-              </form>
-            </>
-          )}
+          <h2 className="mb-3 text-lg font-medium">{t.issueNew}</h2>
+          <p className="mb-3 text-sm text-zinc-500">{t.issueHelp}</p>
+          <form action={emitirCertificado.bind(null, enrollmentId)}>
+            <Button type="submit">{t.issue}</Button>
+          </form>
         </>
       )}
     </div>

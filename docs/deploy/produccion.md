@@ -1,0 +1,207 @@
+# Despliegue de producción — Oracle Cloud "Always Free"
+
+Guía paso a paso para poner Stoka LMS en producción gratis, en una sola VM
+de Oracle Cloud, con HTTPS automático (Let's Encrypt) para el dominio raíz,
+cada subdominio de institución y cada dominio propio que se verifique desde
+`/dominios`. Usa `docker-compose.prod.yml` + `Caddyfile` + `.env.production`
+(ver esos archivos en la raíz del repo — comentados por dentro, esta guía
+es el "orden de los pasos").
+
+No requiere Kubernetes ni varios servicios cloud distintos: todo corre en
+la misma VM, con los mismos contenedores que documenta
+[docs/architecture/07-infraestructura.md](../architecture/07-infraestructura.md)
+para la etapa "MVP / pocos tenants" — migrar después a servicios managed
+(RDS, S3 real, etc.) no exige reescribir nada, son los mismos contenedores.
+
+## 0. Qué vas a necesitar
+
+- **Un dominio propio** (no es gratis — ~US$10-15/año en cualquier
+  registrador: Namecheap, Cloudflare Registrar, etc.). Sin esto no hay
+  forma de tener HTTPS real ni subdominios por institución.
+- **Una cuenta de Oracle Cloud** (pide tarjeta para verificar identidad;
+  el tier "Always Free" nunca cobra solo, a menos que tú mismo
+  contrates algo pago aparte).
+- ~45-60 minutos la primera vez.
+
+## 1. Crear la VM en Oracle Cloud
+
+1. [cloud.oracle.com](https://cloud.oracle.com) → crear cuenta (elegir la
+   región más cercana a tus instituciones — Oracle no permite cambiarla
+   después sin recrear todo).
+2. **Compute → Instances → Create Instance**.
+3. Shape: **VM.Standard.A1.Flex** (Ampere/ARM, "Always Free eligible") —
+   asignale los 4 OCPU / 24 GB que da el tier gratis (alcanza de sobra
+   para Postgres + Keycloak + MinIO + api + web + Caddy juntos).
+4. Imagen: **Ubuntu 24.04** (o la LTS más reciente disponible).
+5. En "Add SSH keys", sube tu clave pública (o generá una nueva ahí mismo
+   y guarda la privada) — es como vas a entrar por SSH.
+6. Creala y anota la **IP pública** que le asigna.
+7. **Networking → Virtual Cloud Network → tu VCN → Security Lists** →
+   agrega reglas de ingreso (Ingress Rules) para los puertos **80** y
+   **443**, origen `0.0.0.0/0`, TCP — sin esto, aunque Docker publique los
+   puertos, el firewall de Oracle los bloquea igual (es la causa más común
+   de "no carga nada" en Oracle Cloud).
+
+## 2. Apuntar el DNS
+
+En el panel de tu dominio, crea estos registros **A**, todos apuntando a
+la IP pública de la VM:
+
+| Nombre | Apunta a |
+|---|---|
+| `tudominio.com` (raíz) | IP de la VM |
+| `auth.tudominio.com` | IP de la VM |
+| `api.tudominio.com` | IP de la VM |
+| `storage.tudominio.com` | IP de la VM |
+| `*.tudominio.com` (wildcard) | IP de la VM |
+
+El wildcard es lo que hace que **cualquier institución nueva que se
+apruebe** (subdominio nuevo, ver `tenant-domain.service.ts`) funcione sin
+volver a tocar el DNS nunca más — Caddy le emite un certificado la primera
+vez que alguien lo visita (ver `Caddyfile`, `on_demand_tls`).
+
+Los DNS pueden tardar de minutos a un par de horas en propagarse.
+
+## 3. Preparar el servidor
+
+```bash
+ssh ubuntu@IP_DE_TU_VM
+
+# Docker + el plugin de Compose (Ubuntu 24.04 los trae en sus repos):
+sudo apt-get update
+sudo apt-get install -y docker.io docker-compose-v2 git
+sudo usermod -aG docker $USER
+newgrp docker
+
+git clone <URL-de-tu-repo> stoka-lms
+cd stoka-lms
+```
+
+## 4. Completar `.env.production`
+
+```bash
+cp .env.production.example .env.production
+nano .env.production   # completar cada valor (ver los comentarios ahi mismo)
+```
+
+Puntos que NO son obvios:
+- `KEYCLOAK_CLIENT_SECRET` / `AUTH_KEYCLOAK_SECRET` se completan **después**
+  del paso 6 (Keycloak todavía no existe en este punto) — dejalos con el
+  valor de ejemplo por ahora.
+- `AUTH_SECRET`: generalo ahora con `openssl rand -base64 32`.
+- Las contraseñas de Postgres/MinIO/Keycloak admin: cualquier generador de
+  contraseñas largo alcanza (`openssl rand -base64 24`, por ejemplo).
+
+## 5. Primer inicio, EN ORDEN (no todo junto)
+
+Postgres/Keycloak/MinIO tienen que estar arriba y sanos antes de correr
+migraciones o crear el realm — por eso esto va en pasos, no un solo
+`docker compose up -d` de entrada.
+
+```bash
+# 1) Solo la infraestructura de base:
+docker compose -f docker-compose.prod.yml --env-file .env.production \
+  up -d postgres redis minio keycloak
+
+# 2) Esperar ~30s a que Keycloak termine de iniciar (verificar con):
+docker compose -f docker-compose.prod.yml logs -f keycloak
+# (Ctrl+C cuando veas "Keycloak <versión> on JVM ... started")
+
+# 3) Construir las imagenes de api/web (tarda varios minutos la primera vez):
+docker compose -f docker-compose.prod.yml --env-file .env.production build api web
+
+# 4) Migraciones + RLS + catalogo de roles/permisos — usando la imagen de
+#    "api" recien construida, sin levantarla todavia como servicio:
+docker compose -f docker-compose.prod.yml --env-file .env.production \
+  run --rm api npx prisma migrate deploy --schema apps/api/prisma/schema.prisma
+
+docker compose -f docker-compose.prod.yml --env-file .env.production \
+  run --rm api node apps/api/prisma/apply-rls.js
+
+docker compose -f docker-compose.prod.yml --env-file .env.production \
+  run --rm api node apps/api/prisma/seed.js
+# (el seed tambien crea un tenant "de desarrollo" con dominio
+# sanmartin.localhost — inofensivo en produccion, nadie va a tener DNS
+# apuntando ahi; podes borrar esa fila de "tenants" mas adelante si te
+# molesta verla).
+
+# 5) Crear el realm de Keycloak + los clientes stoka-api/stoka-web (ESTA
+#    vez con el dominio real, no localhost):
+docker compose -f docker-compose.prod.yml --env-file .env.production \
+  run --rm -e KEYCLOAK_BASE_URL=https://auth.tudominio.com \
+  -e WEB_ORIGIN=https://tudominio.com -e KEYCLOAK_SEED_TEST_USERS=false \
+  api node scripts/setup-keycloak.js
+```
+
+Ese último comando imprime **"Secreto backend"** y **"Secreto frontend"** —
+copialos a `KEYCLOAK_CLIENT_SECRET` y `AUTH_KEYCLOAK_SECRET` dentro de
+`.env.production` ahora.
+
+```bash
+# 6) Recien ahora, todo junto (incluido Caddy, que emite los certificados):
+docker compose -f docker-compose.prod.yml --env-file .env.production \
+  up -d --build
+```
+
+Verifica con `docker compose -f docker-compose.prod.yml logs -f caddy` que
+no haya errores de emisión de certificado (la primera visita a
+`https://tudominio.com` puede tardar unos segundos extra mientras Caddy
+pide el certificado por primera vez).
+
+## 6. Primera institución y primer Super Admin
+
+Es el mismo flujo que en desarrollo (ver
+[docs/manuales/inscribir-tu-institucion.md](../manuales/inscribir-tu-institucion.md)),
+con una limitación **ya conocida y documentada** (ver "Qué sigue" en el
+[README](../../README.md)): al aprobar una institución desde
+`/admin-plataforma` (tu email, el de `PLATFORM_ADMIN_EMAILS`), el
+Administrador de entidad queda creado en la base de datos de Stoka LMS
+pero **todavía no en Keycloak** — hay que crearle el usuario a mano una vez
+(panel `/admin` de Keycloak, `https://auth.tudominio.com/admin`, con
+`KEYCLOAK_ADMIN_USER`/`KEYCLOAK_ADMIN_PASSWORD`) antes de que esa persona
+pueda iniciar sesión por primera vez.
+
+## Redeploy (cambios futuros)
+
+```bash
+cd stoka-lms
+git pull
+docker compose -f docker-compose.prod.yml --env-file .env.production build api web
+docker compose -f docker-compose.prod.yml --env-file .env.production \
+  run --rm api npx prisma migrate deploy --schema apps/api/prisma/schema.prisma
+docker compose -f docker-compose.prod.yml --env-file .env.production up -d
+```
+
+## Backups
+
+Nada de esto viene automatizado todavía (ver la tabla de "Backups y
+recuperación" en
+[07-infraestructura.md](../architecture/07-infraestructura.md), que
+describe la versión "a escala" con point-in-time recovery). Lo mínimo
+razonable para iniciar, un cron diario en la VM:
+
+```bash
+# /etc/cron.daily/stoka-backup (dale permiso de ejecución con chmod +x)
+#!/bin/sh
+docker exec stoka-postgres pg_dump -U stoka stoka_lms | gzip > /root/backups/stoka-$(date +%F).sql.gz
+find /root/backups -mtime +14 -delete
+```
+
+Y bajate esos `.sql.gz` a otro lugar (tu máquina, un bucket) de tanto en
+tanto — un backup que vive solo en el mismo servidor que puede fallar no
+es un backup real.
+
+## Problemas comunes
+
+- **"no se puede conectar" desde el navegador**: revisa primero las
+  Security Lists de Oracle (paso 1.7) — es el error más común, todo lo
+  demás puede estar perfecto y esto igual bloquea todo.
+- **Error de "issuer" al iniciar sesión**: `KEYCLOAK_BASE_URL` (api),
+  `AUTH_KEYCLOAK_ISSUER` (web, se arma solo desde `AUTH_DOMAIN` +
+  `KEYCLOAK_REALM`) y `KC_HOSTNAME` (Keycloak) tienen que ser EXACTAMENTE
+  el mismo dominio — un typo entre `www.` de más o de menos ya lo rompe.
+- **Caddy no emite certificado para un dominio propio nuevo**: confirma
+  que ese dominio ya está `verified: true` en `/dominios` (ver
+  `domain-check.controller.ts` — Caddy le pregunta a la API antes de
+  pedirle nada a Let's Encrypt) y que su DNS ya apunta a la IP del
+  servidor.

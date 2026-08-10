@@ -19,7 +19,39 @@
 import Link from 'next/link';
 import { requireAccessToken, apiFetch, toErrorMessage, getPermissions, can } from '@/lib/api';
 import { ErrorBanner } from '@/components/ErrorBanner';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { Card } from '@/components/ui/Card';
+import { Button } from '@/components/ui/Button';
+import { fieldClasses } from '@/components/ui/field-styles';
+import { getLocale } from '@/lib/locale';
 import { editarPlantilla, eliminarPlantilla } from './actions';
+
+const TEXT = {
+  es: {
+    back: '← Plantillas de certificado',
+    saved: 'Los cambios se guardaron correctamente.',
+    preview: 'Vista previa',
+    previewHelp: 'Los textos entre llaves dobles (ej. {{studentName}}) se ven tal cual aquí — se reemplazan por los datos reales recién al emitir un certificado de verdad.',
+    previewTitle: (name: string) => `Vista previa de ${name}`,
+    edit: 'Editar',
+    saveChanges: 'Guardar cambios',
+    deleteTemplate: 'Eliminar plantilla',
+    deleteHelp: 'Solo se puede eliminar si NINGÚN certificado fue emitido todavía con esta plantilla.',
+    deleteThis: 'Eliminar esta plantilla',
+  },
+  en: {
+    back: '← Certificate templates',
+    saved: 'Your changes were saved successfully.',
+    preview: 'Preview',
+    previewHelp: 'Text between double braces (e.g. {{studentName}}) shows as-is here — it gets replaced with real data only when an actual certificate is issued.',
+    previewTitle: (name: string) => `Preview of ${name}`,
+    edit: 'Edit',
+    saveChanges: 'Save changes',
+    deleteTemplate: 'Delete template',
+    deleteHelp: 'This can only be deleted if NO certificate has been issued with this template yet.',
+    deleteThis: 'Delete this template',
+  },
+};
 
 interface CertificateTemplate {
   id: string;
@@ -37,6 +69,7 @@ export default async function PlantillaDetallePage({
   const { templateId } = await params;
   const { error, saved } = await searchParams;
   const token = await requireAccessToken();
+  const t = TEXT[await getLocale()];
 
   let template: CertificateTemplate;
   try {
@@ -51,10 +84,10 @@ export default async function PlantillaDetallePage({
 
   return (
     <div className="mx-auto max-w-3xl">
-      <Link href="/plantillas-certificado" className="text-sm text-zinc-500 hover:underline">
-        &larr; Plantillas de certificado
+      <Link href="/plantillas-certificado" className="text-sm text-muted hover:underline">
+        {t.back}
       </Link>
-      <h1 className="mt-2 mb-6 text-2xl font-semibold">{template.name}</h1>
+      <PageHeader title={template.name} />
 
       {error && (
         <div className="mb-6">
@@ -62,66 +95,57 @@ export default async function PlantillaDetallePage({
         </div>
       )}
       {saved && (
-        <p className="mb-6 rounded-lg bg-green-50 px-4 py-3 text-sm text-green-700 dark:bg-green-950 dark:text-green-300">
-          Los cambios se guardaron correctamente.
-        </p>
+        <div className="mb-6 rounded-lg bg-success-bg px-4 py-3 text-sm text-success">
+          {t.saved}
+        </div>
       )}
 
-      <h2 className="mb-3 text-lg font-medium">Vista previa</h2>
-      <p className="mb-3 text-sm text-zinc-500">
-        Los textos entre llaves dobles (ej. <code>{'{{studentName}}'}</code>) se ven tal cual acá — se
-        reemplazan por los datos reales recién al emitir un certificado de verdad.
-      </p>
-      <iframe
-        title={`Vista previa de ${template.name}`}
-        srcDoc={template.htmlTemplate}
-        sandbox=""
-        className="mb-8 h-96 w-full rounded-lg border border-zinc-300 bg-white dark:border-zinc-700"
-      />
+      <Card className="mb-8">
+        <h2 className="mb-1 text-base font-medium">{t.preview}</h2>
+        <p className="mb-3 text-sm text-muted">{t.previewHelp}</p>
+        <iframe
+          title={t.previewTitle(template.name)}
+          srcDoc={template.htmlTemplate}
+          sandbox=""
+          className="h-96 w-full rounded-lg border border-border bg-white"
+        />
+      </Card>
 
       {canEdit && (
-        <>
-          <h2 className="mb-3 text-lg font-medium">Editar</h2>
-          <form
-            action={editarPlantilla.bind(null, templateId)}
-            className="mb-8 flex max-w-xl flex-col gap-3"
-          >
+        <Card className="mb-8">
+          <h2 className="mb-3 text-base font-medium">{t.edit}</h2>
+          <form action={editarPlantilla.bind(null, templateId)} className="flex flex-col gap-3">
             <input
               name="name"
               type="text"
               required
               defaultValue={template.name}
-              className="rounded border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
+              className={fieldClasses}
             />
             <textarea
               name="htmlTemplate"
               required
               rows={12}
               defaultValue={template.htmlTemplate}
-              className="rounded border border-zinc-300 px-3 py-2 font-mono text-xs dark:border-zinc-700 dark:bg-zinc-900"
+              className={`${fieldClasses} font-mono text-xs`}
             />
-            <button
-              type="submit"
-              className="self-start rounded-full bg-foreground px-4 py-2 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc]"
-            >
-              Guardar cambios
-            </button>
+            <Button type="submit" className="self-start">
+              {t.saveChanges}
+            </Button>
           </form>
-        </>
+        </Card>
       )}
 
       {canDelete && (
-        <>
-          <h2 className="mb-3 text-lg font-medium">Eliminar plantilla</h2>
-          <p className="mb-3 text-sm text-zinc-500">
-            Solo se puede eliminar si NINGÚN certificado fue emitido todavía con esta plantilla.
-          </p>
+        <Card>
+          <h2 className="mb-2 text-base font-medium">{t.deleteTemplate}</h2>
+          <p className="mb-3 text-sm text-muted">{t.deleteHelp}</p>
           <form action={eliminarPlantilla.bind(null, templateId)}>
-            <button type="submit" className="text-sm text-red-600 underline dark:text-red-400">
-              Eliminar esta plantilla
+            <button type="submit" className="text-sm font-medium text-danger hover:underline">
+              {t.deleteThis}
             </button>
           </form>
-        </>
+        </Card>
       )}
     </div>
   );

@@ -47,15 +47,44 @@ model Tenant {
   // Configuracion de marca (logo, colores) en JSON: cambia con frecuencia y
   // es especifica de cada tenant, por eso no se modela como columnas fijas
   // (ver docs/architecture/02-modelo-de-datos.md, seccion 2.2). Forma
-  // esperada (ver tenant.service.ts y update-tenant-branding.dto.ts):
-  //   { "logoUrl"?: string, "backgroundColor"?: string, "backgroundImageUrl"?: string }
-  // Se usa para personalizar el "home" publico de CADA institucion (ver
-  // apps/web/app/page.tsx) — logo, nombre y fondo propios antes de
-  // iniciar sesion.
+  // GUARDADA en esta columna (ver tenant.service.ts):
+  //   { "logoKey"?: string, "backgroundImageKey"?: string, "backgroundColor"?: string }
+  // "logoKey"/"backgroundImageKey" son keys DENTRO del bucket de archivos
+  // (MinIO/S3, ver storage.service.ts) — el bucket NO es publico, asi que
+  // tenant.service.ts (getCurrent/getPublicInfo) las resuelve a una URL
+  // firmada FRESCA en cada respuesta (mismo patron que profile.service.ts
+  // con el avatar), nunca se guarda una URL firmada directamente aca
+  // (quedaria vencida a la hora). Se usa para personalizar el "home"
+  // publico de CADA institucion (ver apps/web/app/page.tsx) — logo, nombre
+  // y fondo propios antes de iniciar sesion.
   branding       Json     @default("{}")
   defaultLocale  String   @default("es") @map("default_locale")
   timezone       String   @default("America/Lima")
   createdAt      DateTime @default(now()) @map("created_at")
+
+  // Modo mantenimiento: pantalla temporal que reemplaza el home publico (ver
+  // apps/web/app/page.tsx) y bloquea el resto de la app (ver
+  // apps/web/app/(app)/layout.tsx) para cualquiera que NO tenga el permiso
+  // "tenant:edit" (Super Admin / Administrador de entidad, ver
+  // tenant.controller.ts) — pensado para una mudanza de datos, un corte de
+  // otro servicio, etc. "maintenanceEndsAt" es solo informativo (se muestra
+  // como "volvemos aprox. a las...", pero NO desactiva el modo mantenimiento
+  // automaticamente: alguien con permiso lo tiene que apagar a mano).
+  maintenanceMode    Boolean   @default(false) @map("maintenance_mode")
+  maintenanceMessage String?   @map("maintenance_message")
+  maintenanceEndsAt  DateTime? @map("maintenance_ends_at")
+
+  // Activacion/desactivacion a nivel de PLATAFORMA (ver
+  // platform-tenants.service.ts) — distinto del modo mantenimiento de
+  // arriba en dos formas clave: (1) lo prende/apaga un Administrador de
+  // PLATAFORMA (PLATFORM_ADMIN_EMAILS), nunca la propia institucion; (2) NO
+  // tiene excepcion para "tenant:edit" — ni siquiera el Super Admin de esa
+  // institucion puede seguir usandola mientras esta desactivada. Pensado
+  // para instituciones que dejaron de pagar, que pidieron pausar el
+  // servicio, o que se dieron de baja pero cuyos datos todavia no se
+  // borran. Se aplica en tenant-context.middleware.ts, ANTES de que el
+  // request llegue a cualquier controlador.
+  active Boolean @default(true)
 
   // --- Relaciones: todo lo que "pertenece" a este tenant ---
   domains             TenantDomain[]
@@ -67,6 +96,9 @@ model Tenant {
   certificates        Certificate[]
   features            TenantFeature[]
   auditLogs           AuditLog[]
+  cohorts             Cohort[]
+  reminderLogs        ReminderLog[]
+  reportPresets       ReportPreset[]
 
   @@map("tenants")
 }
@@ -83,6 +115,21 @@ model TenantDomain {
   // plataforma (dos tenants no pueden compartir el mismo dominio de entrada).
   domain   String @unique
   isPrimary Boolean @default(true) @map("is_primary")
+
+  // Un dominio propio (ej. "campus.institutosanmartin.edu.pe", agregado por
+  // un Administrador de plataforma via tenant-domain.service.ts) inicia SIN
+  // verificar: hay que probar que quien lo pide de verdad controla ese
+  // dominio antes de que tenant-context.middleware.ts empiece a resolverlo.
+  // El default es "true" a proposito: el subdominio automatico que crea
+  // tenant-registration.service.ts al aprobar una institucion (ej.
+  // "sanmartin.stokalms.com") lo emite la plataforma misma, no hace falta
+  // verificarlo — asi ninguna fila existente necesita backfill.
+  verified          Boolean  @default(true) @map("is_verified")
+  // Token aleatorio que quien pide agregar el dominio tiene que publicar
+  // como registro TXT en "_stoka-verify.<dominio>" — ver
+  // tenant-domain.service.ts#verify(). Se limpia (null) una vez verificado.
+  verificationToken String?  @map("verification_token")
+  createdAt         DateTime @default(now()) @map("created_at")
 
   @@index([tenantId])
   @@map("tenant_domains")
@@ -150,13 +197,46 @@ model UserTenant {
   // participa en mas de una, ver docs/architecture/02-modelo-de-datos.md).
   createdAt DateTime @default(now()) @map("created_at")
 
+  // Cohorte a la que pertenece esta membresia (ej. "Promocion 2026", "Turno
+  // manana") — ver Cohort mas abajo. Nulable: no toda persona tiene por
+  // que estar en una cohorte (ej. personal administrativo). "SetNull" (no
+  // "Cascade"): borrar una cohorte no debe borrar a sus miembros, solo
+  // dejarlos sin cohorte asignada.
+  cohortId String? @map("cohort_id")
+  cohort   Cohort? @relation(fields: [cohortId], references: [id], onDelete: SetNull)
+
   roles       UserRole[]
   enrollments Enrollment[]
+  authoredStudentNotes StudentNote[]
+  uploadedEnrollmentAttachments EnrollmentAttachment[]
+  remindersSent ReminderLog[]
 
   // Un mismo usuario no puede tener dos membresias distintas en el mismo tenant.
   @@unique([userId, tenantId])
   @@index([tenantId])
+  @@index([cohortId])
   @@map("user_tenants")
+}
+
+// ============================================================================
+// COHORTES — agrupa alumnos (ej. "Promocion 2026", "Turno mañana") para
+// matricular y reportar en bloque (ver cohort.service.ts). Vive a nivel de
+// TENANT (no de curso): la misma cohorte de alumnos puede matricularse en
+// varios cursos distintos a lo largo del tiempo, sin tener que recrearla
+// cada vez.
+// ============================================================================
+model Cohort {
+  id          String   @id @default(uuid())
+  tenantId    String   @map("tenant_id")
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  members UserTenant[]
+
+  @@index([tenantId])
+  @@map("cohorts")
 }
 
 // ============================================================================
@@ -279,6 +359,14 @@ model Course {
   // escalas definidas y elegir cual aplica a cada curso).
   gradingScaleId  String?  @map("grading_scale_id")
   gradingScale    GradingScale? @relation(fields: [gradingScaleId], references: [id])
+  // Plantilla de certificado FIJA de este curso — a diferencia del diseño
+  // original (elegir la plantilla a mano en cada emision, ver
+  // certificate.service.ts, "issue"), cada curso define UNA sola vez cual
+  // usar, y la emision deja de pedirla. "onDelete: SetNull": borrar una
+  // plantilla no debe impedir borrar/mantener el curso que la tenia asignada
+  // — el curso simplemente queda sin plantilla hasta que se le asigne otra.
+  certificateTemplateId String? @map("certificate_template_id")
+  certificateTemplate   CertificateTemplate? @relation(fields: [certificateTemplateId], references: [id], onDelete: SetNull)
 
   sections           Section[]
   modules             Module[]
@@ -364,6 +452,7 @@ model Lesson {
   content  String @default("")
 
   resources Resource[]
+  views     LessonView[]
 
   @@index([tenantId])
   @@index([moduleId])
@@ -376,7 +465,10 @@ model Resource {
   tenantId   String @map("tenant_id")
   lessonId   String @map("lesson_id")
   lesson     Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
-  // "video" | "pdf" | "scorm" | "link" | "doc" (ver docs/architecture/02-modelo-de-datos.md).
+  // "video" | "pdf" | "scorm" | "link" | "image" | "presentation" | "spreadsheet"
+  // | "document" | "doc" (comodín para cualquier otro tipo de archivo no
+  // reconocido, ver resource.service.ts, "inferResourceType") — ver
+  // docs/architecture/02-modelo-de-datos.md.
   type       String
   // URL dentro del almacenamiento de archivos (MinIO en local, S3/R2 en
   // produccion — ver .env.example, seccion STORAGE_*).
@@ -411,6 +503,9 @@ model Enrollment {
   submissions        Submission[]
   attendanceRecords   AttendanceRecord[]
   certificates        Certificate[]
+  studentNotes        StudentNote[]
+  attachments         EnrollmentAttachment[]
+  lessonViews         LessonView[]
 
   @@unique([sectionId, userTenantId])
   @@index([tenantId])
@@ -607,9 +702,96 @@ model AttendanceRecord {
   // "manual" | "qr" — como se registro esta asistencia.
   method       String   @default("manual")
 
+  // Una sola marca de asistencia por matricula y fecha de sesion — volver a
+  // marcar el mismo dia es una CORRECCION (upsert), no una fila nueva (ver
+  // attendance.service.ts, "mark").
+  @@unique([enrollmentId, sessionDate])
   @@index([tenantId])
   @@index([enrollmentId])
   @@map("attendance_records")
+}
+
+// ============================================================================
+// ANOTACIONES POR ALUMNO: observaciones de desempeño que un Docente deja
+// sobre una matricula puntual (ej. "mejoro mucho su participacion", "no
+// entrego la tarea 3") — a diferencia de una nota (Grade), no mide nada;
+// es texto libre de seguimiento cualitativo. Cuelga de Enrollment con el
+// mismo criterio que AttendanceRecord/Certificate (onDelete: Restrict — es
+// un registro academico real, no debe perderse en cascada).
+// ============================================================================
+model StudentNote {
+  id           String   @id @default(uuid())
+  // Denormalizado para RLS directa (ver ADR-001-multi-tenancy.md).
+  tenantId     String   @map("tenant_id")
+  enrollmentId String   @map("enrollment_id")
+  enrollment   Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Restrict)
+  // Quien la escribio (tipicamente el Docente del curso). onDelete: Restrict
+  // porque es autoria de un registro academico — no debe desaparecer si
+  // luego se le quita a esa persona su membresia en el tenant.
+  authorId     String   @map("author_id")
+  author       UserTenant @relation(fields: [authorId], references: [id], onDelete: Restrict)
+  body         String
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([tenantId])
+  @@index([enrollmentId])
+  @@map("student_notes")
+}
+
+// ============================================================================
+// SUSTENTO DE UN CAMBIO DE ESTADO DE MATRICULA: cuando un Coordinador
+// retira a un alumno, puede adjuntar un archivo de respaldo (ej. carta de
+// retiro, certificado medico) como evidencia documental de por que se tomo
+// esa decision. No se guarda "dentro" de Enrollment (un campo suelto)
+// porque una misma matricula puede pasar por varios cambios de estado a lo
+// largo del tiempo, cada uno con su propio sustento — es un historial, no
+// un dato unico.
+// ============================================================================
+model EnrollmentAttachment {
+  id           String   @id @default(uuid())
+  // Denormalizado para RLS directa (ver ADR-001-multi-tenancy.md).
+  tenantId     String   @map("tenant_id")
+  enrollmentId String   @map("enrollment_id")
+  enrollment   Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Restrict)
+  // Quien lo subio. onDelete: Restrict — mismo criterio que StudentNote.author.
+  uploadedById String   @map("uploaded_by_id")
+  uploadedBy   UserTenant @relation(fields: [uploadedById], references: [id], onDelete: Restrict)
+  // Key dentro del almacenamiento de archivos (MinIO/S3), no una URL publica
+  // directa — mismo patron que Resource.storageUrl.
+  storageKey   String   @map("storage_key")
+  fileName     String   @map("file_name")
+  description  String?
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([tenantId])
+  @@index([enrollmentId])
+  @@map("enrollment_attachments")
+}
+
+// ============================================================================
+// SEGUIMIENTO DE AVANCE: registra la PRIMERA vez que un alumno abrio una
+// Lesson puntual — es la señal minima necesaria para calcular "cuantas
+// lecciones del curso ya vio" (ver academic-progress.service.ts en el
+// backend). Deliberadamente NO registra cada apertura (eso seria un log de
+// eventos, útil para analitica de uso pero no para lo que se necesita hoy:
+// un simple "vista/no vista").
+// ============================================================================
+model LessonView {
+  id           String   @id @default(uuid())
+  tenantId     String   @map("tenant_id")
+  enrollmentId String   @map("enrollment_id")
+  enrollment   Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  lessonId     String   @map("lesson_id")
+  lesson       Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  firstViewedAt DateTime @default(now()) @map("first_viewed_at")
+
+  // Una sola fila por matricula+leccion: la SEGUNDA vez que abre la misma
+  // lección no crea un duplicado (ver academic-progress.service.ts,
+  // "registrarVista", que hace upsert con "skipDuplicates").
+  @@unique([enrollmentId, lessonId])
+  @@index([tenantId])
+  @@index([enrollmentId])
+  @@map("lesson_views")
 }
 
 // ============================================================================
@@ -631,6 +813,7 @@ model CertificateTemplate {
   dynamicFields Json     @default("[]") @map("dynamic_fields")
 
   certificates Certificate[]
+  courses      Course[]
 
   @@index([tenantId])
   @@map("certificate_templates")
@@ -674,6 +857,57 @@ model TenantFeature {
 
   @@unique([tenantId, featureKey])
   @@map("tenant_features")
+}
+
+// Registro de recordatorios automaticos YA enviados (ver
+// automations.service.ts, "due_date_reminders") — su unico proposito es
+// evitar mandar el MISMO recordatorio dos veces a la misma persona (el job
+// diario corre todos los dias y volveria a encontrar la misma evaluacion
+// "por vencer" si no quedara marcada como ya avisada).
+model ReminderLog {
+  id           String   @id @default(uuid())
+  tenantId     String   @map("tenant_id")
+  tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  // Hoy solo existe "assessment_due" (una evaluacion por vencer) — el campo
+  // es texto libre (no un enum) para poder sumar otros tipos de recordatorio
+  // mas adelante sin migracion.
+  type         String
+  // Id de la entidad que origino el recordatorio (hoy, un Assessment.id).
+  referenceId  String   @map("reference_id")
+  userTenantId String   @map("user_tenant_id")
+  userTenant   UserTenant @relation(fields: [userTenantId], references: [id], onDelete: Cascade)
+  sentAt       DateTime @default(now()) @map("sent_at")
+
+  // Nunca el mismo recordatorio dos veces a la misma persona.
+  @@unique([type, referenceId, userTenantId])
+  @@index([tenantId])
+  @@map("reminder_logs")
+}
+
+// "Reportes personalizados" (plan Pro, ver lib/pricing.ts): una seleccion
+// de columnas GUARDADA con nombre, sobre uno de los 3 reportes que ya
+// calcula reports.service.ts (nunca un reporte nuevo desde cero — ver
+// REPORT_COLUMN_CATALOG en ese archivo) — asi un coordinador arma una
+// vez "alumnos + nota final + sección" y lo vuelve a generar/exportar
+// cada mes sin reconfigurar nada.
+model ReportPreset {
+  id         String   @id @default(uuid())
+  tenantId   String   @map("tenant_id")
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name       String
+  // "attendance" | "grades" | "enrollment_progress" — mismos 3 tipos que
+  // ya existen, nunca una fuente de datos nueva.
+  reportType String   @map("report_type")
+  // Lista de keys de REPORT_COLUMN_CATALOG[reportType] (ej.
+  // ["studentName","finalScore"]) — Json en vez de un String[] nativo de
+  // Postgres, mismo criterio que Tenant.branding: todo campo de lista/
+  // objeto libre de este proyecto vive en Json, para no mezclar dos
+  // convenciones distintas de "arreglo" en el mismo schema.
+  columns    Json
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([tenantId])
+  @@map("report_presets")
 }
 
 // ============================================================================
@@ -739,4 +973,41 @@ model TenantRegistrationRequest {
   createdTenantId  String?   @map("created_tenant_id")
 
   @@map("tenant_registration_requests")
+}
+
+// ============================================================================
+// AnalyticsEvent — metricas del EMBUDO de incorporacion (onboarding), NO
+// datos de negocio de ningun tenant (por eso no lleva "tenant_id" y no
+// esta sujeta a Row Level Security, igual que TenantRegistrationRequest de
+// arriba). Un solo evento generico con "metadata" libre (JSON) en vez de
+// una tabla por tipo de evento: el embudo va a seguir cambiando (nuevos
+// pasos, nuevos datos por paso) y esto evita una migracion cada vez.
+//
+// Grabado SIEMPRE desde el servidor (Server Components/Actions, nunca un
+// script en el navegador) — ver apps/web/lib/analytics.ts: ni junta
+// cookies de terceros ni IP/user-agent, lo minimo indispensable para
+// contar el embudo (ver GET /analytics/funnel, admin-plataforma/metricas).
+// ============================================================================
+model AnalyticsEvent {
+  id        String   @id @default(uuid())
+  // Nombre del evento (ver AnalyticsEventName en analytics.ts, la lista
+  // cerrada de valores validos vive en el FRONTEND, no aca — esta columna
+  // es texto libre a proposito para no acoplar el schema del backend a
+  // esa lista, que es la que mas cambia).
+  event     String
+  // Dominio desde el que se disparo (ej. "sanmartin.localhost",
+  // "localhost") — permite distinguir el embudo de UNA institucion del
+  // embudo de "acceso de administracion" (dominio raiz), sin exigir un
+  // tenant ya resuelto (muchos eventos pasan ANTES de que exista tenant,
+  // ej. "landing_view").
+  host      String?
+  // Datos propios de cada tipo de evento (ej. "found: true" en
+  // "entrar_search") — sin columnas fijas por evento, ver la nota de
+  // arriba.
+  metadata  Json?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // El dashboard siempre filtra por evento y ordena/agrupa por fecha.
+  @@index([event, createdAt])
+  @@map("analytics_events")
 }

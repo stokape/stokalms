@@ -14,12 +14,18 @@
 // ============================================================================
 
 import { Controller, Get, Param } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { CertificateService } from './certificate.service';
 
 @Controller('verify')
 export class VerifyController {
   constructor(private readonly certificateService: CertificateService) {}
 
+  // Tope mas estricto que el global (10/min en vez de 60/min): sin esto,
+  // alguien podria probar codigos de verificacion al azar en rafaga
+  // buscando uno valido (enumeracion) — nadie legitimo necesita revisar mas
+  // de un puñado de certificados por minuto desde la misma IP.
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Get(':code')
   verify(@Param('code') code: string) {
     return this.certificateService.verifyPublic(code);

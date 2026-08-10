@@ -52,7 +52,7 @@ graph LR
     APPROVE -->|prod| PROD[Deploy progresivo a producción<br/>canary 10% → 100%]
 ```
 
-- Migraciones de base de datos versionadas (ej. Prisma Migrate/Knex), ejecutadas como *job* previo al rollout, nunca embebidas en el arranque de la app.
+- Migraciones de base de datos versionadas (ej. Prisma Migrate/Knex), ejecutadas como *job* previo al rollout, nunca embebidas en el inicio de la app.
 - Feature flags por tenant permiten activar funcionalidad nueva primero para tenants piloto antes de un rollout general.
 
 ## 7.4 Observabilidad

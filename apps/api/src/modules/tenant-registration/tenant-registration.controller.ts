@@ -10,6 +10,7 @@
 // ============================================================================
 
 import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { PlatformAdminGuard } from '../../auth/platform-admin.guard';
 import { TenantRegistrationService } from './tenant-registration.service';
 import { CreateTenantRegistrationDto } from './dto/create-tenant-registration.dto';
@@ -19,6 +20,13 @@ import { RejectTenantRegistrationDto } from './dto/reject-tenant-registration.dt
 export class TenantRegistrationController {
   constructor(private readonly service: TenantRegistrationService) {}
 
+  // Tope estricto (5/min) igual al pedido para "endpoints de autenticacion"
+  // en la auditoria de seguridad: esta es la ruta publica mas parecida que
+  // existe en este backend (no hay un POST /login propio — el login real lo
+  // resuelve Keycloak, ver la nota sobre fuerza bruta en
+  // docs/architecture/) — sin este limite, alguien podria spamear el
+  // formulario de alta de instituciones.
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @Post()
   create(@Body() dto: CreateTenantRegistrationDto) {
     return this.service.create(dto);
@@ -28,6 +36,17 @@ export class TenantRegistrationController {
   @Get()
   findAll(@Query('status') status?: string) {
     return this.service.findAll(status);
+  }
+
+  // Alta DIRECTA: el administrador de plataforma crea la institucion sin
+  // pasar por el formulario publico + aprobacion (ver la nota grande en
+  // tenant-registration.service.ts). Reusa el MISMO dto que "POST /" —
+  // misma forma, misma validacion — solo cambia quien la llama y que no
+  // hace falta una solicitud pendiente de antes.
+  @UseGuards(PlatformAdminGuard)
+  @Post('direct')
+  createDirect(@Body() dto: CreateTenantRegistrationDto) {
+    return this.service.createDirect(dto);
   }
 
   @UseGuards(PlatformAdminGuard)

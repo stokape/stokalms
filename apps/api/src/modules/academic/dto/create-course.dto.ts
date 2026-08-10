@@ -25,4 +25,12 @@ export class CreateCourseDto {
   @IsOptional()
   @IsUUID()
   gradingScaleId?: string;
+
+  // Plantilla de certificado FIJA de este curso (ver la nota extensa en
+  // schema.prisma, Course.certificateTemplateId) — opcional: sin ella, la
+  // emision de certificados de este curso queda bloqueada hasta que se le
+  // asigne una (ver certificate.service.ts, "issue").
+  @IsOptional()
+  @IsUUID()
+  certificateTemplateId?: string;
 }

@@ -26,7 +26,7 @@ Priorización basada en el **loop de valor mínimo** de un LMS: *crear curso →
 - Roles y permisos completamente personalizados (creación de roles custom nuevos, no solo edición de los base).
 - Rúbricas de calificación, foros calificables, emparejamiento como tipo de pregunta.
 - Mensajería interna docente-estudiante.
-- Control de asistencia (manual + QR).
+- Control de asistencia por QR (la asistencia manual, por sección y fecha, ya está implementada — ver `modules/attendance`).
 - Calendario académico integrado con entregas/evaluaciones.
 - Notificaciones push + in-app (además de correo).
 - Analítica básica: progreso por curso, engagement simple (vistas de recurso, entregas a tiempo vs. tarde).

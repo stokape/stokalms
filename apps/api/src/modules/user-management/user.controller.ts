@@ -5,12 +5,16 @@
 // controla ES la asignacion de roles, no datos personales del usuario.
 // ============================================================================
 
-import { Body, Controller, Delete, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { PermissionsGuard } from '../../rbac/permissions.guard';
 import { RequirePermission } from '../../rbac/require-permission.decorator';
+import { CurrentUser } from '../../auth/current-user.decorator';
+import { AuthenticatedUser } from '../../auth/auth.service';
 import { UserService } from './user.service';
 import { AssignRoleDto } from './dto/assign-role.dto';
+import { EditUserProfileDto } from './dto/edit-user-profile.dto';
+import { BulkAssignRoleDto } from './dto/bulk-assign-role.dto';
 
 @Controller()
 @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -31,16 +35,45 @@ export class UserController {
 
   @RequirePermission('role', 'assign')
   @Post('users/:userTenantId/roles')
-  assignRole(@Param('userTenantId') userTenantId: string, @Body() dto: AssignRoleDto) {
-    return this.userService.assignRole(userTenantId, dto);
+  assignRole(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('userTenantId') userTenantId: string,
+    @Body() dto: AssignRoleDto,
+  ) {
+    return this.userService.assignRole(userTenantId, dto, user.userId);
+  }
+
+  // "Gestion avanzada de usuarios" — asignar un rol a muchas personas de
+  // una vez, via CSV (ver user.service.ts, "bulkAssignRole"). Mismo
+  // permiso que asignar UN rol a la vez: es la misma accion, en bloque.
+  @RequirePermission('role', 'assign')
+  @Post('users/bulk-assign-role')
+  bulkAssignRole(@CurrentUser() user: AuthenticatedUser, @Body() dto: BulkAssignRoleDto) {
+    return this.userService.bulkAssignRole(dto, user.userId);
   }
 
   @RequirePermission('role', 'assign')
   @Delete('users/:userTenantId/roles/:userRoleId')
   removeRole(
+    @CurrentUser() user: AuthenticatedUser,
     @Param('userTenantId') userTenantId: string,
     @Param('userRoleId') userRoleId: string,
   ) {
-    return this.userService.removeRole(userTenantId, userRoleId);
+    return this.userService.removeRole(userTenantId, userRoleId, user.userId);
+  }
+
+  @RequirePermission('user_profile', 'edit')
+  @Get('users/:userTenantId/profile')
+  getProfile(@Param('userTenantId') userTenantId: string) {
+    return this.userService.getProfile(userTenantId);
+  }
+
+  @RequirePermission('user_profile', 'edit')
+  @Patch('users/:userTenantId/profile')
+  updateProfile(
+    @Param('userTenantId') userTenantId: string,
+    @Body() dto: EditUserProfileDto,
+  ) {
+    return this.userService.updateProfile(userTenantId, dto);
   }
 }

@@ -12,9 +12,11 @@
 //   1) Tomamos el header "X-Tenant-Host" si vino, o si no "Host" (ej.
 //      "academia.stokalms.com" o "campus.institutosanmartin.edu.pe").
 //   2) Buscamos ese dominio EXACTO en la tabla tenant_domains.
-//   3) Si existe, ya sabemos el tenantId; si no existe, el request queda
-//      "sin tenant" (tenantId = null) — util para rutas que son publicas o
-//      de administracion de plataforma, no especificas de un tenant.
+//   3) Si existe Y esta VERIFICADO (ver tenant-domain.service.ts — los
+//      dominios propios que agrega un Administrador de plataforma nacen sin
+//      verificar), ya sabemos el tenantId; si no, el request queda "sin
+//      tenant" (tenantId = null) — util para rutas que son publicas o de
+//      administracion de plataforma, no especificas de un tenant.
 //
 // POR QUE "X-Tenant-Host" ADEMAS DE "Host": cuando quien llama es un
 // NAVEGADOR directo (curl, Postman, un cliente movil), "Host" ya refleja
@@ -37,12 +39,28 @@
 //   el tenant activo durante todo el ciclo de vida del request.
 // - Se registra en app.module.ts (metodo "configure") para aplicarse a
 //   TODAS las rutas.
+// - Aca mismo se corta el paso a instituciones DESACTIVADAS por un
+//   Administrador de plataforma (ver Tenant.active en schema.prisma y
+//   platform-tenants.service.ts) — es el lugar mas temprano posible del
+//   ciclo del request, asi que ni un solo controlador de negocio llega a
+//   ejecutarse para un tenant desactivado.
 // ============================================================================
 
 import { Injectable, NestMiddleware } from '@nestjs/common';
 import { Request, Response, NextFunction } from 'express';
 import { PrismaService } from '../../prisma/prisma.service';
 import { TenantContextService } from './tenant-context.service';
+
+// Unica ruta que un tenant DESACTIVADO puede seguir llamando: es la que usa
+// el home publico (apps/web/app/page.tsx) para saber que mostrar (en este
+// caso, una pantalla de "institucion desactivada" en vez de un error
+// generico). Se compara contra "req.originalUrl" (con "endsWith", no
+// "==="), NUNCA contra "req.path": Nest monta este middleware via
+// "forRoutes('*')" por dentro de su propio router, y eso hace que
+// "req.path"/"req.url" queden reescritos a "/" para CUALQUIER ruta dentro
+// de este middleware (se comprobo en la practica) — "req.originalUrl" es
+// el unico que conserva el path real, prefijo "/api/v1" incluido.
+const ALLOWED_WHEN_INACTIVE = '/tenant/public';
 
 @Injectable()
 export class TenantContextMiddleware implements NestMiddleware {
@@ -66,13 +84,35 @@ export class TenantContextMiddleware implements NestMiddleware {
 
     // tenant_domains NO tiene Row-Level Security (ver la explicacion al
     // inicio de rls-policies.sql): esta consulta debe poder encontrar
-    // CUALQUIER tenant, de eso se trata resolverlo.
+    // CUALQUIER tenant, de eso se trata resolverlo. Se trae "active" en el
+    // mismo viaje (via el include de la relacion) para no pagar una
+    // segunda consulta aparte.
     const tenantDomain = await this.prisma.tenantDomain.findUnique({
       where: { domain: host },
-      select: { tenantId: true },
+      select: { tenantId: true, verified: true, tenant: { select: { active: true } } },
     });
 
-    const tenantId = tenantDomain?.tenantId ?? null;
+    // Un dominio propio recien agregado (ver tenant-domain.service.ts) no
+    // resuelve a NINGUN tenant hasta que se verifique la propiedad via TXT
+    // — mientras tanto se comporta igual que si el dominio no existiera.
+    const tenantId = tenantDomain?.verified ? tenantDomain.tenantId : null;
+
+    const pathOnly = req.originalUrl.split('?')[0];
+    if (tenantId && tenantDomain?.tenant.active === false && !pathOnly.endsWith(ALLOWED_WHEN_INACTIVE)) {
+      // Se corta ACA, antes de "run()": ningun guard ni controlador llega a
+      // ejecutarse, ni siquiera los que no requieren tenant (ej. rutas de
+      // administracion de plataforma) — en la practica esto nunca las
+      // afecta, porque el panel de plataforma se visita por el dominio raiz
+      // de la plataforma, nunca por el dominio de una institucion
+      // particular. Mismo formato de error que el resto del backend (ver
+      // common/filters/prisma-exception.filter.ts): JSON con "message".
+      res.status(403).json({
+        statusCode: 403,
+        message:
+          'Esta institución fue desactivada por el equipo de Stoka LMS. Si crees que es un error, contacta al equipo de plataforma.',
+      });
+      return;
+    }
 
     // A partir de aqui, CUALQUIER codigo que se ejecute como parte de este
     // request (dentro de la funcion "next()" y todo lo que esta dispare de

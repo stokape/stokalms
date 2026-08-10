@@ -12,6 +12,8 @@
 import Link from 'next/link';
 import { requireAccessToken, apiFetch, toErrorMessage, getCoursePermissions, can } from '@/lib/api';
 import { ErrorBanner } from '@/components/ErrorBanner';
+import { Button } from '@/components/ui/Button';
+import { getLocale, type Locale } from '@/lib/locale';
 import { crearCategoria, crearEvaluacion, eliminarEvaluacion } from './actions';
 
 interface Course {
@@ -37,11 +39,54 @@ interface CourseModule {
   title: string;
 }
 
-const TYPE_LABELS: Record<string, string> = {
-  exam: 'Examen',
-  assignment: 'Tarea',
-  forum: 'Foro',
-  rubric: 'Rúbrica',
+const TYPE_LABELS_BY_LOCALE: Record<Locale, Record<string, string>> = {
+  es: { exam: 'Examen', assignment: 'Tarea', forum: 'Foro', rubric: 'Rúbrica' },
+  en: { exam: 'Exam', assignment: 'Assignment', forum: 'Forum', rubric: 'Rubric' },
+};
+
+const TEXT = {
+  es: {
+    title: 'Evaluaciones',
+    empty: 'Este curso todavía no tiene ninguna evaluación.',
+    untitled: (type: string) => `${type} sin título`,
+    attempt: 'intento',
+    attempts: 'intentos',
+    delete: 'Eliminar',
+    firstCreateCategory: 'Primero crea una categoría de notas',
+    categoryHelp: 'Toda evaluación pertenece a una categoría (ej. "Exámenes", "Tareas"), que define cuánto pesa en la nota final del curso.',
+    categoryNamePlaceholder: 'Ej. "Exámenes"',
+    weightPlaceholder: 'Peso % (ej. 40)',
+    dropLowestTitle: 'Cuántas notas bajas se descartan al promediar',
+    createCategory: 'Crear categoría',
+    createAssessmentHeading: 'Crear una evaluación nueva',
+    assessmentTitlePlaceholder: 'Título (opcional, ej. "Examen parcial 1")',
+    noModule: 'Sin módulo (queda a nivel del curso)',
+    maxPointsPlaceholder: 'Puntaje máximo',
+    maxAttemptsTitle: 'Intentos permitidos',
+    autoPublish: 'Publicar la nota apenas se corrige (sin esperar a "publicar notas" del curso)',
+    createAssessment: 'Crear evaluación',
+  },
+  en: {
+    title: 'Assessments',
+    empty: "This course doesn't have any assessments yet.",
+    untitled: (type: string) => `Untitled ${type}`,
+    attempt: 'attempt',
+    attempts: 'attempts',
+    delete: 'Delete',
+    firstCreateCategory: 'First create a grading category',
+    categoryHelp: 'Every assessment belongs to a category (e.g. "Exams", "Assignments"), which defines how much it weighs in the course\'s final grade.',
+    categoryNamePlaceholder: 'E.g. "Exams"',
+    weightPlaceholder: 'Weight % (e.g. 40)',
+    dropLowestTitle: 'How many low grades are dropped when averaging',
+    createCategory: 'Create category',
+    createAssessmentHeading: 'Create a new assessment',
+    assessmentTitlePlaceholder: 'Title (optional, e.g. "Midterm exam")',
+    noModule: "No module (stays at the course level)",
+    maxPointsPlaceholder: 'Maximum points',
+    maxAttemptsTitle: 'Allowed attempts',
+    autoPublish: 'Publish the grade as soon as it\'s graded (without waiting for the course to "publish grades")',
+    createAssessment: 'Create assessment',
+  },
 };
 
 export default async function EvaluacionesDelCursoPage({
@@ -54,6 +99,9 @@ export default async function EvaluacionesDelCursoPage({
   const { courseId } = await params;
   const { error, moduleId: preselectedModuleId } = await searchParams;
   const token = await requireAccessToken();
+  const locale = await getLocale();
+  const t = TEXT[locale];
+  const TYPE_LABELS = TYPE_LABELS_BY_LOCALE[locale];
 
   let course: Course;
   let assessments: Assessment[];
@@ -98,7 +146,7 @@ export default async function EvaluacionesDelCursoPage({
       <Link href={`/cursos/${courseId}`} className="text-sm text-zinc-500 hover:underline">
         &larr; {course.title}
       </Link>
-      <h1 className="mt-2 mb-6 text-2xl font-semibold">Evaluaciones</h1>
+      <h1 className="mt-2 mb-6 text-2xl font-semibold">{t.title}</h1>
 
       {error && (
         <div className="mb-6">
@@ -107,22 +155,22 @@ export default async function EvaluacionesDelCursoPage({
       )}
 
       {assessments.length === 0 ? (
-        <p className="mb-8 text-zinc-500">Este curso todavía no tiene ninguna evaluación.</p>
+        <p className="mb-8 text-zinc-500">{t.empty}</p>
       ) : (
         <ul className="mb-8 divide-y divide-zinc-200 dark:divide-zinc-800">
           {assessments.map((a) => (
             <li key={a.id} className="flex items-center justify-between gap-4 py-3">
               <Link href={`/cursos/${courseId}/evaluaciones/${a.id}`} className="hover:underline">
-                {a.config.title || `${TYPE_LABELS[a.type] ?? a.type} sin título`}
+                {a.config.title || t.untitled(TYPE_LABELS[a.type] ?? a.type)}
                 <span className="ml-2 text-sm text-zinc-500">
                   ({TYPE_LABELS[a.type] ?? a.type} · {a.maxPoints} pts · {a.maxAttempts}{' '}
-                  {a.maxAttempts === 1 ? 'intento' : 'intentos'})
+                  {a.maxAttempts === 1 ? t.attempt : t.attempts})
                 </span>
               </Link>
               {canDelete && (
                 <form action={eliminarEvaluacion.bind(null, courseId, a.id)}>
                   <button type="submit" className="text-xs text-red-600 underline dark:text-red-400">
-                    Eliminar
+                    {t.delete}
                   </button>
                 </form>
               )}
@@ -133,17 +181,14 @@ export default async function EvaluacionesDelCursoPage({
 
       {canCreate && categories && categories.length === 0 && (
         <>
-          <h2 className="mb-3 text-lg font-medium">Primero creá una categoría de notas</h2>
-          <p className="mb-3 text-sm text-zinc-500">
-            Toda evaluación pertenece a una categoría (ej. &quot;Exámenes&quot;, &quot;Tareas&quot;),
-            que define cuánto pesa en la nota final del curso.
-          </p>
+          <h2 className="mb-3 text-lg font-medium">{t.firstCreateCategory}</h2>
+          <p className="mb-3 text-sm text-zinc-500">{t.categoryHelp}</p>
           <form action={crearCategoria.bind(null, courseId)} className="mb-8 flex max-w-xl flex-wrap gap-2">
             <input
               name="name"
               type="text"
               required
-              placeholder='Ej. "Exámenes"'
+              placeholder={t.categoryNamePlaceholder}
               className="flex-1 rounded border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
             />
             <input
@@ -152,7 +197,7 @@ export default async function EvaluacionesDelCursoPage({
               min={0}
               max={100}
               required
-              placeholder="Peso % (ej. 40)"
+              placeholder={t.weightPlaceholder}
               className="w-32 rounded border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
             />
             <input
@@ -160,27 +205,22 @@ export default async function EvaluacionesDelCursoPage({
               type="number"
               min={0}
               defaultValue={0}
-              title="Cuántas notas bajas se descartan al promediar"
+              title={t.dropLowestTitle}
               className="w-24 rounded border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
             />
-            <button
-              type="submit"
-              className="rounded-full bg-foreground px-4 py-2 text-sm text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc]"
-            >
-              Crear categoría
-            </button>
+            <Button type="submit">{t.createCategory}</Button>
           </form>
         </>
       )}
 
       {canCreate && categories && categories.length > 0 && (
         <>
-          <h2 className="mb-3 text-lg font-medium">Crear una evaluación nueva</h2>
+          <h2 className="mb-3 text-lg font-medium">{t.createAssessmentHeading}</h2>
           <form action={crearEvaluacion.bind(null, courseId)} className="flex max-w-xl flex-col gap-3">
             <input
               name="title"
               type="text"
-              placeholder='Título (opcional, ej. "Examen parcial 1")'
+              placeholder={t.assessmentTitlePlaceholder}
               className="rounded border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
             />
             <div className="flex gap-2">
@@ -189,10 +229,10 @@ export default async function EvaluacionesDelCursoPage({
                 required
                 className="flex-1 rounded border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
               >
-                <option value="exam">Examen</option>
-                <option value="assignment">Tarea</option>
-                <option value="forum">Foro</option>
-                <option value="rubric">Rúbrica</option>
+                <option value="exam">{TYPE_LABELS.exam}</option>
+                <option value="assignment">{TYPE_LABELS.assignment}</option>
+                <option value="forum">{TYPE_LABELS.forum}</option>
+                <option value="rubric">{TYPE_LABELS.rubric}</option>
               </select>
               <select
                 name="gradebookCategoryId"
@@ -212,7 +252,7 @@ export default async function EvaluacionesDelCursoPage({
                 defaultValue={preselectedModuleId ?? ''}
                 className="rounded border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
               >
-                <option value="">Sin módulo (queda a nivel del curso)</option>
+                <option value="">{t.noModule}</option>
                 {modules.map((m) => (
                   <option key={m.id} value={m.id}>
                     {m.title}
@@ -227,7 +267,7 @@ export default async function EvaluacionesDelCursoPage({
                 min={0}
                 step="0.01"
                 required
-                placeholder="Puntaje máximo"
+                placeholder={t.maxPointsPlaceholder}
                 className="flex-1 rounded border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
               />
               <input
@@ -235,20 +275,17 @@ export default async function EvaluacionesDelCursoPage({
                 type="number"
                 min={1}
                 defaultValue={1}
-                title="Intentos permitidos"
+                title={t.maxAttemptsTitle}
                 className="w-32 rounded border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
               />
             </div>
             <label className="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400">
               <input type="checkbox" name="autoPublish" />
-              Publicar la nota apenas se corrige (sin esperar a &quot;publicar notas&quot; del curso)
+              {t.autoPublish}
             </label>
-            <button
-              type="submit"
-              className="self-start rounded-full bg-foreground px-4 py-2 text-sm text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc]"
-            >
-              Crear evaluación
-            </button>
+            <Button type="submit" className="self-start">
+              {t.createAssessment}
+            </Button>
           </form>
         </>
       )}

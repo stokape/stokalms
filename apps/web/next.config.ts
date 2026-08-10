@@ -1,6 +1,12 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Empaqueta en ".next/standalone" solo los archivos y dependencias que la
+  // app REALMENTE usa (Next.js rastrea los imports) — sin esto, la imagen
+  // Docker de produccion tendria que llevarse los node_modules enteros del
+  // monorepo (workspaces hoisteados, decenas de paquetes de apps/api
+  // incluidos) para poder correr "next start". Ver apps/web/Dockerfile.
+  output: "standalone",
   experimental: {
     // El limite por defecto de un Server Action es 1MB — muy poco para
     // subir un video o un PDF como recurso de leccion (ver

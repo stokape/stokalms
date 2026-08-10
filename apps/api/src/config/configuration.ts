@@ -21,11 +21,14 @@ export interface AppConfig {
   port: number;
   platformRootDomain: string;
   // URL publica y absoluta desde la que se puede llamar a ESTA misma API
-  // desde afuera (ej. al escanear un QR impreso en un certificado). Es
-  // deliberadamente distinta de "NEXT_PUBLIC_API_URL" (que lee el
-  // FRONTEND): esta la usa el propio BACKEND, del lado del servidor, para
-  // construir enlaces absolutos que van DENTRO de contenido generado (ver
-  // certificate.service.ts, que arma la URL que el QR codifica).
+  // desde afuera (ej. al escanear un QR impreso en un certificado). La usa
+  // el propio BACKEND, del lado del servidor, para construir enlaces
+  // absolutos que van DENTRO de contenido generado (ver
+  // certificate.service.ts, que arma la URL que el QR codifica) — el
+  // FRONTEND nunca necesita esta variable (llama a la API desde SU PROPIO
+  // servidor con "STOKA_API_URL", ver apps/web/lib/api.ts, jamas desde el
+  // navegador — por eso ninguna variable de este proyecto lleva el
+  // prefijo "NEXT_PUBLIC_", ver .env.example).
   apiPublicUrl: string;
   database: {
     // Usuario administrador (superusuario): solo lo usa el CLI de Prisma
@@ -59,7 +62,19 @@ export interface AppConfig {
     realm: string;
     clientId: string;
     clientSecret: string;
+    // Cliente OIDC del FRONTEND (no el de este backend) — mismo "stoka-web"
+    // que scripts/setup-keycloak.js ya crea. Lo necesita
+    // keycloak-admin.service.ts para poder registrarle un redirect_uri
+    // nuevo cuando se aprueba una institucion (ver la nota extensa ahi).
+    webClientId: string;
   };
+  // Origen PUBLICO del frontend (ej. "https://stokalms.com" en produccion,
+  // "http://localhost:3000" en desarrollo) — MISMA variable, mismo valor,
+  // que ya usa scripts/setup-keycloak.js (ver "WEB_ORIGIN" alli). La
+  // necesita keycloak-admin.service.ts para saber con que protocolo/puerto
+  // arma el redirect_uri de cada institucion (el HOST cambia por tenant,
+  // el resto no).
+  webOrigin: string;
   // Lista fija de emails con permiso de "administrador de PLATAFORMA": la
   // unica persona que puede aprobar/rechazar solicitudes de alta de una
   // institucion nueva (ver platform-admin.guard.ts). Es una simplificacion
@@ -70,9 +85,54 @@ export interface AppConfig {
   // distintos niveles de acceso, ese es el momento de modelar un dominio
   // Casbin "platform" de verdad en vez de esta lista fija.
   platformAdminEmails: string[];
+  // Envio de correo (ver common/mail/mail.service.ts, usado por
+  // automations.service.ts para los recordatorios) — SIN valores por
+  // defecto reales a proposito: en desarrollo, sin estas variables
+  // definidas, "host" queda vacio y MailService NO INTENTA enviar nada
+  // (solo deja un aviso en el log) — ver la nota extensa alli sobre por
+  // que "no enviar" es preferible a fallar la operacion que disparo el
+  // correo (ej. terminar una matricula) por un problema de SMTP.
+  mail: {
+    host: string;
+    port: number;
+    secure: boolean;
+    user: string;
+    password: string;
+    // Remitente que ve quien recibe el correo (ej. "Stoka LMS
+    // <no-responder@stokalms.com>") — separado de "user" (la cuenta con la
+    // que se autentica al servidor SMTP) porque muchos proveedores
+    // (SendGrid, SES) autentican con una API key que no es, en si, una
+    // direccion de correo real.
+    from: string;
+  };
+  // "Funcionalidades de IA" (plan Pro, ver lib/pricing.ts y
+  // common/ai/ai.service.ts) — mismo criterio que "mail" arriba: SIN
+  // valores por defecto reales. Sin "apiKey" definida, AiService no
+  // intenta llamar a ningun proveedor externo (devuelve "no configurado"
+  // en vez de fallar) — construido, apagado por defecto, como se acordo.
+  ai: {
+    apiKey: string;
+    // Compatible con la API de "chat completions" de OpenAI — muchos
+    // proveedores (incluido OpenAI mismo) exponen ese mismo formato, asi
+    // que cambiar de proveedor es, en la practica, solo cambiar esta URL
+    // base y el modelo, sin tocar AiService.
+    baseUrl: string;
+    model: string;
+  };
+  // Origenes desde los que un NAVEGADOR puede llamar a esta API con
+  // JavaScript (fetch/XHR) — ver main.ts, app.enableCors(). Hoy, en la
+  // practica, NINGUN navegador llama a esta API directo: el frontend
+  // (apps/web) siempre pasa por su propio servidor de Next.js (Server
+  // Components/Actions), que no esta sujeto a CORS por ser una llamada
+  // servidor-a-servidor, no del navegador (ver la nota extensa en
+  // apps/web/lib/api.ts). Esta lista es DEFENSA EN PROFUNDIDAD: si algun
+  // dia se agrega una llamada del lado del cliente, solo estos origenes
+  // van a poder hacerla — cualquier otro sitio queda bloqueado por el
+  // propio navegador, aunque alguien robara o reusara un token valido.
+  corsAllowedOrigins: string[];
 }
 
-// NestJS invoca esta funcion UNA vez al arrancar y guarda el objeto resultante
+// NestJS invoca esta funcion UNA vez al iniciar y guarda el objeto resultante
 // en memoria; de ahi en adelante, cualquier servicio lo consulta con
 // "configService.get<AppConfig>('...')" en vez de leer process.env de nuevo.
 export default (): AppConfig => ({
@@ -106,10 +166,32 @@ export default (): AppConfig => ({
     realm: process.env.KEYCLOAK_REALM ?? 'stoka-dev',
     clientId: process.env.KEYCLOAK_CLIENT_ID ?? 'stoka-api',
     clientSecret: process.env.KEYCLOAK_CLIENT_SECRET ?? '',
+    webClientId: process.env.KEYCLOAK_WEB_CLIENT_ID ?? 'stoka-web',
+  },
+  webOrigin: process.env.WEB_ORIGIN ?? 'http://localhost:3000',
+
+  mail: {
+    host: process.env.SMTP_HOST ?? '',
+    port: parseInt(process.env.SMTP_PORT ?? '587', 10),
+    secure: process.env.SMTP_SECURE === 'true',
+    user: process.env.SMTP_USER ?? '',
+    password: process.env.SMTP_PASSWORD ?? '',
+    from: process.env.SMTP_FROM ?? 'Stoka LMS <no-responder@stokalms.com>',
+  },
+
+  ai: {
+    apiKey: process.env.AI_API_KEY ?? '',
+    baseUrl: process.env.AI_BASE_URL ?? 'https://api.openai.com/v1',
+    model: process.env.AI_MODEL ?? 'gpt-4o-mini',
   },
 
   platformAdminEmails: (process.env.PLATFORM_ADMIN_EMAILS ?? '')
     .split(',')
     .map((email) => email.trim().toLowerCase())
+    .filter(Boolean),
+
+  corsAllowedOrigins: (process.env.CORS_ALLOWED_ORIGINS ?? 'http://localhost:3000')
+    .split(',')
+    .map((origin) => origin.trim())
     .filter(Boolean),
 });

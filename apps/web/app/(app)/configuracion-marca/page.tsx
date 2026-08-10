@@ -4,11 +4,37 @@
 // ANTES de iniciar sesion. Requiere "tenant:edit" (Administrador de
 // entidad / Super Admin, ver prisma/seed.js) — cualquier otro rol ve el
 // mensaje de "no tienes permiso" habitual.
+//
+// El logo y la imagen de fondo se SUBEN como archivo real (mismo patron
+// que la foto de perfil, ver profile/page.tsx) — no se pegan como URL a
+// mano. El color de fondo si sigue siendo un campo de texto simple: es el
+// respaldo que se usa cuando todavia no se subio una imagen de fondo (o
+// si la institucion prefiere un fondo solido en vez de una foto), no un
+// archivo que subir.
 // ============================================================================
 
 import { requireAccessToken, apiFetch, toErrorMessage } from '@/lib/api';
 import { ErrorBanner } from '@/components/ErrorBanner';
-import { actualizarMarca } from './actions';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { Card } from '@/components/ui/Card';
+import { getLocale } from '@/lib/locale';
+import { actualizarMarca, actualizarLogo, actualizarFondo, actualizarFavicon } from './actions';
+import { BrandingStudio } from './BrandingStudio';
+
+const TEXT = {
+  es: {
+    title: 'Configuración de marca',
+    descriptionPrefix: 'Esto es lo que ve cualquier persona en el "home" público de tu institución, antes de iniciar sesión.',
+    viewHome: 'Ver la página de inicio →',
+    saved: 'Los cambios se guardaron correctamente.',
+  },
+  en: {
+    title: 'Branding settings',
+    descriptionPrefix: "This is what anyone sees on your institution's public \"home\" page, before logging in.",
+    viewHome: 'View the home page →',
+    saved: 'Your changes were saved successfully.',
+  },
+};
 
 interface Tenant {
   name: string;
@@ -16,6 +42,9 @@ interface Tenant {
     logoUrl?: string;
     backgroundColor?: string;
     backgroundImageUrl?: string;
+    primaryColor?: string;
+    faviconUrl?: string;
+    hideStokaBranding?: boolean;
   };
 }
 
@@ -26,29 +55,29 @@ export default async function ConfiguracionMarcaPage({
 }) {
   const { error, saved } = await searchParams;
   const token = await requireAccessToken();
+  const locale = await getLocale();
+  const t = TEXT[locale];
 
   let tenant: Tenant;
   try {
     tenant = await apiFetch<Tenant>(token, '/tenant');
   } catch (err) {
-    return (
-      <div className="mx-auto max-w-2xl">
-        <ErrorBanner message={toErrorMessage(err)} />
-      </div>
-    );
+    return <ErrorBanner message={toErrorMessage(err)} />;
   }
 
   return (
-    <div className="mx-auto max-w-2xl">
-      <h1 className="mb-6 text-2xl font-semibold">Configuración de marca</h1>
-      <p className="mb-6 text-sm text-zinc-500">
-        Esto es lo que ve cualquier persona en el &quot;home&quot; público de tu institución, antes de
-        iniciar sesión. Después de guardar, abrí{' '}
-        <a href="/" target="_blank" className="underline">
-          la página de inicio
-        </a>{' '}
-        en otra pestaña para ver el resultado.
-      </p>
+    <div>
+      <PageHeader
+        title={t.title}
+        description={
+          <>
+            {t.descriptionPrefix}{' '}
+            <a href="/" target="_blank" className="text-primary hover:underline">
+              {t.viewHome}
+            </a>
+          </>
+        }
+      />
 
       {error && (
         <div className="mb-6">
@@ -56,67 +85,23 @@ export default async function ConfiguracionMarcaPage({
         </div>
       )}
       {saved && (
-        <p className="mb-6 rounded-lg bg-green-50 px-4 py-3 text-sm text-green-700 dark:bg-green-950 dark:text-green-300">
-          Los cambios se guardaron correctamente.
-        </p>
+        <Card className="mb-6 border-success/30 bg-success-bg text-sm text-success">{t.saved}</Card>
       )}
 
-      <form action={actualizarMarca} className="flex max-w-md flex-col gap-4">
-        <label className="flex flex-col gap-1 text-sm">
-          Nombre de la institución
-          <input
-            name="name"
-            type="text"
-            required
-            defaultValue={tenant.name}
-            className="rounded border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
-          />
-        </label>
-
-        <label className="flex flex-col gap-1 text-sm">
-          URL del logo
-          <input
-            name="logoUrl"
-            type="text"
-            defaultValue={tenant.branding.logoUrl ?? ''}
-            placeholder="https://..."
-            className="rounded border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
-          />
-        </label>
-
-        <label className="flex flex-col gap-1 text-sm">
-          Color de fondo
-          <input
-            name="backgroundColor"
-            type="text"
-            defaultValue={tenant.branding.backgroundColor ?? ''}
-            placeholder="#0f172a"
-            className="rounded border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
-          />
-          <span className="text-xs text-zinc-500">
-            Un color hexadecimal (ej. &quot;#0f172a&quot;). Si además cargás una imagen de fondo, la
-            imagen tiene prioridad.
-          </span>
-        </label>
-
-        <label className="flex flex-col gap-1 text-sm">
-          URL de imagen de fondo (opcional)
-          <input
-            name="backgroundImageUrl"
-            type="text"
-            defaultValue={tenant.branding.backgroundImageUrl ?? ''}
-            placeholder="https://..."
-            className="rounded border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
-          />
-        </label>
-
-        <button
-          type="submit"
-          className="mt-2 self-start rounded-full bg-foreground px-6 py-3 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc]"
-        >
-          Guardar cambios
-        </button>
-      </form>
+      <BrandingStudio
+        tenantName={tenant.name}
+        initialColor={tenant.branding.backgroundColor ?? '#1e90ff'}
+        initialPrimaryColor={tenant.branding.primaryColor ?? '#1e90ff'}
+        initialLogoUrl={tenant.branding.logoUrl}
+        initialBackgroundUrl={tenant.branding.backgroundImageUrl}
+        initialFaviconUrl={tenant.branding.faviconUrl}
+        initialHideStokaBranding={tenant.branding.hideStokaBranding ?? false}
+        actualizarMarca={actualizarMarca}
+        actualizarLogo={actualizarLogo}
+        actualizarFondo={actualizarFondo}
+        actualizarFavicon={actualizarFavicon}
+        locale={locale}
+      />
     </div>
   );
 }

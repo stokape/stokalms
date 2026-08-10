@@ -25,6 +25,7 @@ import { applyGradingScale } from './gradebook.util';
 export interface StudentResult {
   enrollmentId: string;
   student: { userId: string; email: string; fullName: string };
+  section: { id: string; name: string };
   finalScore: number;
   letterGrade: string | null;
 }
@@ -119,7 +120,12 @@ export class GradebookService {
   // docs/architecture/05-api-design.md, seccion 5.5 (ejemplo de respuesta
   // con "warnings").
   // ---------------------------------------------------------------------
-  private async computeCourseGrades(
+  // No es privado: academic-progress.service.ts lo reusa para calcular la
+  // nota PARCIAL de un alumno puntual (mismo algoritmo, sin publicar nada)
+  // dentro de "Ver avance" — ver la nota extensa mas arriba sobre por que
+  // esto YA funciona como "nota parcial" sin cambios (excluye, no computa
+  // como cero, cualquier categoria todavia sin calificar).
+  async computeCourseGrades(
     tx: Prisma.TransactionClient,
     courseId: string,
     options: { onlyPublished: boolean },
@@ -150,7 +156,7 @@ export class GradebookService {
       },
       include: {
         grade: true,
-        enrollment: { include: { userTenant: { include: { user: true } } } },
+        enrollment: { include: { userTenant: { include: { user: true } }, section: true } },
       },
     });
 
@@ -221,6 +227,7 @@ export class GradebookService {
           email: enrollment.userTenant.user.email,
           fullName: enrollment.userTenant.user.fullName,
         },
+        section: { id: enrollment.section.id, name: enrollment.section.name },
         finalScore,
         letterGrade,
       });

@@ -10,7 +10,10 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { TenantContextService } from '../../common/tenant/tenant-context.service';
 import { CasbinService } from '../../rbac/casbin.service';
+import { AuditService } from '../../common/audit/audit.service';
 import { AssignRoleDto } from './dto/assign-role.dto';
+import { EditUserProfileDto } from './dto/edit-user-profile.dto';
+import { BulkAssignRoleDto } from './dto/bulk-assign-role.dto';
 
 @Injectable()
 export class UserService {
@@ -18,6 +21,7 @@ export class UserService {
     private readonly prisma: PrismaService,
     private readonly tenantContext: TenantContextService,
     private readonly casbin: CasbinService,
+    private readonly auditService: AuditService,
   ) {}
 
   async findAll() {
@@ -62,7 +66,7 @@ export class UserService {
     });
   }
 
-  async assignRole(userTenantId: string, dto: AssignRoleDto) {
+  async assignRole(userTenantId: string, dto: AssignRoleDto, actorUserId?: string) {
     const tenantId = this.tenantContext.requireTenantId();
 
     await this.prisma.withTenant(tenantId, async (tx) => {
@@ -97,11 +101,146 @@ export class UserService {
     // alguien reinicie el backend — mismo patron ya usado al aprobar una
     // institucion nueva (ver tenant-registration.service.ts, "approve").
     await this.casbin.reload();
+    await this.auditService.record(tenantId, {
+      userId: actorUserId,
+      action: 'role.assigned',
+      payload: { userTenantId, roleId: dto.roleId, scopeCourseId: dto.scopeCourseId ?? null },
+    });
 
     return { assigned: true };
   }
 
-  async removeRole(userTenantId: string, userRoleId: string) {
+  // "Gestion avanzada de usuarios": asignar un rol a MUCHAS personas de una
+  // sola vez (ej. "todo este CSV de docentes nuevos, rol Docente") — mismo
+  // patron fila-por-fila que enrollment.service.ts#bulkCreate: un email que
+  // no corresponde a nadie de este tenant es una fila con error MAS en el
+  // resultado, nunca motivo para tumbar el resto del archivo.
+  async bulkAssignRole(dto: BulkAssignRoleDto, actorUserId?: string) {
+    const tenantId = this.tenantContext.requireTenantId();
+    const results: Array<{ email: string; status: 'asignado' | 'ya_tenia' | 'error'; message?: string }> = [];
+
+    await this.prisma.withTenant(tenantId, async (tx) => {
+      for (const row of dto.rows) {
+        try {
+          const userTenant = await tx.userTenant.findFirst({
+            where: { user: { email: row.email } },
+            include: { roles: true },
+          });
+          if (!userTenant) {
+            results.push({
+              email: row.email,
+              status: 'error',
+              message: 'No hay nadie con ese email en esta institución.',
+            });
+            continue;
+          }
+
+          const role = await tx.role.findUnique({ where: { id: row.roleId } });
+          if (!role || (role.tenantId !== null && role.tenantId !== tenantId)) {
+            results.push({ email: row.email, status: 'error', message: 'El rol indicado no existe.' });
+            continue;
+          }
+
+          // "Ya tenia" no es un error — una fila repetida en el mismo CSV
+          // (o alguien que ya tenia el rol de antes) no deberia frenar la
+          // carga del resto, solo informarse aparte de "asignado".
+          const alreadyHasRole = userTenant.roles.some(
+            (r) => r.roleId === row.roleId && r.scopeCourseId === null,
+          );
+          if (alreadyHasRole) {
+            results.push({ email: row.email, status: 'ya_tenia' });
+            continue;
+          }
+
+          await tx.userRole.create({
+            data: { tenantId, userTenantId: userTenant.id, roleId: row.roleId },
+          });
+          results.push({ email: row.email, status: 'asignado' });
+        } catch (err) {
+          results.push({
+            email: row.email,
+            status: 'error',
+            message: err instanceof Error ? err.message : 'Error inesperado.',
+          });
+        }
+      }
+    });
+
+    // Una sola recarga al final (no una por fila): recargar el enforcer de
+    // Casbin es relativamente caro (relee TODA la tabla de politicas, ver
+    // casbin.service.ts) — hacerlo una vez al final de un CSV de 50 filas
+    // en vez de 50 veces es la misma garantia de "vigente de inmediato" sin
+    // el costo repetido.
+    await this.casbin.reload();
+    await this.auditService.record(tenantId, {
+      userId: actorUserId,
+      action: 'role.bulk_assigned',
+      payload: {
+        total: dto.rows.length,
+        asignados: results.filter((r) => r.status === 'asignado').length,
+        errores: results.filter((r) => r.status === 'error').length,
+      },
+    });
+
+    return { results };
+  }
+
+  private async requireUserTenant(userTenantId: string) {
+    const tenantId = this.tenantContext.requireTenantId();
+    return this.prisma.withTenant(tenantId, async (tx) => {
+      const userTenant = await tx.userTenant.findUnique({
+        where: { id: userTenantId },
+        include: { user: true },
+      });
+      if (!userTenant) {
+        throw new NotFoundException(`No existe la membresia "${userTenantId}" en este tenant.`);
+      }
+      return userTenant;
+    });
+  }
+
+  // Los mismos campos de contacto/residencia que "Mi perfil" (ver
+  // profile.service.ts, getMine) pero para OTRA persona — sirve para
+  // precargar el formulario de edicion.
+  async getProfile(userTenantId: string) {
+    const userTenant = await this.requireUserTenant(userTenantId);
+    const { user } = userTenant;
+    return {
+      email: user.email,
+      fullName: user.fullName,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      phone: user.phone,
+      address: user.address,
+      department: user.department,
+      province: user.province,
+      district: user.district,
+    };
+  }
+
+  async updateProfile(userTenantId: string, dto: EditUserProfileDto) {
+    const userTenant = await this.requireUserTenant(userTenantId);
+    const tenantId = this.tenantContext.requireTenantId();
+
+    await this.prisma.withTenant(tenantId, (tx) =>
+      tx.user.update({
+        where: { id: userTenant.userId },
+        data: {
+          ...(dto.firstName !== undefined && { firstName: dto.firstName }),
+          ...(dto.lastName !== undefined && { lastName: dto.lastName }),
+          ...(dto.phone !== undefined && { phone: dto.phone }),
+          ...(dto.address !== undefined && { address: dto.address }),
+          ...(dto.department !== undefined && { department: dto.department }),
+          ...(dto.province !== undefined && { province: dto.province }),
+          ...(dto.district !== undefined && { district: dto.district }),
+        },
+      }),
+    );
+
+    return { updated: true };
+  }
+
+  async removeRole(userTenantId: string, userRoleId: string, actorUserId?: string) {
     const tenantId = this.tenantContext.requireTenantId();
 
     await this.prisma.withTenant(tenantId, async (tx) => {
@@ -113,6 +252,11 @@ export class UserService {
     });
 
     await this.casbin.reload();
+    await this.auditService.record(tenantId, {
+      userId: actorUserId,
+      action: 'role.removed',
+      payload: { userTenantId, userRoleId },
+    });
 
     return { removed: true };
   }

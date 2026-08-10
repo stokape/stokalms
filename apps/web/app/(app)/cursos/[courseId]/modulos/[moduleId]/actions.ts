@@ -23,6 +23,47 @@ export async function crearLeccion(courseId: string, moduleId: string, formData:
   redirect(path);
 }
 
+export async function actualizarModulo(courseId: string, moduleId: string, formData: FormData) {
+  const token = await requireAccessToken();
+  const path = `/cursos/${courseId}/modulos/${moduleId}`;
+  const title = String(formData.get('title') ?? '').trim();
+
+  try {
+    await apiFetch(token, `/courses/${courseId}/modules/${moduleId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ title }),
+    });
+  } catch (err) {
+    redirect(`${path}?error=${encodeURIComponent(toErrorMessage(err))}`);
+  }
+
+  revalidatePath(path);
+  redirect(path);
+}
+
+export async function actualizarLeccionTitulo(
+  courseId: string,
+  moduleId: string,
+  lessonId: string,
+  formData: FormData,
+) {
+  const token = await requireAccessToken();
+  const path = `/cursos/${courseId}/modulos/${moduleId}`;
+  const title = String(formData.get('title') ?? '').trim();
+
+  try {
+    await apiFetch(token, `/courses/${courseId}/modules/${moduleId}/lessons/${lessonId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ title }),
+    });
+  } catch (err) {
+    redirect(`${path}?error=${encodeURIComponent(toErrorMessage(err))}`);
+  }
+
+  revalidatePath(path);
+  redirect(path);
+}
+
 export async function eliminarLeccion(courseId: string, moduleId: string, lessonId: string) {
   const token = await requireAccessToken();
   const path = `/cursos/${courseId}/modulos/${moduleId}`;

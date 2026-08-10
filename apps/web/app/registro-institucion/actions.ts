@@ -2,6 +2,7 @@
 
 import { redirect } from 'next/navigation';
 import { apiFetchPublic, toErrorMessage } from '@/lib/api';
+import { trackEvent } from '@/lib/analytics';
 
 export async function crearSolicitud(formData: FormData) {
   const dto = {
@@ -24,5 +25,6 @@ export async function crearSolicitud(formData: FormData) {
     redirect(`/registro-institucion?error=${encodeURIComponent(toErrorMessage(err))}`);
   }
 
+  void trackEvent('registration_submitted');
   redirect('/registro-institucion?enviado=1');
 }

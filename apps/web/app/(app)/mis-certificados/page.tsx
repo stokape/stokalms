@@ -6,11 +6,42 @@
 // administrativo, ver enrollment.service.ts) + GET /enrollments/:id/certificates
 // por cada matrícula (acotado a "certificate:view_own" — el backend ya
 // filtra esto para que solo se puedan ver los certificados PROPIOS).
+//
+// El enlace del menú a esta pantalla se oculta para roles de personal (ver
+// (app)/layout.tsx, "isStaff") — no estudian, así que "Mis certificados"
+// les quedaba vacío y confuso ("¿certificados de qué?"). La pantalla en sí
+// sigue existiendo (no requiere ningún permiso especial, es autoservicio
+// puro): alguien con un rol de personal que ADEMÁS esté matriculado como
+// alumno en otro curso puede seguir entrando por URL directa.
 // ============================================================================
 
 import Link from 'next/link';
 import { requireAccessToken, apiFetch, toErrorMessage } from '@/lib/api';
 import { ErrorBanner } from '@/components/ErrorBanner';
+import { getLocale } from '@/lib/locale';
+
+const TEXT = {
+  es: {
+    title: 'Mis certificados',
+    emptyPrefix: 'Todavía no tienes ningún certificado emitido. Los certificados se emiten cuando completas un curso — revisa tu progreso en',
+    myEnrollments: 'Mis matrículas',
+    issuedOn: 'Emitido el',
+    revoked: 'Revocado',
+    active: 'Vigente',
+    viewVerification: 'Ver página de verificación pública',
+    downloadPdf: 'Descargar PDF',
+  },
+  en: {
+    title: 'My certificates',
+    emptyPrefix: "You don't have any issued certificates yet. Certificates are issued when you complete a course — check your progress in",
+    myEnrollments: 'My enrollments',
+    issuedOn: 'Issued on',
+    revoked: 'Revoked',
+    active: 'Active',
+    viewVerification: 'View public verification page',
+    downloadPdf: 'Download PDF',
+  },
+};
 
 interface EnrollmentMine {
   id: string;
@@ -34,6 +65,8 @@ export default async function MisCertificadosPage({
 }) {
   const { error } = await searchParams;
   const token = await requireAccessToken();
+  const locale = await getLocale();
+  const t = TEXT[locale];
 
   let enrollments: EnrollmentMine[];
   try {
@@ -58,7 +91,7 @@ export default async function MisCertificadosPage({
 
   return (
     <div className="mx-auto max-w-3xl">
-      <h1 className="mb-6 text-2xl font-semibold">Mis certificados</h1>
+      <h1 className="mb-6 text-2xl font-semibold">{t.title}</h1>
 
       {error && (
         <div className="mb-6">
@@ -68,10 +101,9 @@ export default async function MisCertificadosPage({
 
       {conCertificados.length === 0 ? (
         <p className="text-zinc-500">
-          Todavía no tenés ningún certificado emitido. Los certificados se emiten cuando completás un
-          curso — mirá tu progreso en{' '}
+          {t.emptyPrefix}{' '}
           <Link href="/mis-matriculas" className="underline">
-            Mis matrículas
+            {t.myEnrollments}
           </Link>
           .
         </p>
@@ -91,21 +123,21 @@ export default async function MisCertificadosPage({
                     <div>
                       <p className="font-mono text-sm">{c.verificationCode}</p>
                       <p className="text-sm text-zinc-500">
-                        Emitido el{' '}
-                        {new Date(c.issuedAt).toLocaleDateString('es-PE', { dateStyle: 'long' })}
+                        {t.issuedOn}{' '}
+                        {new Date(c.issuedAt).toLocaleDateString(locale === 'en' ? 'en-US' : 'es-PE', { dateStyle: 'long' })}
                         {' · '}
                         {c.revoked ? (
-                          <span className="text-red-600 dark:text-red-400">Revocado</span>
+                          <span className="text-red-600 dark:text-red-400">{t.revoked}</span>
                         ) : (
-                          <span className="text-green-700 dark:text-green-400">Vigente</span>
+                          <span className="text-green-700 dark:text-green-400">{t.active}</span>
                         )}
                       </p>
                       <Link href={`/verify/${c.verificationCode}`} className="text-sm underline">
-                        Ver página de verificación pública
+                        {t.viewVerification}
                       </Link>
                     </div>
                     <a href={c.downloadUrl} className="text-sm underline" target="_blank" rel="noreferrer">
-                      Descargar PDF
+                      {t.downloadPdf}
                     </a>
                   </li>
                 ))}

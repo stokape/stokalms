@@ -18,4 +18,8 @@ export class UpdateCourseDto {
   @IsOptional()
   @IsUUID()
   gradingScaleId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  certificateTemplateId?: string;
 }

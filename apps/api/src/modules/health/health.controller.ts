@@ -10,14 +10,21 @@
 // Relacion con el resto del proyecto:
 // - Es el primer modulo de negocio que registramos en app.module.ts, a modo
 //   de prueba de que el prefijo global "/api/v1" (definido en main.ts) y el
-//   arranque completo funcionan de punta a punta.
+//   inicio completo funcionan de punta a punta.
 // ============================================================================
 
 import { Controller, Get } from '@nestjs/common';
+import { SkipThrottle } from '@nestjs/throttler';
 
 // @Controller('health') define que este controlador responde en la ruta
 // "/health". Sumado al prefijo global "api/v1" (main.ts), la ruta final
 // disponible es: GET http://localhost:3001/api/v1/health
+//
+// @SkipThrottle(): un balanceador/orquestador (Docker, Kubernetes) golpea
+// este endpoint cada pocos segundos por diseño — contarlo contra el limite
+// global de 60/min (ver app.module.ts) lo haria empezar a fallar solo, sin
+// que nadie este atacando nada.
+@SkipThrottle()
 @Controller('health')
 export class HealthController {
   // @Get() sin argumentos = responde al metodo HTTP GET sobre la ruta base

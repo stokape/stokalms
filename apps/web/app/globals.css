@@ -1,26 +1,171 @@
 @import "tailwindcss";
 
+/* Redefine el prefijo "dark:" de Tailwind para que dependa del atributo
+   "data-theme" del <html> (lo fijan el script de inicio de
+   app/layout.tsx y el interruptor de components/ThemeToggle.tsx), NO de
+   la preferencia del sistema operativo — así la persona elige de
+   verdad, en vez de que el navegador decida por ella sin avisar. El
+   script de inicio usa esa misma preferencia del sistema como valor
+   por defecto la PRIMERA vez que alguien visita (antes de tocar el
+   interruptor), así que "seguir al sistema" no se pierde, solo pasa a
+   ser una elección explícita en vez de implícita — y con esto, CUALQUIER
+   clase "dark:..." que ya existe en el resto de la app (ver por ejemplo
+   dominios/page.tsx) sigue funcionando sin que haya que tocarla. */
+@custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Paleta de marca oficial de Stoka LMS (brand kit "Opción 2"): Azul
+     Principal/Secundario para acentos, Azul Profundo como texto/fondo
+     oscuro, Plata Claro/Metálico como neutros — ver
+     components/StokaLogo.tsx, el mismo isotipo. */
+  --background: #f5f8fc;
+  --surface: #ffffff;
+  --foreground: #0d1b2a;
+  /* #64748b (slate-500) ajustado hacia el azul de marca en vez de un gris
+     neutro — mismo contraste (~4.7:1 sobre blanco, pasa AA para texto
+     normal), pero coherente con la paleta en vez de un gris "de sobra". */
+  --muted: #58697f;
+  /* "Plata Claro" del brand kit — literal, no un gris genérico. */
+  --border: #c5d1e3;
+
+  /* Azul Principal / Azul Secundario del brand kit. */
+  --primary: #1e90ff;
+  --primary-hover: #0f6dff;
+  --primary-foreground: #ffffff;
+
+  --success: #059669;
+  --success-bg: #ecfdf5;
+  --warning: #b45309;
+  --warning-bg: #fffbeb;
+  --danger: #dc2626;
+  --danger-bg: #fef2f2;
+  --info: #0369a1;
+  --info-bg: #f0f9ff;
 }
 
 @theme inline {
   --color-background: var(--background);
+  --color-surface: var(--surface);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
+  --color-muted: var(--muted);
+  --color-border: var(--border);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-success: var(--success);
+  --color-success-bg: var(--success-bg);
+  --color-warning: var(--warning);
+  --color-warning-bg: var(--warning-bg);
+  --color-danger: var(--danger);
+  --color-danger-bg: var(--danger-bg);
+  --color-info: var(--info);
+  --color-info-bg: var(--info-bg);
+  /* Raleway: la tipografía oficial del brand kit ("LMS"/"Educación
+     virtual" en el lockup — ver components/StokaLogo.tsx). Reemplaza a
+     Geist Sans en TODA la app, no solo el logo — es lo que separa
+     "usamos los colores de marca" de "de verdad se siente Stoka LMS".
+     Geist Mono se mantiene para lo poco que necesita ancho fijo. */
+  --font-sans: var(--font-raleway);
   --font-mono: var(--font-geist-mono);
+  /* Titulares grandes (landing, "font-display" en Tailwind): mismo
+     Raleway pero pensado para peso extra-bold, ver layout.tsx. */
+  --font-display: var(--font-raleway);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* Antes esto vivía dentro de "@media (prefers-color-scheme: dark)" — el
+   script de inicio (ver app/layout.tsx) ya calcula esa MISMA
+   preferencia y la fija como "data-theme" en el <html> antes de la
+   primera pintura, así que ahora esto se activa por el atributo
+   directamente, no por el media query (que dejaría de reflejar el tema
+   REAL en cuanto alguien tocara el interruptor). */
+:root[data-theme='dark'] {
+  /* "Azul Profundo" (#0d1b2a) es LITERALMENTE el fondo oscuro del brand
+     kit — no una aproximación, el mismo valor exacto. */
+  --background: #0d1b2a;
+  --surface: #16283c;
+  /* "Plata Metálico" del brand kit — un neutro claro cálido en vez del
+     blanco-azulado gris de antes, mismo criterio que --border en claro. */
+  --foreground: #e6e9ee;
+  --muted: #93a6c0;
+  --border: #24384d;
+
+  /* Mismo Azul Principal, aclarado (igual que el resto de la paleta en
+     oscuro: el acento se aclara para leerse bien sobre un fondo oscuro,
+     en vez de quedar apagado) — el botón usa texto Azul Profundo encima,
+     no blanco, por el mismo motivo que antes usaba índigo oscuro. */
+  --primary: #4fa8ff;
+  --primary-hover: #7cc0ff;
+  --primary-foreground: #0d1b2a;
+
+  --success: #34d399;
+  --success-bg: #06231a;
+  --warning: #fbbf24;
+  --warning-bg: #2a1e05;
+  --danger: #f87171;
+  --danger-bg: #2a1010;
+  --info: #38bdf8;
+  --info-bg: #071d2a;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+}
+
+/* ===== InstitutionMosaic (ver app/InstitutionMosaic.tsx) =====
+   5 tarjetas apiladas (position: absolute, misma celda) que se turnan la
+   visibilidad — cada una usa el MISMO keyframe pero con un
+   "animation-delay" negativo distinto (var(--i), fijada inline por
+   tarjeta), el truco clasico de carrusel-sin-JS: a los 15s / 5 tarjetas =
+   3s de ventana cada una. */
+.mosaic-card {
+  opacity: 0;
+  animation: mosaic-cycle 15s ease-in-out infinite;
+  animation-delay: calc(var(--i) * -3s);
+}
+/* Pausa al pasar el mouse — un gesto de "quedate mirando esta" sin JS. */
+.mosaic:hover .mosaic-card {
+  animation-play-state: paused;
+}
+@keyframes mosaic-cycle {
+  0%,
+  4% {
+    opacity: 0;
+  }
+  8%,
+  16% {
+    opacity: 1;
+  }
+  20%,
+  100% {
+    opacity: 0;
+  }
+}
+/* Sin la animacion, TODAS las tarjetas quedarian invisibles (opacity: 0 es
+   el estado base) — sin movimiento, se fija la primera nomas. */
+@media (prefers-reduced-motion: reduce) {
+  .mosaic-card {
+    animation: none;
+  }
+  .mosaic-card:first-child {
+    opacity: 1;
+  }
+}
+
+/* Entrada suave para mensajes que aparecen SIN que la persona haya hecho
+   scroll ni nada (ej. "no encontramos tu institución" en
+   app/entrar/page.tsx) — sin esto, el mensaje "salta" de golpe al DOM y se
+   siente como un error del sistema en vez de una respuesta esperada del
+   formulario. Nombre generico a proposito: sirve para cualquier mensaje
+   nuevo que aparezca así, no solo el de "entrar". */
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }

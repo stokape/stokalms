@@ -36,3 +36,69 @@ export async function quitarRol(userTenantId: string, userRoleId: string) {
   revalidatePath(PATH);
   redirect(PATH);
 }
+
+// "Gestion avanzada de usuarios": asignar un rol a muchas personas de una
+// vez desde un CSV de dos columnas "email,nombre del rol" — mismo patron
+// que matricularCSV (ver cursos/[courseId]/secciones/[sectionId]/actions.ts):
+// el PARSEO pasa por el frontend, el backend recibe filas ya estructuradas
+// (ver bulk-assign-role.dto.ts). El nombre del rol se resuelve aca contra
+// "GET /roles" (sin distinguir mayusculas/minusculas ni espacios de mas,
+// para que un CSV escrito a mano no falle por un detalle de tipeo).
+export async function asignarRolesCSV(formData: FormData) {
+  const token = await requireAccessToken();
+  const file = formData.get('file');
+
+  if (!(file instanceof File) || file.size === 0) {
+    redirect(`${PATH}?error=${encodeURIComponent('Elige un archivo CSV para subir.')}`);
+  }
+
+  const text = await (file as File).text();
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const dataLines =
+    lines.length > 0 && lines[0].toLowerCase().startsWith('email') ? lines.slice(1) : lines;
+
+  const roles = await apiFetch<Array<{ id: string; name: string }>>(token, '/roles');
+  const roleIdByName = new Map(roles.map((r) => [r.name.trim().toLowerCase(), r.id]));
+
+  const rows: Array<{ email: string; roleId: string }> = [];
+  const unresolvedRoles: string[] = [];
+  for (const line of dataLines) {
+    const [email, roleName] = line.split(',').map((s) => s?.trim());
+    if (!email || !roleName) continue;
+    const roleId = roleIdByName.get(roleName.toLowerCase());
+    if (!roleId) {
+      unresolvedRoles.push(roleName);
+      continue;
+    }
+    rows.push({ email, roleId });
+  }
+
+  if (unresolvedRoles.length > 0) {
+    redirect(
+      `${PATH}?error=${encodeURIComponent(`No reconocemos el rol "${unresolvedRoles[0]}" — revisa que el nombre coincida exactamente con uno de los roles existentes.`)}`,
+    );
+  }
+  if (rows.length === 0) {
+    redirect(`${PATH}?error=${encodeURIComponent('El archivo no tiene ninguna fila con datos.')}`);
+  }
+
+  let results: Array<{ email: string; status: 'asignado' | 'ya_tenia' | 'error'; message?: string }>;
+  try {
+    const response = await apiFetch<{ results: typeof results }>(token, '/users/bulk-assign-role', {
+      method: 'POST',
+      body: JSON.stringify({ rows }),
+    });
+    results = response.results;
+  } catch (err) {
+    redirect(`${PATH}?error=${encodeURIComponent(toErrorMessage(err))}`);
+  }
+
+  const okCount = results.filter((r) => r.status === 'asignado' || r.status === 'ya_tenia').length;
+  const errors = results.filter((r) => r.status === 'error').slice(0, 20);
+
+  revalidatePath(PATH);
+  redirect(`${PATH}?bulkOk=${okCount}&bulkErrors=${encodeURIComponent(JSON.stringify(errors))}`);
+}

@@ -17,5 +17,9 @@ import { TenantService } from './tenant.service';
 @Module({
   controllers: [TenantController],
   providers: [TenantService],
+  // Exportado para que PlatformTenantsModule pueda inyectar TenantService
+  // y reusar sus metodos "ParaTenant(tenantId, ...)" — ver la nota extensa
+  // en tenant.service.ts sobre por que NO se duplica esa logica ahi.
+  exports: [TenantService],
 })
 export class TenantSettingsModule {}

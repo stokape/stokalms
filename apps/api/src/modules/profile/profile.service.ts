@@ -46,6 +46,13 @@ export class ProfileService {
       : null;
 
     return {
+      // Se expone para que "Mi perfil" (frontend) pueda ofrecerse a si
+      // misma como formulario de edicion cuando quien mira tiene
+      // "user_profile:edit" (ver user-management/user.service.ts,
+      // updateProfile) — reusa EXACTAMENTE el mismo endpoint de staff,
+      // apuntado a la propia membresia, en vez de duplicar la logica de
+      // edicion aca.
+      userTenantId: user.userTenantId,
       email: person.email,
       fullName: person.fullName,
       firstName: person.firstName,

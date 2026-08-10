@@ -22,8 +22,12 @@ export class CertificateController {
 
   @RequirePermission('certificate', 'issue')
   @Post()
-  issue(@Param('enrollmentId') enrollmentId: string, @Body() dto: IssueCertificateDto) {
-    return this.certificateService.issue(enrollmentId, dto);
+  issue(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('enrollmentId') enrollmentId: string,
+    @Body() dto: IssueCertificateDto,
+  ) {
+    return this.certificateService.issue(enrollmentId, dto, user.userId);
   }
 
   // Sin @RequirePermission a proposito: "certificate:view" (staff) y
@@ -54,7 +58,7 @@ export class CertificateByIdController {
 
   @RequirePermission('certificate', 'revoke')
   @Patch(':id/revoke')
-  revoke(@Param('id') id: string) {
-    return this.certificateService.revoke(id);
+  revoke(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
+    return this.certificateService.revoke(id, user.userId);
   }
 }

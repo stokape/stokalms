@@ -10,7 +10,30 @@
 import Link from 'next/link';
 import { requireAccessToken, apiFetch, toErrorMessage, getCoursePermissions, can } from '@/lib/api';
 import { ErrorBanner } from '@/components/ErrorBanner';
-import { crearModulo, eliminarModulo } from './actions';
+import { Button } from '@/components/ui/Button';
+import { getLocale } from '@/lib/locale';
+import { crearModulo, actualizarModulo, eliminarModulo } from './actions';
+
+const TEXT = {
+  es: {
+    title: 'Contenido del curso',
+    empty: 'Este curso todavía no tiene ningún módulo.',
+    save: 'Guardar',
+    delete: 'Eliminar',
+    createHeading: 'Crear un módulo nuevo',
+    placeholder: 'Ej. "Módulo 1 - Introducción"',
+    create: 'Crear',
+  },
+  en: {
+    title: 'Course content',
+    empty: "This course doesn't have any modules yet.",
+    save: 'Save',
+    delete: 'Delete',
+    createHeading: 'Create a new module',
+    placeholder: 'E.g. "Module 1 - Introduction"',
+    create: 'Create',
+  },
+};
 
 interface CourseModule {
   id: string;
@@ -33,6 +56,7 @@ export default async function ModulosDelCursoPage({
   const { courseId } = await params;
   const { error } = await searchParams;
   const token = await requireAccessToken();
+  const t = TEXT[await getLocale()];
 
   let course: Course;
   let modules: CourseModule[];
@@ -51,6 +75,7 @@ export default async function ModulosDelCursoPage({
   // "Crear un módulo nuevo" que de todas formas el backend le rechazaría.
   const permissions = await getCoursePermissions(token, courseId);
   const canCreate = can(permissions, 'module', 'create');
+  const canEdit = can(permissions, 'module', 'edit');
   const canDelete = can(permissions, 'module', 'delete');
 
   return (
@@ -58,7 +83,7 @@ export default async function ModulosDelCursoPage({
       <Link href={`/cursos/${courseId}`} className="text-sm text-zinc-500 hover:underline">
         &larr; {course.title}
       </Link>
-      <h1 className="mt-2 mb-6 text-2xl font-semibold">Contenido del curso</h1>
+      <h1 className="mt-2 mb-6 text-2xl font-semibold">{t.title}</h1>
 
       {error && (
         <div className="mb-6">
@@ -67,7 +92,7 @@ export default async function ModulosDelCursoPage({
       )}
 
       {modules.length === 0 ? (
-        <p className="mb-8 text-zinc-500">Este curso todavía no tiene ningún módulo.</p>
+        <p className="mb-8 text-zinc-500">{t.empty}</p>
       ) : (
         <ul className="mb-8 divide-y divide-zinc-200 dark:divide-zinc-800">
           {modules.map((module) => (
@@ -78,13 +103,32 @@ export default async function ModulosDelCursoPage({
               >
                 {module.title}
               </Link>
-              {canDelete && (
-                <form action={eliminarModulo.bind(null, courseId, module.id)}>
-                  <button type="submit" className="text-xs text-red-600 underline dark:text-red-400">
-                    Eliminar
-                  </button>
-                </form>
-              )}
+              <div className="flex items-center gap-3">
+                {canEdit && (
+                  <form
+                    action={actualizarModulo.bind(null, courseId, module.id)}
+                    className="flex items-center gap-1"
+                  >
+                    <input
+                      name="title"
+                      type="text"
+                      defaultValue={module.title}
+                      required
+                      className="w-40 rounded border border-zinc-300 px-2 py-1 text-xs dark:border-zinc-700 dark:bg-zinc-900"
+                    />
+                    <button type="submit" className="text-xs underline">
+                      {t.save}
+                    </button>
+                  </form>
+                )}
+                {canDelete && (
+                  <form action={eliminarModulo.bind(null, courseId, module.id)}>
+                    <button type="submit" className="text-xs text-red-600 underline dark:text-red-400">
+                      {t.delete}
+                    </button>
+                  </form>
+                )}
+              </div>
             </li>
           ))}
         </ul>
@@ -92,21 +136,16 @@ export default async function ModulosDelCursoPage({
 
       {canCreate && (
         <>
-          <h2 className="mb-3 text-lg font-medium">Crear un módulo nuevo</h2>
+          <h2 className="mb-3 text-lg font-medium">{t.createHeading}</h2>
           <form action={crearModulo.bind(null, courseId)} className="flex max-w-sm gap-2">
             <input
               name="title"
               type="text"
               required
-              placeholder='Ej. "Módulo 1 - Introducción"'
+              placeholder={t.placeholder}
               className="flex-1 rounded border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
             />
-            <button
-              type="submit"
-              className="rounded-full bg-foreground px-4 py-2 text-sm text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc]"
-            >
-              Crear
-            </button>
+            <Button type="submit">{t.create}</Button>
           </form>
         </>
       )}

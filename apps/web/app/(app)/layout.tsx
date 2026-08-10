@@ -17,12 +17,48 @@
 // - Llama a GET /auth/me una sola vez (para mostrar el nombre de quien
 //   inicio sesion en la barra superior); cada pagina hija hace sus PROPIAS
 //   llamadas a la API para sus propios datos.
+//
+// DISEÑO: barra lateral en vez del nav horizontal de antes — con 8-9
+// enlaces posibles segun el rol, una fila horizontal se volvia ilegible
+// (todo apretado, sin jerarquia). El toggle para mobile ("Menú" arriba) es
+// CSS puro (un <input type="checkbox"> oculto + "peer-checked", ver mas
+// abajo) a proposito, no un Client Component: sigue funcionando incluso
+// si algo tarda en hidratar React, mismo criterio de progressive
+// enhancement que ya usan los formularios de toda la app.
 // ============================================================================
 
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { auth, signOut } from '@/auth';
-import { apiFetch, can, type Permissions } from '@/lib/api';
+import { auth } from '@/auth';
+import { apiFetch, apiFetchPublic, can, type Permissions } from '@/lib/api';
+import { IdleSessionGuard } from '@/components/IdleSessionGuard';
+import { LocaleSwitcher } from '@/components/LocaleSwitcher';
+import { StokaWordmark, StokaMark } from '@/components/StokaLogo';
+import { StokaBrandingBadge } from '@/components/StokaBrandingBadge';
+import { NavLink } from '@/components/ui/NavLink';
+import { getLocale } from '@/lib/locale';
+import { getAppDictionary } from '../dictionaries/app';
+import {
+  CoursesIcon,
+  CalendarIcon,
+  ChartIcon,
+  BookmarkIcon,
+  AwardIcon,
+  FileIcon,
+  GearIcon,
+  GlobeIcon,
+  UsersIcon,
+  UserCircleIcon,
+  LogoutIcon,
+  MenuIcon,
+  WrenchIcon,
+  DashboardIcon,
+  ReportIcon,
+  CohortIcon,
+  AutomationIcon,
+  ShieldIcon,
+} from '@/components/ui/icons';
+import { cerrarSesionCompleta, reingresarConContrasena } from './session-actions';
 
 interface StokaUser {
   fullName: string;
@@ -36,6 +72,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     redirect('/');
   }
 
+  const locale = await getLocale();
+  const t = getAppDictionary(locale);
+
   // Si /auth/me falla (ej. el backend esta caido), no tiene sentido
   // bloquear TODA la navegacion por eso — se muestra la barra igual, sin
   // nombre y sin ningun enlace que dependa de permisos, y cada pagina hija
@@ -47,93 +86,215 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     me = null;
   }
   const permissions: Permissions = new Set(me?.permissions ?? []);
+  const isStaff = can(permissions, 'enrollment', 'view') || can(permissions, 'enrollment', 'create');
+
+  // Modo mantenimiento (ver /mantenimiento y app/page.tsx): igual que en el
+  // home publico, solo "tenant:edit" (Super Admin / Administrador de
+  // entidad) puede seguir usando el resto de la app mientras esta prendido
+  // — a cualquier otra persona ya logueada se la manda al home, que le va a
+  // mostrar la pantalla de aviso en vez de dejarla seguir navegando.
+  //
+  // Institucion DESACTIVADA por plataforma (ver Tenant.active): a
+  // diferencia del mantenimiento, esto manda a TODO el mundo al home sin
+  // excepcion — ni siquiera "tenant:edit" sirve aca, porque solo un
+  // Administrador de plataforma puede reactivarla (ver
+  // /admin-plataforma/instituciones). En la practica, si esta desactivada
+  // el fetch de abajo es la UNICA llamada al backend que no corta con 403
+  // (ver tenant-context.middleware.ts) — cualquier otra pantalla de esta
+  // app ya habria fallado antes de llegar aca.
+  let tenantInfo: {
+    active?: boolean;
+    maintenanceMode?: boolean;
+    branding?: { hideStokaBranding?: boolean };
+  } | null = null;
+  try {
+    tenantInfo = await apiFetchPublic('/tenant/public');
+  } catch {
+    tenantInfo = null;
+  }
+  if (tenantInfo?.active === false) {
+    redirect('/');
+  }
+  const maintenanceOn = Boolean(tenantInfo?.maintenanceMode);
+  const canBypassMaintenance = can(permissions, 'tenant', 'edit');
+  if (maintenanceOn && !canBypassMaintenance) {
+    redirect('/');
+  }
 
   return (
-    <div className="flex min-h-screen flex-col">
-      <header className="flex flex-wrap items-center justify-between gap-4 border-b border-zinc-200 px-6 py-4 dark:border-zinc-800">
-        <div className="flex flex-wrap items-center gap-6">
-          <Link href="/cursos" className="text-lg font-semibold">
-            Stoka LMS
-          </Link>
-          <nav className="flex flex-wrap gap-4 text-sm text-zinc-600 dark:text-zinc-400">
-            {/* "Cursos" y "Notas": todos los roles del sistema tienen al
-                menos "course:view" y "grade:view"/"grade:view_own" (ver
-                prisma/seed.js) — se muestran siempre. */}
-            <Link href="/cursos" className="hover:underline">
-              Cursos
-            </Link>
-            <Link href="/notas" className="hover:underline">
-              Notas
-            </Link>
-            <Link href="/mis-matriculas" className="hover:underline">
-              Mis matrículas
-            </Link>
-            <Link href="/mis-certificados" className="hover:underline">
-              Mis certificados
-            </Link>
-            {can(permissions, 'certificate_template', 'view') && (
-              <Link href="/plantillas-certificado" className="hover:underline">
-                Plantillas de certificado
-              </Link>
-            )}
-            {can(permissions, 'tenant', 'edit') && (
-              <Link href="/configuracion-marca" className="hover:underline">
-                Configuración de marca
-              </Link>
-            )}
-            {can(permissions, 'role', 'view') && (
-              <Link href="/usuarios" className="hover:underline">
-                Usuarios y roles
-              </Link>
-            )}
-            <Link href="/perfil" className="hover:underline">
-              Mi perfil
-            </Link>
-          </nav>
-        </div>
-        <div className="flex items-center gap-4 text-sm">
-          {me && <span className="text-zinc-500">{me.fullName}</span>}
-          <form
-            action={async () => {
-              'use server';
-              // "signOut()" solo (a secas) borra la COOKIE de NextAuth —
-              // Keycloak sigue creyendo que la sesion de SSO sigue activa
-              // (su propia cookie, en localhost:8080, no se toca). Sin este
-              // paso extra, entrar de nuevo a "Iniciar sesion" te loguea
-              // SOLO A LA MISMA persona sin pedir usuario/contraseña, algo
-              // que pasa desapercibido con una cuenta pero se vuelve muy
-              // confuso al alternar entre los 7 usuarios de prueba (uno por
-              // rol, ver README) para probar cada rol por separado.
-              //
-              // La solucion es el logout "RP-initiated" del protocolo OIDC:
-              // redirigir al "end_session_endpoint" de Keycloak, pasandole
-              // el id_token de ESTA sesion como prueba de quien esta
-              // cerrando sesion ("id_token_hint") — Keycloak exige ese dato
-              // para saber a que sesion de SSO cerrarle la cookie.
-              const session = await auth();
-              const idToken = session?.idToken;
-              await signOut({ redirect: false });
+    <div className="min-h-screen">
+      <input type="checkbox" id="nav-toggle" className="peer hidden" />
 
-              const issuer = process.env.AUTH_KEYCLOAK_ISSUER;
-              if (issuer && idToken) {
-                const logoutUrl = new URL(`${issuer}/protocol/openid-connect/logout`);
-                logoutUrl.searchParams.set('id_token_hint', idToken);
-                logoutUrl.searchParams.set(
-                  'post_logout_redirect_uri',
-                  process.env.AUTH_URL ?? 'http://localhost:3000',
-                );
-                redirect(logoutUrl.toString());
-              }
-              redirect('/');
-            }}
-          >
-            <button type="submit" className="text-zinc-500 underline">
-              Cerrar sesión
+      {/* Fondo oscuro detras del menu en mobile, mientras esta abierto —
+          hacer clic ahi (la propia label) tambien lo cierra. */}
+      <label
+        htmlFor="nav-toggle"
+        className="fixed inset-0 z-30 hidden bg-black/40 peer-checked:block lg:!hidden"
+      />
+
+      <aside
+        className="fixed inset-y-0 left-0 z-40 flex w-64 -translate-x-full flex-col border-r
+                   border-border bg-surface transition-transform duration-200
+                   peer-checked:translate-x-0 lg:translate-x-0"
+      >
+        <div className="flex items-center justify-between gap-2 border-b border-border px-5 py-4">
+          <Link href="/cursos">
+            <StokaWordmark markClassName="h-8 w-8" />
+          </Link>
+          <LocaleSwitcher locale={locale} path="/cursos" />
+        </div>
+
+        <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
+          <NavLink href="/cursos" icon={<CoursesIcon className="h-5 w-5" />}>
+            {t.nav.courses}
+          </NavLink>
+          {can(permissions, 'dashboard', 'view') && (
+            <NavLink href="/panel" icon={<DashboardIcon className="h-5 w-5" />}>
+              {t.nav.panel}
+            </NavLink>
+          )}
+          {can(permissions, 'term', 'view') && (
+            <NavLink href="/periodos" icon={<CalendarIcon className="h-5 w-5" />}>
+              {t.nav.terms}
+            </NavLink>
+          )}
+          <NavLink href="/notas" icon={<ChartIcon className="h-5 w-5" />}>
+            {t.nav.grades}
+          </NavLink>
+          {can(permissions, 'report', 'view') && (
+            <NavLink href="/reportes" icon={<ReportIcon className="h-5 w-5" />}>
+              {t.nav.reports}
+            </NavLink>
+          )}
+          {can(permissions, 'cohort', 'view') && (
+            <NavLink href="/cohortes" icon={<CohortIcon className="h-5 w-5" />}>
+              {t.nav.cohorts}
+            </NavLink>
+          )}
+          {/* "Mis matrículas"/"Mis certificados" son autoservicio para
+              alguien que ESTUDIA — se ocultan para roles de personal que
+              ya tienen "enrollment:view" o "enrollment:create" (ven la
+              misma información, de TODOS los alumnos, desde Cursos →
+              Sección): mostrárselos igual los confundía (¿"mis"
+              certificados de qué, si no estudian?), ver la nota extensa
+              en ../mis-certificados/page.tsx. */}
+          {!isStaff && (
+            <>
+              <NavLink href="/mis-matriculas" icon={<BookmarkIcon className="h-5 w-5" />}>
+                {t.nav.myEnrollments}
+              </NavLink>
+              <NavLink href="/mis-certificados" icon={<AwardIcon className="h-5 w-5" />}>
+                {t.nav.myCertificates}
+              </NavLink>
+            </>
+          )}
+          {can(permissions, 'certificate_template', 'view') && (
+            <NavLink href="/plantillas-certificado" icon={<FileIcon className="h-5 w-5" />}>
+              {t.nav.certificateTemplates}
+            </NavLink>
+          )}
+          {can(permissions, 'tenant', 'edit') && (
+            <NavLink href="/configuracion-marca" icon={<GearIcon className="h-5 w-5" />}>
+              {t.nav.branding}
+            </NavLink>
+          )}
+          {can(permissions, 'tenant', 'edit') && (
+            <NavLink href="/dominios" icon={<GlobeIcon className="h-5 w-5" />}>
+              {t.nav.domains}
+            </NavLink>
+          )}
+          {can(permissions, 'tenant', 'edit') && (
+            <NavLink href="/mantenimiento" icon={<WrenchIcon className="h-5 w-5" />}>
+              {t.nav.maintenance}
+            </NavLink>
+          )}
+          {can(permissions, 'tenant', 'edit') && (
+            <NavLink href="/automatizaciones" icon={<AutomationIcon className="h-5 w-5" />}>
+              {t.nav.automations}
+            </NavLink>
+          )}
+          {(can(permissions, 'tenant', 'edit') || can(permissions, 'audit', 'view')) && (
+            <NavLink href="/seguridad" icon={<ShieldIcon className="h-5 w-5" />}>
+              {t.nav.security}
+            </NavLink>
+          )}
+          {can(permissions, 'role', 'view') && (
+            <NavLink href="/usuarios" icon={<UsersIcon className="h-5 w-5" />}>
+              {t.nav.users}
+            </NavLink>
+          )}
+          <NavLink href="/perfil" icon={<UserCircleIcon className="h-5 w-5" />}>
+            {t.nav.profile}
+          </NavLink>
+        </nav>
+
+        <div className="border-t border-border p-3">
+          {me && (
+            <div className="mb-2 flex items-center gap-2 rounded-lg px-2 py-1.5">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
+                {me.fullName.charAt(0).toUpperCase()}
+              </div>
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium">{me.fullName}</p>
+                <p className="truncate text-xs text-muted">{me.email}</p>
+              </div>
+            </div>
+          )}
+          <form action={cerrarSesionCompleta}>
+            <button
+              type="submit"
+              className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-muted transition-colors hover:bg-danger-bg hover:text-danger"
+            >
+              <LogoutIcon className="h-5 w-5" />
+              {t.nav.logout}
             </button>
           </form>
         </div>
-      </header>
-      <main className="flex-1 p-6">{children}</main>
+      </aside>
+
+      <div className="lg:pl-64">
+        <header className="sticky top-0 z-20 flex items-center gap-3 border-b border-border bg-surface/90 px-4 py-3 backdrop-blur lg:hidden">
+          <label
+            htmlFor="nav-toggle"
+            className="flex h-9 w-9 items-center justify-center rounded-lg border border-border"
+            aria-label={t.nav.openMenu}
+          >
+            <MenuIcon className="h-5 w-5" />
+          </label>
+          <StokaMark className="h-6 w-6" />
+          <span className="text-sm font-semibold">Stoka LMS</span>
+          <span className="ml-auto">
+            <LocaleSwitcher locale={locale} path="/cursos" />
+          </span>
+        </header>
+
+        <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+          {/* Si llegamos hasta aca con maintenanceOn en true, es porque el
+             redirect de arriba YA descarto a cualquiera sin "tenant:edit"
+             — este aviso es solo un recordatorio para quien lo dejo
+             prendido. */}
+          {maintenanceOn && (
+            <div className="mb-6 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-warning-bg px-4 py-3 text-sm text-warning">
+              <span>⚠️ {t.maintenanceBanner.message}</span>
+              <Link href="/mantenimiento" className="font-medium underline">
+                {t.maintenanceBanner.disable}
+              </Link>
+            </div>
+          )}
+          {children}
+
+          {!tenantInfo?.branding?.hideStokaBranding && (
+            <StokaBrandingBadge label={t.footer.poweredBy} className="mt-10 border-t border-border pt-6" />
+          )}
+        </main>
+      </div>
+
+      <IdleSessionGuard
+        userLabel={me?.fullName ?? me?.email ?? t.nav.defaultUserLabel}
+        onReingresar={reingresarConContrasena.bind(null, me?.email)}
+        onCerrarSesion={cerrarSesionCompleta}
+        locale={locale}
+      />
     </div>
   );
 }

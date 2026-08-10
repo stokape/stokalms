@@ -39,6 +39,7 @@ export class CourseService {
           code: dto.code,
           title: dto.title,
           gradingScaleId: dto.gradingScaleId,
+          certificateTemplateId: dto.certificateTemplateId,
         },
       });
     });
@@ -79,6 +80,9 @@ export class CourseService {
           ...(dto.code !== undefined && { code: dto.code }),
           ...(dto.title !== undefined && { title: dto.title }),
           ...(dto.gradingScaleId !== undefined && { gradingScaleId: dto.gradingScaleId }),
+          ...(dto.certificateTemplateId !== undefined && {
+            certificateTemplateId: dto.certificateTemplateId,
+          }),
         },
       }),
     );

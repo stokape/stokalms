@@ -25,6 +25,10 @@ export class CreateCertificateTemplateDto {
   //   {{issueDate}}     -> fecha de emision (formato largo en español)
   //   {{verificationCode}} -> codigo de verificacion
   //   {{qrCode}}        -> <img> con el QR de verificacion, ya como data URI
+  //   {{institutionName}} -> nombre de la institucion (tenant activo)
+  //   {{institutionLogo}} -> <img> con el logo de la institucion (ver
+  //                          configuracion-marca), o vacio si todavia no
+  //                          cargo ninguno — nunca un icono de imagen rota
   @IsString()
   @IsNotEmpty()
   htmlTemplate: string;

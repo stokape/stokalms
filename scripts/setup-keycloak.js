@@ -1,9 +1,13 @@
 // ============================================================================
-// setup-keycloak.js — Configura Keycloak para desarrollo local, por codigo.
+// setup-keycloak.js — Configura Keycloak por codigo. Sirve TANTO para
+// desarrollo local (valores por defecto de abajo) COMO para produccion
+// (ver docs/deploy/produccion.md, que lo corre una vez pasandole las
+// variables de entorno reales) — la diferencia entre uno y otro caso es
+// pura configuracion via variables de entorno, nunca codigo distinto.
 //
 // POR QUE UN SCRIPT Y NO CONFIGURARLO A MANO EN LA CONSOLA WEB:
 // Keycloak (ver docker-compose.yml y docs/architecture/adr/ADR-003-auth-identity.md)
-// arranca "en blanco": solo trae el realm "master" para administrarlo a el
+// inicia "en blanco": solo trae el realm "master" para administrarlo a el
 // mismo, ningun realm ni cliente de la aplicacion. Configurarlo a mano en
 // http://localhost:8080/admin cada vez que alguien clona el repo (o cada vez
 // que se reinicia el contenedor sin el volumen persistido) seria un paso
@@ -36,11 +40,26 @@ const REALM_NAME = process.env.KEYCLOAK_REALM ?? 'stoka-dev';
 const CLIENT_ID = process.env.KEYCLOAK_CLIENT_ID ?? 'stoka-api';
 const WEB_CLIENT_ID = 'stoka-web';
 
+// Origen PUBLICO del frontend (a donde Keycloak redirige de vuelta despues
+// del login/logout, ver mas abajo "redirectUris"/"webOrigins") — en
+// desarrollo es siempre "http://localhost:3000"; en produccion, la URL real
+// del sitio (ver WEB_ORIGIN en docs/deploy/produccion.md), NUNCA localhost.
+const WEB_ORIGIN = process.env.WEB_ORIGIN ?? 'http://localhost:3000';
+
 // Credenciales del ADMINISTRADOR de Keycloak (no confundir con un usuario de
-// la aplicacion): son las mismas que arrancan el contenedor en
-// docker-compose.yml (KEYCLOAK_ADMIN / KEYCLOAK_ADMIN_PASSWORD).
-const ADMIN_USER = 'admin';
-const ADMIN_PASSWORD = 'admin_dev_password';
+// la aplicacion): en desarrollo son las mismas que inician el contenedor en
+// docker-compose.yml (KEYCLOAK_ADMIN / KEYCLOAK_ADMIN_PASSWORD); en
+// produccion vienen de KEYCLOAK_ADMIN_USER/KEYCLOAK_ADMIN_PASSWORD
+// (docker-compose.prod.yml, que a su vez inicia el contenedor con esas
+// mismas credenciales) — nunca hardcodeadas ahi.
+const ADMIN_USER = process.env.KEYCLOAK_ADMIN_USER ?? 'admin';
+const ADMIN_PASSWORD = process.env.KEYCLOAK_ADMIN_PASSWORD ?? 'admin_dev_password';
+
+// Las 7 cuentas de prueba de abajo (contraseñas publicadas en este mismo
+// archivo) son solo para desarrollo — jamas deben terminar en un Keycloak
+// real con instituciones reales. "docs/deploy/produccion.md" corre este
+// script con KEYCLOAK_SEED_TEST_USERS=false explicitamente.
+const SEED_TEST_USERS = process.env.KEYCLOAK_SEED_TEST_USERS !== 'false';
 
 // Usuarios de prueba que este script crea, para poder validar el login real
 // (ver apps/api/src/auth/) sin tener que registrar una cuenta. Hay UNO por
@@ -108,14 +127,23 @@ async function main() {
   const adminToken = await getAdminToken();
 
   await ensureRealm(adminToken);
+  await ensureBruteForceProtection(adminToken);
+  await ensureBranding(adminToken);
 
   const apiClientUuid = await ensureClient(adminToken, CLIENT_ID, {
     // El backend SI necesita "password grant" (ver mas abajo) para poder
     // probar el login por script/curl sin un navegador de por medio.
     directAccessGrantsEnabled: true,
-    redirectUris: ['http://localhost:3000/*'],
-    webOrigins: ['http://localhost:3000'],
+    redirectUris: [`${WEB_ORIGIN}/*`],
+    webOrigins: [WEB_ORIGIN],
   });
+  // Le da a "stoka-api" su propia identidad de "cuenta de servicio" (no la
+  // de ninguna persona) con permiso SOLO para crear/editar usuarios del
+  // realm — lo que apps/api/src/auth/keycloak-admin.service.ts usa para
+  // crear la cuenta de Keycloak de cada institucion nueva al aprobarla
+  // (ver tenant-registration.service.ts), sin exponer nunca la contraseña
+  // del admin real de Keycloak dentro del backend.
+  await ensureAdminServiceAccount(adminToken, apiClientUuid);
   const apiClientSecret = await getClientSecret(adminToken, apiClientUuid);
 
   const webClientUuid = await ensureClient(adminToken, WEB_CLIENT_ID, {
@@ -127,15 +155,15 @@ async function main() {
     // Esta es la URL exacta a la que Keycloak redirige de vuelta despues
     // del login; "callback/keycloak" es la convencion que usa NextAuth.js
     // para el proveedor configurado como "keycloak".
-    redirectUris: ['http://localhost:3000/api/auth/callback/keycloak'],
-    webOrigins: ['http://localhost:3000'],
+    redirectUris: [`${WEB_ORIGIN}/api/auth/callback/keycloak`],
+    webOrigins: [WEB_ORIGIN],
     // Desde Keycloak 18, el logout "RP-initiated" (redirigir al
     // "end_session_endpoint" para cerrar TAMBIEN la sesion de SSO, no solo
     // la cookie de NextAuth — ver app/(app)/layout.tsx, boton "Cerrar
     // sesion") exige que el "post_logout_redirect_uri" este en esta lista
     // aparte de "redirectUris" de arriba; si no coincide, Keycloak devuelve
     // un error en vez de redirigir de vuelta a la aplicacion.
-    attributes: { 'post.logout.redirect.uris': 'http://localhost:3000/*' },
+    attributes: { 'post.logout.redirect.uris': `${WEB_ORIGIN}/*` },
   });
   // "ensureClient" solo CREA si no existia — si alguien corre este script
   // sobre un Keycloak que ya tenia el cliente "stoka-web" de ANTES de que
@@ -143,12 +171,16 @@ async function main() {
   // aplicaria. Este paso lo actualiza de todas formas, siempre, sin
   // importar si el cliente era nuevo o ya existia (PUT es idempotente).
   await ensureClientAttributes(adminToken, webClientUuid, {
-    'post.logout.redirect.uris': 'http://localhost:3000/*',
+    'post.logout.redirect.uris': `${WEB_ORIGIN}/*`,
   });
   const webClientSecret = await getClientSecret(adminToken, webClientUuid);
 
-  for (const testUser of TEST_USERS) {
-    await ensureTestUser(adminToken, testUser);
+  if (SEED_TEST_USERS) {
+    for (const testUser of TEST_USERS) {
+      await ensureTestUser(adminToken, testUser);
+    }
+  } else {
+    console.log('[keycloak-setup] KEYCLOAK_SEED_TEST_USERS=false: se omiten las cuentas de prueba.');
   }
 
   console.log('\n[keycloak-setup] Listo. Resumen:');
@@ -157,8 +189,10 @@ async function main() {
   console.log(`  Secreto backend:     ${apiClientSecret}`);
   console.log(`  Cliente frontend:    ${WEB_CLIENT_ID}`);
   console.log(`  Secreto frontend:    ${webClientSecret}`);
-  for (const testUser of TEST_USERS) {
-    console.log(`  Usuario de prueba:   ${testUser.username} / ${testUser.password}`);
+  if (SEED_TEST_USERS) {
+    for (const testUser of TEST_USERS) {
+      console.log(`  Usuario de prueba:   ${testUser.username} / ${testUser.password}`);
+    }
   }
   console.log(
     '\n  Copia "Secreto backend" en KEYCLOAK_CLIENT_SECRET dentro de .env y apps/api/.env.',
@@ -229,10 +263,19 @@ async function ensureRealm(adminToken) {
     body: JSON.stringify({
       realm: REALM_NAME,
       enabled: true,
-      // "sslRequired: none" es SOLO para desarrollo local sobre http://.
-      // En produccion cada tenant corre bajo https, esto se revierte.
-      sslRequired: 'none',
+      // "none" en desarrollo local (todo corre sobre http://localhost); en
+      // produccion, "external" exige HTTPS para cualquier request que NO
+      // venga de la propia red interna (Caddy YA sirve todo bajo TLS
+      // ahi, ver Caddyfile, asi que esto nunca deberia rechazar trafico
+      // real, solo endurece contra alguien pegandole directo por HTTP).
+      sslRequired: WEB_ORIGIN.startsWith('https://') ? 'external' : 'none',
       registrationAllowed: false,
+      // Tema propio con el enlace "Volver" y los colores de marca en las
+      // pantallas de login (ver keycloak-themes/stoka/) y el nombre que
+      // Keycloak muestra en vez de "stoka-dev" — "ensureBranding" de mas
+      // abajo vuelve a fijar ambos igual en un realm que ya existia de antes.
+      loginTheme: 'stoka',
+      displayName: 'Stoka LMS',
     }),
   });
 
@@ -240,6 +283,88 @@ async function ensureRealm(adminToken) {
     throw new Error(`No se pudo crear el realm "${REALM_NAME}" (HTTP ${create.status}).`);
   }
   console.log(`[keycloak-setup] Realm "${REALM_NAME}" creado.`);
+}
+
+// ----------------------------------------------------------------------------
+// Fija "loginTheme: stoka" y "displayName: Stoka LMS" (ver
+// keycloak-themes/stoka/) SIEMPRE, no solo la primera vez que se crea el
+// realm — mismo motivo/patron que ensureBruteForceProtection: un realm
+// creado ANTES de que esto existiera nunca lo tendria si esto solo
+// corriera dentro de "ensureRealm". "displayName" es lo que Keycloak
+// muestra en el encabezado y en el <title> de la pestaña del navegador en
+// vez del nombre tecnico del realm ("stoka-dev") — un ajuste de realm
+// estandar de Keycloak, no algo propio de este tema.
+// ----------------------------------------------------------------------------
+async function ensureBranding(adminToken) {
+  const get = await fetch(`${KEYCLOAK_BASE_URL}/admin/realms/${REALM_NAME}`, {
+    headers: adminHeaders(adminToken),
+  });
+  const realm = await get.json();
+
+  const update = await fetch(`${KEYCLOAK_BASE_URL}/admin/realms/${REALM_NAME}`, {
+    method: 'PUT',
+    headers: adminHeaders(adminToken),
+    body: JSON.stringify({ ...realm, loginTheme: 'stoka', displayName: 'Stoka LMS' }),
+  });
+
+  if (!update.ok) {
+    throw new Error(`No se pudo activar la marca "Stoka LMS" en el realm (HTTP ${update.status}).`);
+  }
+  console.log('[keycloak-setup] Tema de login "stoka" y nombre "Stoka LMS" activados.');
+}
+
+// ----------------------------------------------------------------------------
+// Activa "Brute Force Detection" del realm: el equivalente REAL a "limitar
+// login a 5 peticiones por minuto por IP" que pide una auditoria de
+// seguridad tipica — pero aca no aplica como rate limit del backend porque
+// este proyecto NO TIENE un endpoint propio de login (ver
+// docs/architecture/adr/ADR-003-auth-identity.md): el formulario de
+// usuario/contraseña lo sirve y procesa Keycloak, no NestJS ni Next.js. Por
+// eso la proteccion contra fuerza bruta va CONFIGURADA EN KEYCLOAK, no en
+// codigo de la aplicacion.
+//
+// A diferencia de "ensureRealm" (que solo actua la PRIMERA vez que el realm
+// se crea), esto corre siempre: si alguien ya tiene el realm de antes sin
+// esta proteccion, un "npm run keycloak:setup" la agrega igual — mismo
+// patron de "leer todo, mezclar, mandar todo de vuelta" que
+// ensureClientAttributes (Keycloak tampoco tiene un PATCH parcial de realm).
+// ----------------------------------------------------------------------------
+async function ensureBruteForceProtection(adminToken) {
+  const get = await fetch(`${KEYCLOAK_BASE_URL}/admin/realms/${REALM_NAME}`, {
+    headers: adminHeaders(adminToken),
+  });
+  const realm = await get.json();
+
+  const update = await fetch(`${KEYCLOAK_BASE_URL}/admin/realms/${REALM_NAME}`, {
+    method: 'PUT',
+    headers: adminHeaders(adminToken),
+    body: JSON.stringify({
+      ...realm,
+      bruteForceProtected: true,
+      // 5 intentos fallidos SEGUIDOS (no una ventana de tiempo fija, asi
+      // funciona Keycloak) — el numero que pidio la auditoria de seguridad
+      // para "login".
+      failureFactor: 5,
+      // Bloqueo TEMPORAL (no permanente): tras 5 fallos, esa cuenta queda
+      // sin poder intentar de nuevo por 60s, duplicandose en cada fallo
+      // posterior hasta el techo de "maxFailureWaitSeconds" — evita que un
+      // atacante siga probando en rafaga sin dejar a la persona real
+      // bloqueada para siempre por un ataque ajeno.
+      permanentLockout: false,
+      waitIncrementSeconds: 60,
+      maxFailureWaitSeconds: 900,
+      quickLoginCheckMilliSeconds: 1000,
+      minimumQuickLoginWaitSeconds: 60,
+      maxDeltaTimeSeconds: 43200,
+    }),
+  });
+
+  if (!update.ok) {
+    throw new Error(
+      `No se pudo activar "brute force detection" en el realm (HTTP ${update.status}).`,
+    );
+  }
+  console.log('[keycloak-setup] Deteccion de fuerza bruta activada (5 intentos / bloqueo temporal).');
 }
 
 // ----------------------------------------------------------------------------
@@ -290,6 +415,107 @@ async function ensureClient(adminToken, clientId, options) {
   const [created] = await recheck.json();
   console.log(`[keycloak-setup] Cliente "${clientId}" creado.`);
   return created.id;
+}
+
+// Roles del cliente interno "realm-management" que se le dan al service
+// account de "stoka-api" — ver keycloak-admin.service.ts, quien los usa:
+//   - "manage-users": crear la cuenta de cada institucion nueva al
+//     aprobarla.
+//   - "manage-clients": registrarle a "stoka-web" el redirect_uri de esa
+//     misma institucion (su propio subdominio) — SIN esto, esa cuenta
+//     recien creada no podia iniciar sesion nunca (Keycloak rechaza
+//     cualquier redirect_uri que no este en la lista EXACTA del cliente,
+//     sin comodines en la parte del subdominio — ver la nota extensa en
+//     tenant-registration.service.ts). Es un salto de privilegio real
+//     (puede reconfigurar CUALQUIER cliente del realm, no solo agregar un
+//     redirect_uri) — se decidio asumirlo a proposito, avisado, en vez de
+//     seguir agregando cada institucion nueva a mano.
+const SERVICE_ACCOUNT_ROLES = ['manage-users', 'manage-clients'];
+
+// ----------------------------------------------------------------------------
+// Le da a "stoka-api" una identidad DE SERVICIO (no de ninguna persona), con
+// los roles de arriba — lo minimo que necesita
+// apps/api/src/auth/keycloak-admin.service.ts para aprovisionar una
+// institucion nueva de punta a punta (cuenta + login funcionando), sin
+// tener que guardar en ningun lado la contraseña del admin real de
+// Keycloak. Corre siempre (mismo patron que
+// ensureBranding/ensureBruteForceProtection): un "stoka-api" creado ANTES
+// de que esto existiera nunca lo tendria si esto solo corriera dentro de
+// "ensureClient".
+// ----------------------------------------------------------------------------
+async function ensureAdminServiceAccount(adminToken, apiClientUuid) {
+  const getClient = await fetch(
+    `${KEYCLOAK_BASE_URL}/admin/realms/${REALM_NAME}/clients/${apiClientUuid}`,
+    { headers: adminHeaders(adminToken) },
+  );
+  const client = await getClient.json();
+
+  if (!client.serviceAccountsEnabled) {
+    const update = await fetch(
+      `${KEYCLOAK_BASE_URL}/admin/realms/${REALM_NAME}/clients/${apiClientUuid}`,
+      {
+        method: 'PUT',
+        headers: adminHeaders(adminToken),
+        body: JSON.stringify({ ...client, serviceAccountsEnabled: true }),
+      },
+    );
+    if (!update.ok) {
+      throw new Error(
+        `No se pudo activar el service account de "stoka-api" (HTTP ${update.status}).`,
+      );
+    }
+  }
+
+  // El usuario "de sistema" que Keycloak crea para ese service account
+  // (service-account-stoka-api) — el rol se le asigna a EL, no al cliente.
+  const svcUserResp = await fetch(
+    `${KEYCLOAK_BASE_URL}/admin/realms/${REALM_NAME}/clients/${apiClientUuid}/service-account-user`,
+    { headers: adminHeaders(adminToken) },
+  );
+  if (!svcUserResp.ok) {
+    throw new Error(
+      `No se pudo obtener el usuario de servicio de "stoka-api" (HTTP ${svcUserResp.status}).`,
+    );
+  }
+  const svcUser = await svcUserResp.json();
+
+  const realmMgmtResp = await fetch(
+    `${KEYCLOAK_BASE_URL}/admin/realms/${REALM_NAME}/clients?clientId=realm-management`,
+    { headers: adminHeaders(adminToken) },
+  );
+  const [realmMgmtClient] = await realmMgmtResp.json();
+
+  const rolesToAssign = [];
+  for (const roleName of SERVICE_ACCOUNT_ROLES) {
+    const roleResp = await fetch(
+      `${KEYCLOAK_BASE_URL}/admin/realms/${REALM_NAME}/clients/${realmMgmtClient.id}/roles/${roleName}`,
+      { headers: adminHeaders(adminToken) },
+    );
+    if (!roleResp.ok) {
+      throw new Error(`No se encontro el rol "${roleName}" (HTTP ${roleResp.status}).`);
+    }
+    rolesToAssign.push(await roleResp.json());
+  }
+
+  // Asignar un rol que la cuenta YA tiene no es un error en Keycloak (el
+  // POST es idempotente) — no hace falta comprobar antes si ya lo tenia.
+  const assign = await fetch(
+    `${KEYCLOAK_BASE_URL}/admin/realms/${REALM_NAME}/users/${svcUser.id}/role-mappings/clients/${realmMgmtClient.id}`,
+    {
+      method: 'POST',
+      headers: adminHeaders(adminToken),
+      body: JSON.stringify(rolesToAssign),
+    },
+  );
+  if (!assign.ok) {
+    throw new Error(
+      `No se pudieron asignar los roles [${SERVICE_ACCOUNT_ROLES.join(', ')}] al service account de "stoka-api" (HTTP ${assign.status}).`,
+    );
+  }
+
+  console.log(
+    `[keycloak-setup] Service account de "stoka-api" listo (${SERVICE_ACCOUNT_ROLES.join(', ')} via Admin API).`,
+  );
 }
 
 // ----------------------------------------------------------------------------

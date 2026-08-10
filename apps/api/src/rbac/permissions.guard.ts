@@ -39,10 +39,18 @@ export class PermissionsGuard implements CanActivate {
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const required = this.reflector.get<RequiredPermission>(
-      PERMISSION_KEY,
+    // "getAllAndOverride" mira primero el metodo y, si ahi no hay nada,
+    // recien despues la clase — asi un @RequirePermission puesto por error
+    // a nivel de controller (en vez de repetido en cada metodo, que es el
+    // patron que usa el resto del backend) sigue exigiendose en vez de
+    // dejarse pasar en silencio. Se agrego esta capa despues de encontrar
+    // justamente ese error en tenant-domain.controller.ts durante pruebas
+    // manuales: @RequirePermission a nivel de clase con el "get" simple de
+    // antes NUNCA se leia, dejando pasar a cualquier rol autenticado.
+    const required = this.reflector.getAllAndOverride<RequiredPermission>(PERMISSION_KEY, [
       context.getHandler(),
-    );
+      context.getClass(),
+    ]);
 
     // Si la ruta no declaro @RequirePermission(...), este guard no tiene
     // nada que comprobar: se deja pasar (el control de acceso de esa ruta

@@ -10,6 +10,7 @@
 // ============================================================================
 
 import { apiFetchPublic, ApiError } from '@/lib/api';
+import { StokaBrandingBadge } from '@/components/StokaBrandingBadge';
 
 interface VerifyResult {
   valid: boolean;
@@ -18,6 +19,7 @@ interface VerifyResult {
   courseTitle: string;
   institution: string;
   issuedAt: string;
+  hideStokaBranding: boolean;
 }
 
 export default async function VerifyPage({ params }: { params: Promise<{ code: string }> }) {
@@ -77,6 +79,15 @@ export default async function VerifyPage({ params }: { params: Promise<{ code: s
             </dl>
           </div>
         )
+      )}
+
+      {/* Esta pagina la ve alguien AJENO a la institucion (quien escaneo el
+         QR) — es el lugar de mas visibilidad fuera de la propia
+         institucion para el sello, por eso se respeta el mismo toggle que
+         /configuracion-marca aunque el resto de esta pantalla no tenga
+         nada mas "de marca". */}
+      {result && !result.hideStokaBranding && (
+        <StokaBrandingBadge label="Verificado con Stoka LMS" />
       )}
     </div>
   );

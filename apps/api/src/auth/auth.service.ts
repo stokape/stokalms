@@ -14,25 +14,38 @@
 //      (ver 02-modelo-de-datos.md) no quede duplicada.
 //   2) Su fila en "UserTenant" (membresia en ESTE tenant), si no existia.
 //
-// Lo que este servicio NO hace: asignar un ROL automaticamente. Una
-// membresia recien creada queda SIN ningun rol — el permiso de "que puede
-// hacer" esta persona en el tenant lo asigna despues un Administrador de
-// entidad desde el panel (ver docs/architecture/03-rbac.md, seccion 3.3).
-// Auto-asignar un rol por defecto seria un riesgo de seguridad: cualquiera
-// que logre iniciar sesion terminaria con permisos sin que nadie los haya
-// autorizado explicitamente para ESTE tenant.
+// Lo que este servicio NO hace, PARA CUALQUIER OTRA PERSONA: asignar un
+// ROL automaticamente. Una membresia recien creada queda SIN ningun rol —
+// el permiso de "que puede hacer" esta persona en el tenant lo asigna
+// despues un Administrador de entidad desde el panel (ver
+// docs/architecture/03-rbac.md, seccion 3.3). Auto-asignar un rol por
+// defecto seria un riesgo de seguridad: cualquiera que logre iniciar
+// sesion terminaria con permisos sin que nadie los haya autorizado
+// explicitamente para ESTE tenant.
+//
+// LA UNICA EXCEPCION: el equipo de PLATAFORMA (PLATFORM_ADMIN_EMAILS, ver
+// configuration.ts) — ver "ensureSuperAdminForPlatformAdmins" mas abajo.
+// Esas cuentas ya pueden crear/aprobar instituciones y administrar TODA la
+// plataforma desde /admin-plataforma; que despues, al entrar a un tenant
+// especifico (el suyo propio o el de un tercero, ej. para soporte), se
+// encuentren SIN ningun permiso ahi adentro era una inconsistencia real:
+// el super usuario terminaba con menos acceso dentro de un tenant que
+// cualquier Administrador de entidad normal de ESE tenant.
 //
 // Relacion con el resto del proyecto:
 // - Lo invoca jwt.strategy.ts en cada request autenticado.
 // - Usa TenantContextService (ver src/common/tenant/) para saber A QUE
 //   tenant esta iniciando sesion esta persona (resuelto por subdominio).
 // - Usa PrismaService.withTenant(...) para que la creacion de UserTenant
-//   quede sujeta a Row-Level Security igual que cualquier otra escritura.
+//   (y, para el equipo de plataforma, tambien la de UserRole) quede
+//   sujeta a Row-Level Security igual que cualquier otra escritura.
 // ============================================================================
 
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { TenantContextService } from '../common/tenant/tenant-context.service';
+import { CasbinService } from '../rbac/casbin.service';
 import { KeycloakJwtPayload } from './jwt.strategy';
 
 // Forma del objeto que termina en "req.user" para el resto de la aplicacion
@@ -49,9 +62,13 @@ export interface AuthenticatedUser {
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly tenantContext: TenantContextService,
+    private readonly configService: ConfigService,
+    private readonly casbin: CasbinService,
   ) {}
 
   async findOrProvisionUser(payload: KeycloakJwtPayload): Promise<AuthenticatedUser> {
@@ -127,6 +144,8 @@ export class AuthService {
       });
     });
 
+    await this.ensureSuperAdminForPlatformAdmins(email, tenantId, userTenant.id);
+
     return {
       userId: user.id,
       userTenantId: userTenant.id,
@@ -134,5 +153,75 @@ export class AuthService {
       email: user.email,
       fullName: user.fullName,
     };
+  }
+
+  // ---------------------------------------------------------------------
+  // Si quien inicia sesion es del equipo de PLATAFORMA
+  // (PLATFORM_ADMIN_EMAILS), le asegura el rol "Super Admin" (uno de los
+  // roles del sistema sembrados por prisma/seed.js, ALL_PERMISSIONS —
+  // igual de completo que "Administrador de entidad") EN ESTE TENANT, sin
+  // importar si es el suyo propio o el de un tercero. Se corre en CADA
+  // login (no solo al crear la membresia) para autocurar el caso de una
+  // cuenta que ya tenia UserTenant de antes pero sin rol — por eso el
+  // primer chequeo es barato (una consulta que casi siempre encuentra la
+  // asignacion ya hecha y corta ahi, ver "alreadyAssigned" mas abajo).
+  //
+  // Por que ADITIVO, nunca destructivo: si el tenant YA le habia asignado
+  // otro rol a esta persona (ej. la invito como Docente antes de que
+  // pasara a integrar el equipo de plataforma), esta funcion NUNCA se lo
+  // quita — solo agrega Super Admin ENCIMA. Un UserTenant puede tener mas
+  // de un UserRole (ver schema.prisma, UserRole no tiene un unique sobre
+  // userTenantId solo) — el mismo patron que ya permite que alguien sea
+  // Docente de un curso Y Estudiante de otro a la vez.
+  // ---------------------------------------------------------------------
+  private async ensureSuperAdminForPlatformAdmins(
+    email: string,
+    tenantId: string,
+    userTenantId: string,
+  ): Promise<void> {
+    const platformAdminEmails = this.configService.get<string[]>('platformAdminEmails') ?? [];
+    if (!platformAdminEmails.includes(email.toLowerCase())) {
+      return;
+    }
+
+    // "roles" tampoco tiene Row-Level Security (catalogo compartido, ver
+    // rls-policies.sql) — se puede leer con el cliente normal.
+    const superAdminRole = await this.prisma.role.findFirst({
+      where: { name: 'Super Admin', isSystemRole: true, tenantId: null },
+    });
+    if (!superAdminRole) {
+      // No deberia pasar (prisma/seed.js siempre lo siembra), pero un
+      // seed corrido a medias en un entorno nuevo no debe romper el login
+      // de nadie — se sigue de largo sin este "extra".
+      this.logger.warn(
+        'No se encontro el rol de sistema "Super Admin" — no se pudo elevar el acceso del equipo de plataforma en este tenant. Corre "npm run prisma:seed".',
+      );
+      return;
+    }
+
+    const alreadyAssigned = await this.prisma.withTenant(tenantId, (tx) =>
+      tx.userRole.findFirst({
+        where: { userTenantId, roleId: superAdminRole.id, scopeCourseId: null },
+      }),
+    );
+    if (alreadyAssigned) {
+      return;
+    }
+
+    await this.prisma.withTenant(tenantId, (tx) =>
+      tx.userRole.create({
+        data: { tenantId, userTenantId, roleId: superAdminRole.id },
+      }),
+    );
+
+    // Sin esto, el acceso recien otorgado no regiria hasta que alguien
+    // reinicie el backend (ver la nota sobre "reload()" en
+    // casbin.service.ts) — mismo criterio que tenant-registration.service.ts
+    // al asignarle su rol a un Administrador de entidad recien creado.
+    await this.casbin.reload();
+
+    this.logger.log(
+      `Acceso de "Super Admin" asegurado para "${email}" (equipo de plataforma) en el tenant "${tenantId}".`,
+    );
   }
 }

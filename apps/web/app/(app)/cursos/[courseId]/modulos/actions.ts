@@ -22,6 +22,24 @@ export async function crearModulo(courseId: string, formData: FormData) {
   redirect(path);
 }
 
+export async function actualizarModulo(courseId: string, moduleId: string, formData: FormData) {
+  const token = await requireAccessToken();
+  const path = `/cursos/${courseId}/modulos`;
+  const title = String(formData.get('title') ?? '').trim();
+
+  try {
+    await apiFetch(token, `/courses/${courseId}/modules/${moduleId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ title }),
+    });
+  } catch (err) {
+    redirect(`${path}?error=${encodeURIComponent(toErrorMessage(err))}`);
+  }
+
+  revalidatePath(path);
+  redirect(path);
+}
+
 export async function eliminarModulo(courseId: string, moduleId: string) {
   const token = await requireAccessToken();
   const path = `/cursos/${courseId}/modulos`;

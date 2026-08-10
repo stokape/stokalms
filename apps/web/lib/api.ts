@@ -57,7 +57,11 @@ export class ApiError extends Error {
 // la redireccion).
 export async function requireAccessToken(): Promise<string> {
   const session = await auth();
-  if (!session?.accessToken) {
+  // "session.error" viene de auth.ts (refreshAccessToken): el refresh_token
+  // ya no sirvio, asi que el accessToken que quedo en la sesion es viejo a
+  // proposito — usarlo solo produciria un 401 confuso ("Unauthorized") en
+  // vez de mandar derecho a iniciar sesion de nuevo.
+  if (!session?.accessToken || session.error) {
     redirect('/');
   }
   return session.accessToken;

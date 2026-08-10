@@ -3,7 +3,7 @@
 // cliente generado por Prisma a partir de apps/api/prisma/schema.prisma.
 //
 // Esta clase hace DOS trabajos distintos:
-//   1) Ciclo de vida: abre la conexion a la base de datos cuando arranca la
+//   1) Ciclo de vida: abre la conexion a la base de datos cuando inicia la
 //      aplicacion (onModuleInit) y la cierra ordenadamente al apagarla
 //      (onModuleDestroy) — evita conexiones "colgadas".
 //   2) Aislamiento multi-tenant: expone "withTenant(...)", el UNICO camino
@@ -34,7 +34,10 @@ import { PrismaClient } from '@prisma/client';
 // Tipo del "cliente transaccional" que Prisma pasa dentro de un
 // "$transaction(async (tx) => {...})". Tiene los mismos metodos que
 // PrismaClient (ej. tx.course.findMany(...)) pero atado a esa transaccion.
-type PrismaTransactionClient = Omit<
+// Exportado (no solo local): algun servicio que recibe este "tx" ya
+// abierto por OTRO metodo (ver automations.service.ts, "findStaffToNotify")
+// necesita poder tipar ese parametro sin repetir esta misma definicion.
+export type PrismaTransactionClient = Omit<
   PrismaClient,
   '$connect' | '$disconnect' | '$on' | '$transaction' | '$extends' | '$use'
 >;

@@ -36,5 +36,9 @@ import { GradebookService } from './gradebook.service';
     SubmissionService,
     GradebookService,
   ],
+  // GradebookService se reusa desde academic-progress.module.ts (nota
+  // parcial de un alumno, ver la nota en gradebook.service.ts sobre
+  // "computeCourseGrades").
+  exports: [GradebookService],
 })
 export class GradebookModule {}

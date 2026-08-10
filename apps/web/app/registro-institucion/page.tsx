@@ -4,37 +4,68 @@
 // apps/api/src/modules/tenant-registration/), no un tenant directo: queda
 // pendiente de que un administrador de plataforma la revise (ver
 // admin-plataforma/solicitudes/page.tsx) — no es autoservicio instantaneo.
+//
+// Los campos viven en RegistrationForm.tsx (Client Component): el
+// subdominio se autosugiere a partir del nombre a medida que se escribe,
+// algo que este Server Component no puede hacer por si solo.
+//
+// "?plan=..." (ver app/precios/actions.ts): cuando se llega desde el CTA
+// de un plan en /precios, cambia el subtitulo y precarga el mensaje — el
+// resto del formulario (y el endpoint al que se manda) es EXACTAMENTE el
+// mismo. Para el plan Enterprise en particular, este formulario ES el
+// "contactar con ventas" (Stoka LMS todavia no tiene otro canal de
+// contacto comercial — ver la nota extensa en lib/pricing.ts).
 // ============================================================================
 
 import Link from 'next/link';
+import { headers } from 'next/headers';
 import { ErrorBanner } from '@/components/ErrorBanner';
+import { LocaleSwitcher } from '@/components/LocaleSwitcher';
+import { StokaWordmark } from '@/components/StokaLogo';
+import { getLocale } from '@/lib/locale';
+import { getRegistroInstitucionDictionary } from '../dictionaries/registro-institucion';
 import { crearSolicitud } from './actions';
+import { RegistrationForm } from './RegistrationForm';
 
 export default async function RegistroInstitucionPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; enviado?: string }>;
+  searchParams: Promise<{ error?: string; enviado?: string; plan?: string }>;
 }) {
-  const { error, enviado } = await searchParams;
+  const [{ error, enviado, plan }, locale, hostHeader] = await Promise.all([
+    searchParams,
+    getLocale(),
+    headers().then((h) => h.get('host') ?? ''),
+  ]);
+  const t = getRegistroInstitucionDictionary(locale);
+  const isEnterprise = plan === 'enterprise';
+  // El dominio real que va a recibir el subdominio elegido (ver
+  // PLATFORM_ROOT_DOMAIN, tenant-registration.service.ts "buildDomain") —
+  // antes decia ".stokalms.com" fijo en el texto, aunque este mismo
+  // servidor estuviera corriendo bajo "localhost" (desarrollo) o cualquier
+  // otro dominio real -- confuso, porque el dominio final de la institucion
+  // terminaba siendo OTRO distinto al que el formulario le mostraba a quien
+  // se estaba inscribiendo.
+  const [rootHostname] = hostHeader.split(':');
 
   return (
     <div className="mx-auto flex min-h-screen max-w-lg flex-col justify-center px-6 py-12">
-      <Link href="/" className="mb-6 text-sm text-zinc-500 hover:underline">
-        &larr; Volver al inicio
+      <Link href="/" className="mb-8 flex justify-center">
+        <StokaWordmark markClassName="h-10 w-10" />
       </Link>
-      <h1 className="mb-2 text-2xl font-semibold">Inscribí tu institución</h1>
-      <p className="mb-6 text-sm text-zinc-500">
-        Completá este formulario y un administrador de la plataforma va a revisar tu solicitud.
-        Te vamos a contactar al email que dejes acá con la respuesta.
-      </p>
+      <div className="mb-6 flex items-center justify-between">
+        <Link href="/" className="text-sm text-muted hover:underline">
+          &larr; {t.back}
+        </Link>
+        <LocaleSwitcher locale={locale} path="/registro-institucion" />
+      </div>
+      <h1 className="mb-2 text-2xl font-semibold tracking-tight">{t.title}</h1>
+      <p className="mb-6 text-sm text-muted">{isEnterprise ? t.enterpriseIntro : t.subtitle}</p>
 
       {enviado && (
-        <div className="mb-6 rounded-lg bg-green-50 px-4 py-4 text-sm text-green-800 dark:bg-green-950 dark:text-green-300">
-          <p className="font-medium">¡Listo! Recibimos tu solicitud.</p>
-          <p className="mt-1">
-            Te vamos a escribir al email que dejaste apenas la revisemos. Mientras tanto, no hace
-            falta que hagas nada más.
-          </p>
+        <div className="mb-6 rounded-xl border border-success/20 bg-success-bg px-4 py-4 text-sm text-success">
+          <p className="font-medium">{t.successTitle}</p>
+          <p className="mt-1">{t.successBody}</p>
         </div>
       )}
 
@@ -45,74 +76,12 @@ export default async function RegistroInstitucionPage({
       )}
 
       {!enviado && (
-        <form action={crearSolicitud} className="flex flex-col gap-4">
-          <label className="flex flex-col gap-1 text-sm">
-            Nombre de la institución
-            <input
-              name="institutionName"
-              type="text"
-              required
-              placeholder="Ej. Instituto San Martín"
-              className="rounded border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
-            />
-          </label>
-
-          <label className="flex flex-col gap-1 text-sm">
-            Subdominio que querés usar
-            <div className="flex items-center gap-2">
-              <input
-                name="desiredSubdomain"
-                type="text"
-                required
-                pattern="[a-z0-9][a-z0-9-]{1,38}[a-z0-9]"
-                placeholder="instituto-sanmartin"
-                className="flex-1 rounded border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
-              />
-              <span className="text-zinc-500">.stokalms.com</span>
-            </div>
-            <span className="text-xs text-zinc-500">
-              Solo minúsculas, números y guiones (ej. &quot;instituto-sanmartin&quot;).
-            </span>
-          </label>
-
-          <label className="flex flex-col gap-1 text-sm">
-            Tu nombre
-            <input
-              name="contactName"
-              type="text"
-              required
-              placeholder="Quien va a ser el administrador de la institución"
-              className="rounded border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
-            />
-          </label>
-
-          <label className="flex flex-col gap-1 text-sm">
-            Tu email
-            <input
-              name="contactEmail"
-              type="email"
-              required
-              className="rounded border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
-            />
-          </label>
-
-          <label className="flex flex-col gap-1 text-sm">
-            Contanos un poco más (opcional)
-            <textarea
-              name="message"
-              rows={3}
-              placeholder="Ej. cuántos estudiantes tienen, qué cursos dictan..."
-              className="rounded border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
-            />
-          </label>
-
-          <button
-            type="submit"
-            className="mt-2 rounded-full bg-foreground px-6 py-3 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc]"
-          >
-            Enviar solicitud
-          </button>
-        </form>
+        <RegistrationForm
+          action={crearSolicitud}
+          t={t}
+          rootHostname={rootHostname}
+          messagePrefill={isEnterprise ? t.enterpriseMessagePrefill : undefined}
+        />
       )}
     </div>
   );

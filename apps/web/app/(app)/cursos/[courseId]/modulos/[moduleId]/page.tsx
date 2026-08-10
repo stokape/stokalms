@@ -10,7 +10,9 @@
 import Link from 'next/link';
 import { requireAccessToken, apiFetch, toErrorMessage, getCoursePermissions, can } from '@/lib/api';
 import { ErrorBanner } from '@/components/ErrorBanner';
-import { crearLeccion, eliminarLeccion } from './actions';
+import { Button } from '@/components/ui/Button';
+import { getLocale, type Locale } from '@/lib/locale';
+import { crearLeccion, actualizarModulo, actualizarLeccionTitulo, eliminarLeccion } from './actions';
 
 interface CourseModule {
   id: string;
@@ -30,11 +32,44 @@ interface Assessment {
   config: { title?: string };
 }
 
-const ASSESSMENT_TYPE_LABELS: Record<string, string> = {
-  exam: 'Examen',
-  assignment: 'Tarea',
-  forum: 'Foro',
-  rubric: 'Rúbrica',
+const ASSESSMENT_TYPE_LABELS_BY_LOCALE: Record<Locale, Record<string, string>> = {
+  es: { exam: 'Examen', assignment: 'Tarea', forum: 'Foro', rubric: 'Rúbrica' },
+  en: { exam: 'Exam', assignment: 'Assignment', forum: 'Forum', rubric: 'Rubric' },
+};
+
+const TEXT = {
+  es: {
+    backToContent: '← Contenido del curso',
+    renameModule: 'Renombrar módulo',
+    lessons: 'Lecciones',
+    noLessons: 'Este módulo todavía no tiene ninguna lección.',
+    save: 'Guardar',
+    delete: 'Eliminar',
+    createLesson: 'Crear una lección nueva',
+    lessonPlaceholder: 'Ej. "Lección 1 - Introducción"',
+    contentPlaceholder: 'Texto de la lección (opcional, se puede completar después). Los archivos y enlaces se agregan aparte, una vez creada la lección.',
+    createLessonSubmit: 'Crear lección',
+    assessmentsHeading: 'Tareas y evaluaciones de este módulo',
+    noAssessments: 'Este módulo todavía no tiene ninguna evaluación.',
+    untitled: (type: string) => `${type} sin título`,
+    createAssessment: 'Crear una evaluación en este módulo',
+  },
+  en: {
+    backToContent: '← Course content',
+    renameModule: 'Rename module',
+    lessons: 'Lessons',
+    noLessons: "This module doesn't have any lessons yet.",
+    save: 'Save',
+    delete: 'Delete',
+    createLesson: 'Create a new lesson',
+    lessonPlaceholder: 'E.g. "Lesson 1 - Introduction"',
+    contentPlaceholder: 'Lesson text (optional, can be filled in later). Files and links are added separately, once the lesson is created.',
+    createLessonSubmit: 'Create lesson',
+    assessmentsHeading: 'Assignments and assessments for this module',
+    noAssessments: "This module doesn't have any assessments yet.",
+    untitled: (type: string) => `Untitled ${type}`,
+    createAssessment: 'Create an assessment in this module',
+  },
 };
 
 export default async function LeccionesDelModuloPage({
@@ -47,6 +82,9 @@ export default async function LeccionesDelModuloPage({
   const { courseId, moduleId } = await params;
   const { error } = await searchParams;
   const token = await requireAccessToken();
+  const locale = await getLocale();
+  const t = TEXT[locale];
+  const ASSESSMENT_TYPE_LABELS = ASSESSMENT_TYPE_LABELS_BY_LOCALE[locale];
 
   let courseModule: CourseModule;
   let lessons: Lesson[];
@@ -60,7 +98,9 @@ export default async function LeccionesDelModuloPage({
   }
 
   const permissions = await getCoursePermissions(token, courseId);
+  const canEditModule = can(permissions, 'module', 'edit');
   const canCreateLesson = can(permissions, 'lesson', 'create');
+  const canEditLesson = can(permissions, 'lesson', 'edit');
   const canDeleteLesson = can(permissions, 'lesson', 'delete');
   const canCreateAssessment = can(permissions, 'assessment', 'create');
 
@@ -81,7 +121,7 @@ export default async function LeccionesDelModuloPage({
   return (
     <div className="mx-auto max-w-3xl">
       <Link href={`/cursos/${courseId}/modulos`} className="text-sm text-zinc-500 hover:underline">
-        &larr; Contenido del curso
+        {t.backToContent}
       </Link>
       <h1 className="mt-2 mb-6 text-2xl font-semibold">{courseModule.title}</h1>
 
@@ -91,9 +131,30 @@ export default async function LeccionesDelModuloPage({
         </div>
       )}
 
-      <h2 className="mb-3 text-lg font-medium">Lecciones</h2>
+      {canEditModule && (
+        <form
+          action={actualizarModulo.bind(null, courseId, moduleId)}
+          className="mb-8 flex max-w-sm gap-2"
+        >
+          <input
+            name="title"
+            type="text"
+            defaultValue={courseModule.title}
+            required
+            className="flex-1 rounded border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+          />
+          <button
+            type="submit"
+            className="rounded-full border border-zinc-300 px-4 py-2 text-sm hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
+          >
+            {t.renameModule}
+          </button>
+        </form>
+      )}
+
+      <h2 className="mb-3 text-lg font-medium">{t.lessons}</h2>
       {lessons.length === 0 ? (
-        <p className="mb-8 text-zinc-500">Este módulo todavía no tiene ninguna lección.</p>
+        <p className="mb-8 text-zinc-500">{t.noLessons}</p>
       ) : (
         <ul className="mb-8 divide-y divide-zinc-200 dark:divide-zinc-800">
           {lessons.map((lesson) => (
@@ -104,13 +165,32 @@ export default async function LeccionesDelModuloPage({
               >
                 {lesson.title}
               </Link>
-              {canDeleteLesson && (
-                <form action={eliminarLeccion.bind(null, courseId, moduleId, lesson.id)}>
-                  <button type="submit" className="text-xs text-red-600 underline dark:text-red-400">
-                    Eliminar
-                  </button>
-                </form>
-              )}
+              <div className="flex items-center gap-3">
+                {canEditLesson && (
+                  <form
+                    action={actualizarLeccionTitulo.bind(null, courseId, moduleId, lesson.id)}
+                    className="flex items-center gap-1"
+                  >
+                    <input
+                      name="title"
+                      type="text"
+                      defaultValue={lesson.title}
+                      required
+                      className="w-40 rounded border border-zinc-300 px-2 py-1 text-xs dark:border-zinc-700 dark:bg-zinc-900"
+                    />
+                    <button type="submit" className="text-xs underline">
+                      {t.save}
+                    </button>
+                  </form>
+                )}
+                {canDeleteLesson && (
+                  <form action={eliminarLeccion.bind(null, courseId, moduleId, lesson.id)}>
+                    <button type="submit" className="text-xs text-red-600 underline dark:text-red-400">
+                      {t.delete}
+                    </button>
+                  </form>
+                )}
+              </div>
             </li>
           ))}
         </ul>
@@ -118,7 +198,7 @@ export default async function LeccionesDelModuloPage({
 
       {canCreateLesson && (
         <>
-          <h3 className="mb-3 text-base font-medium">Crear una lección nueva</h3>
+          <h3 className="mb-3 text-base font-medium">{t.createLesson}</h3>
           <form
             action={crearLeccion.bind(null, courseId, moduleId)}
             className="mb-10 flex max-w-xl flex-col gap-3"
@@ -127,36 +207,33 @@ export default async function LeccionesDelModuloPage({
               name="title"
               type="text"
               required
-              placeholder='Ej. "Lección 1 - Introducción"'
+              placeholder={t.lessonPlaceholder}
               className="rounded border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
             />
             <textarea
               name="content"
               rows={6}
-              placeholder="Texto de la lección (opcional, se puede completar después). Los archivos y enlaces se agregan aparte, una vez creada la lección."
+              placeholder={t.contentPlaceholder}
               className="rounded border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
             />
-            <button
-              type="submit"
-              className="self-start rounded-full bg-foreground px-4 py-2 text-sm text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc]"
-            >
-              Crear lección
-            </button>
+            <Button type="submit" className="self-start">
+              {t.createLessonSubmit}
+            </Button>
           </form>
         </>
       )}
 
       {moduleAssessments && (
         <>
-          <h2 className="mb-3 text-lg font-medium">Tareas y evaluaciones de este módulo</h2>
+          <h2 className="mb-3 text-lg font-medium">{t.assessmentsHeading}</h2>
           {moduleAssessments.length === 0 ? (
-            <p className="mb-4 text-zinc-500">Este módulo todavía no tiene ninguna evaluación.</p>
+            <p className="mb-4 text-zinc-500">{t.noAssessments}</p>
           ) : (
             <ul className="mb-4 divide-y divide-zinc-200 dark:divide-zinc-800">
               {moduleAssessments.map((a) => (
                 <li key={a.id} className="py-3">
                   <Link href={`/cursos/${courseId}/evaluaciones/${a.id}`} className="hover:underline">
-                    {a.config.title || `${ASSESSMENT_TYPE_LABELS[a.type] ?? a.type} sin título`}
+                    {a.config.title || t.untitled(ASSESSMENT_TYPE_LABELS[a.type] ?? a.type)}
                     <span className="ml-2 text-sm text-zinc-500">
                       ({ASSESSMENT_TYPE_LABELS[a.type] ?? a.type} · {a.maxPoints} pts)
                     </span>
@@ -170,7 +247,7 @@ export default async function LeccionesDelModuloPage({
               href={`/cursos/${courseId}/evaluaciones?moduleId=${moduleId}`}
               className="text-sm underline"
             >
-              Crear una evaluación en este módulo
+              {t.createAssessment}
             </Link>
           )}
         </>

@@ -21,3 +21,21 @@ export async function asignarEscalaDeNotas(courseId: string, formData: FormData)
   revalidatePath(path);
   redirect(path);
 }
+
+export async function asignarPlantillaDeCertificado(courseId: string, formData: FormData) {
+  const token = await requireAccessToken();
+  const path = `/cursos/${courseId}`;
+  const certificateTemplateId = String(formData.get('certificateTemplateId') ?? '');
+
+  try {
+    await apiFetch(token, `/courses/${courseId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ certificateTemplateId }),
+    });
+  } catch (err) {
+    redirect(`${path}?error=${encodeURIComponent(toErrorMessage(err))}`);
+  }
+
+  revalidatePath(path);
+  redirect(path);
+}

@@ -13,6 +13,7 @@ import { TenantContextService } from '../../common/tenant/tenant-context.service
 import { StorageService } from '../../common/storage/storage.service';
 import { CasbinService } from '../../rbac/casbin.service';
 import { AuthenticatedUser } from '../../auth/auth.service';
+import { AuditService } from '../../common/audit/audit.service';
 import { CertificateRendererService } from './certificate-renderer.service';
 import { IssueCertificateDto } from './dto/issue-certificate.dto';
 
@@ -25,12 +26,17 @@ export class CertificateService {
     private readonly renderer: CertificateRendererService,
     private readonly casbin: CasbinService,
     private readonly configService: ConfigService,
+    private readonly auditService: AuditService,
   ) {}
 
-  async issue(enrollmentId: string, dto: IssueCertificateDto) {
+  // "actorUserId" ausente = lo emitio el sistema (ver
+  // automations.service.ts, "auto_issue_certificate"), no una persona
+  // haciendo clic en el boton — el registro de auditoria lo muestra como
+  // "(sistema)" (ver security.service.ts, getAuditLogsCsv).
+  async issue(enrollmentId: string, dto: IssueCertificateDto, actorUserId?: string) {
     const tenantId = this.tenantContext.requireTenantId();
 
-    const { enrollment, template } = await this.prisma.withTenant(tenantId, async (tx) => {
+    const { enrollment, template, tenant } = await this.prisma.withTenant(tenantId, async (tx) => {
       const enrollment = await tx.enrollment.findUnique({
         where: { id: enrollmentId },
         include: {
@@ -62,17 +68,44 @@ export class CertificateService {
         );
       }
 
-      const template = await tx.certificateTemplate.findUnique({ where: { id: dto.templateId } });
-      if (!template) {
-        throw new NotFoundException(`No existe la plantilla de certificado "${dto.templateId}".`);
+      // Por defecto se usa la plantilla FIJA del curso (ver
+      // Course.certificateTemplateId, schema.prisma) — "dto.templateId" es
+      // solo una excepcion manual para un caso puntual (ver la nota extensa
+      // en issue-certificate.dto.ts).
+      const templateId = dto.templateId ?? enrollment.section.course.certificateTemplateId;
+      if (!templateId) {
+        throw new ConflictException(
+          `El curso "${enrollment.section.course.title}" todavía no tiene una plantilla de certificado asignada — asignale una desde el curso antes de emitir.`,
+        );
       }
 
-      return { enrollment, template };
+      const template = await tx.certificateTemplate.findUnique({ where: { id: templateId } });
+      if (!template) {
+        throw new NotFoundException(`No existe la plantilla de certificado "${templateId}".`);
+      }
+
+      // Nombre/logo de la institucion para los placeholders
+      // "{{institutionName}}"/"{{institutionLogo}}" (ver
+      // certificate-renderer.service.ts) — se leen ACA, al emitir, nunca se
+      // guardan dentro del PDF de forma que dependan de una URL firmada
+      // vieja (mismo criterio que tenant.service.ts con el resto de la
+      // marca).
+      const tenant = await tx.tenant.findUnique({
+        where: { id: tenantId },
+        select: { name: true, branding: true },
+      });
+
+      return { enrollment, template, tenant };
     });
 
     const verificationCode = await this.generateUniqueVerificationCode();
     const verificationUrl = `${this.configService.get<string>('apiPublicUrl')}/verify/${verificationCode}`;
     const issuedAt = new Date();
+
+    const branding = (tenant?.branding as { logoKey?: string } | undefined) ?? {};
+    const institutionLogoUrl = branding.logoKey
+      ? await this.storage.getPresignedDownloadUrl(branding.logoKey)
+      : undefined;
 
     const pdfBuffer = await this.renderer.render(template.htmlTemplate, {
       studentName: enrollment.userTenant.user.fullName,
@@ -80,6 +113,8 @@ export class CertificateService {
       issueDate: issuedAt,
       verificationCode,
       verificationUrl,
+      institutionName: tenant?.name ?? '',
+      institutionLogoUrl,
     });
 
     const storageKey = `certificates/${tenantId}/${verificationCode}.pdf`;
@@ -90,13 +125,19 @@ export class CertificateService {
         data: {
           tenantId,
           enrollmentId,
-          templateId: dto.templateId,
+          templateId: template.id,
           verificationCode,
           pdfUrl: storageKey, // Ver la nota en storage.service.ts: es la KEY dentro del bucket, no una URL publica permanente.
           issuedAt,
         },
       }),
     );
+
+    await this.auditService.record(tenantId, {
+      userId: actorUserId,
+      action: 'certificate.issued',
+      payload: { certificateId: certificate.id, enrollmentId, verificationCode },
+    });
 
     return this.toResponse(certificate);
   }
@@ -155,7 +196,7 @@ export class CertificateService {
     throw new ForbiddenException('No tienes permiso para ver los certificados de esta matricula.');
   }
 
-  async revoke(id: string) {
+  async revoke(id: string, actorUserId?: string) {
     const tenantId = this.tenantContext.requireTenantId();
     const certificate = await this.prisma.withTenant(tenantId, (tx) =>
       tx.certificate.findUnique({ where: { id } }),
@@ -169,6 +210,11 @@ export class CertificateService {
     const revoked = await this.prisma.withTenant(tenantId, (tx) =>
       tx.certificate.update({ where: { id }, data: { revoked: true } }),
     );
+    await this.auditService.record(tenantId, {
+      userId: actorUserId,
+      action: 'certificate.revoked',
+      payload: { certificateId: id },
+    });
     return this.toResponse(revoked);
   }
 
@@ -207,6 +253,12 @@ export class CertificateService {
         courseTitle: certificate.enrollment.section.course.title,
         institution: certificate.tenant.name,
         issuedAt: certificate.issuedAt,
+        // Ver update-tenant.dto.ts ("hideStokaBranding"): esta es la
+        // pagina publica de verificacion, el lugar de mas visibilidad
+        // fuera de la propia institucion para el sello "Hecho con
+        // Stoka LMS" — quien lo desactivo en /configuracion-marca
+        // tambien lo espera oculto aca.
+        hideStokaBranding: Boolean((certificate.tenant.branding as { hideStokaBranding?: boolean })?.hideStokaBranding),
       };
     });
   }

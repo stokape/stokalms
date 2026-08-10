@@ -1,0 +1,188 @@
+# ============================================================================
+# docker-compose.prod.yml — Entorno de PRODUCCION de Stoka LMS (pensado para
+# una unica VM, ej. Oracle Cloud "Always Free" — ver
+# docs/deploy/produccion.md para la guia completa paso a paso).
+#
+# Diferencias clave contra docker-compose.yml (desarrollo):
+#   - Keycloak corre en modo "start" (produccion real), no "start-dev", con
+#     su propio storage en el Postgres compartido (no en memoria/H2).
+#   - api y web son las imagenes de PRODUCCION (Dockerfile de cada app), no
+#     "npm run dev" con recarga en caliente.
+#   - Caddy hace de proxy reverso: TLS automatico (Let's Encrypt) para el
+#     dominio raiz, cada subdominio de institucion y cada dominio propio ya
+#     verificado (ver Caddyfile y domain-check.controller.ts) — nada de
+#     Postgres/Keycloak/MinIO queda expuesto directo a Internet.
+#   - Nada de puertos "de host" salvo 80/443 (Caddy): todo lo demas se habla
+#     por la red interna de Docker entre contenedores.
+#
+# Uso (ver la guia completa en docs/deploy/produccion.md):
+#   docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+# ============================================================================
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: stoka-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - stoka_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Keycloak guarda SUS PROPIAS tablas en el mismo Postgres, pero en un
+  # schema aparte ("KC_DB_SCHEMA") — ni comparte tablas con Stoka LMS ni
+  # hace falta una segunda base de datos.
+  keycloak:
+    image: quay.io/keycloak/keycloak:25.0
+    container_name: stoka-keycloak
+    restart: unless-stopped
+    command: start
+    environment:
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN_USER}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
+      KC_DB_SCHEMA: keycloak
+      KC_DB_USERNAME: ${POSTGRES_USER}
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD}
+      # Nombre PUBLICO por el que se llega a Keycloak (ej.
+      # "auth.tudominio.com") — Keycloak lo estampa dentro de cada token
+      # ("iss") y en cada URL que genera; tiene que ser EXACTAMENTE el mismo
+      # valor que KEYCLOAK_BASE_URL (api) y AUTH_KEYCLOAK_ISSUER (web) en
+      # .env.production, o el login se rompe con un error de "issuer".
+      KC_HOSTNAME: ${AUTH_DOMAIN}
+      # TLS lo termina Caddy, no Keycloak — habla HTTP en texto plano
+      # dentro de la red interna de Docker, nunca expuesto a Internet.
+      KC_HTTP_ENABLED: "true"
+      # Le dice a Keycloak que confie en las cabeceras "X-Forwarded-*" que
+      # le manda Caddy (asi sabe que el request original SI fue HTTPS,
+      # aunque a el le llegue por HTTP).
+      KC_PROXY_HEADERS: xforwarded
+      KC_HEALTH_ENABLED: "true"
+    volumes:
+      # Mismo tema "stoka" que en desarrollo (ver docker-compose.yml y
+      # keycloak-themes/stoka/) — el enlace "Volver" en las pantallas de
+      # login, activado por "loginTheme" en scripts/setup-keycloak.js.
+      - ./keycloak-themes/stoka:/opt/keycloak/themes/stoka:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  minio:
+    image: minio/minio:latest
+    container_name: stoka-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${STORAGE_ACCESS_KEY}
+      MINIO_ROOT_PASSWORD: ${STORAGE_SECRET_KEY}
+    volumes:
+      - stoka_minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: stoka-api
+    restart: unless-stopped
+    env_file: .env.production
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
+      # "stoka_app" es un nombre FIJO (ver rls-policies.sql y
+      # apply-rls.js) — lo unico que varia por entorno es su contraseña.
+      RUNTIME_DATABASE_URL: postgresql://stoka_app:${RUNTIME_DB_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
+      REDIS_URL: redis://redis:6379
+      # PUBLICO (via Caddy -> minio:9000), no "http://minio:9000" interno:
+      # las URLs firmadas que arma el SDK de S3 (ver storage.service.ts,
+      # getPresignedDownloadUrl) llevan este mismo host adentro de la firma
+      # — si fuera el hostname interno de Docker, esas URLs le llegarian al
+      # NAVEGADOR de alguien y serian imposibles de resolver.
+      STORAGE_ENDPOINT: https://storage.${PLATFORM_ROOT_DOMAIN}
+      KEYCLOAK_BASE_URL: https://${AUTH_DOMAIN}
+      # Mismo valor que scripts/setup-keycloak.js usa para registrar los
+      # clientes de Keycloak — lo necesita keycloak-admin.service.ts para
+      # armar el redirect_uri de cada institucion nueva (ver la nota
+      # extensa en tenant-registration.service.ts).
+      WEB_ORIGIN: https://${PLATFORM_ROOT_DOMAIN}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      keycloak:
+        condition: service_started
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    container_name: stoka-web
+    restart: unless-stopped
+    env_file: .env.production
+    environment:
+      NODE_ENV: production
+      STOKA_API_URL: http://api:3001/api/v1
+      AUTH_KEYCLOAK_ISSUER: https://${AUTH_DOMAIN}/realms/${KEYCLOAK_REALM}
+      STORAGE_PUBLIC_ORIGIN: https://storage.${PLATFORM_ROOT_DOMAIN}
+    depends_on:
+      - api
+
+  # Redis: sin uso real todavia (ver la nota en app.module.ts sobre el
+  # storage del rate limiting) — se deja levantado igual, listo para el
+  # dia que el backend corra en mas de una instancia.
+  redis:
+    image: redis:7-alpine
+    container_name: stoka-redis
+    restart: unless-stopped
+    volumes:
+      - stoka_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Unico servicio con puertos publicados al host — TLS automatico
+  # (Let's Encrypt "on demand", ver Caddyfile) para el dominio raiz, cada
+  # subdominio de institucion y cada dominio propio ya verificado.
+  caddy:
+    image: caddy:2-alpine
+    container_name: stoka-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - stoka_caddy_data:/data
+      - stoka_caddy_config:/config
+    environment:
+      PLATFORM_ROOT_DOMAIN: ${PLATFORM_ROOT_DOMAIN}
+      AUTH_DOMAIN: ${AUTH_DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL}
+    depends_on:
+      - api
+      - web
+      - keycloak
+      - minio
+
+volumes:
+  stoka_postgres_data:
+  stoka_redis_data:
+  stoka_minio_data:
+  stoka_caddy_data:
+  stoka_caddy_config:

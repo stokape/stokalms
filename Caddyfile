@@ -1,0 +1,87 @@
+# ============================================================================
+# Caddyfile — Proxy reverso + TLS automatico de produccion.
+#
+# POR QUE "on_demand_tls" (en vez de listar cada dominio a mano): el
+# dominio raiz (ej. "stokalms.com") sirve el home generico, pero cada
+# institucion nueva vive en SU PROPIO subdominio dinamico (ej.
+# "sanmartin.stokalms.com", ver tenant-domain.service.ts) que se crea
+# recien cuando se aprueba esa institucion — no hay forma de listarlos de
+# antemano aca, y reiniciar Caddy cada vez que se aprueba una institucion
+# nueva seria fragil. "on_demand_tls" le pide a Caddy un certificado
+# Let's Encrypt automaticamente la PRIMERA vez que alguien visita CUALQUIER
+# nombre de host, consultando antes a "domain-check.controller.ts" (via
+# "ask") para confirmar que ese host es de verdad nuestro — mismo mecanismo
+# cubre tambien los dominios PROPIOS que cada institucion agrega y verifica
+# desde /dominios (ver tenant-domain.service.ts).
+#
+# Variables ({$VAR}, ver docker-compose.prod.yml, servicio "caddy"):
+#   PLATFORM_ROOT_DOMAIN — ej. "stokalms.com"
+#   AUTH_DOMAIN           — ej. "auth.stokalms.com" (Keycloak)
+#   ACME_EMAIL            — para avisos de Let's Encrypt (vencimientos, etc.)
+# ============================================================================
+
+{
+	email {$ACME_EMAIL}
+
+	on_demand_tls {
+		ask http://api:3001/api/v1/domain-check
+		interval 2m
+		burst 5
+	}
+}
+
+# Todo el trafico HTTPS entra por aca — SIN nombre de host en la direccion
+# del sitio a proposito (":443" a secas): un host fijo le diria a Caddy "yo
+# se de antemano cuales son tus dominios", que es justo lo que no podemos
+# saber de antemano con subdominios dinamicos por institucion.
+:443 {
+	tls {
+		on_demand
+	}
+
+	@auth host {$AUTH_DOMAIN}
+	@storage host storage.{$PLATFORM_ROOT_DOMAIN}
+	@api host api.{$PLATFORM_ROOT_DOMAIN}
+
+	# Keycloak (login/SSO) — ver auth.ts (frontend) y jwt.strategy.ts
+	# (backend), ambos apuntan a este mismo host publico.
+	handle @auth {
+		reverse_proxy keycloak:8080
+	}
+
+	# MinIO (archivos: logos, PDFs de certificado, SCORM) — publico a
+	# proposito, ver la nota extensa en docker-compose.prod.yml sobre
+	# STORAGE_ENDPOINT: el acceso real lo sigue controlando la URL
+	# firmada (con vencimiento), no el proxy.
+	handle @storage {
+		reverse_proxy minio:9000
+	}
+
+	# API directa (ver la nota en el bloque "api." de abajo: el frontend le
+	# habla por la red interna de Docker, esto es solo para acceso externo).
+	handle @api {
+		reverse_proxy api:3001
+	}
+
+	# Cualquier otro host (el dominio raiz, cada subdominio de institucion,
+	# cada dominio propio ya verificado) cae aca: el frontend Next.js, que
+	# es quien decide QUE mostrar segun el header Host (ver app/page.tsx y
+	# tenant-context.middleware.ts en el backend).
+	handle {
+		reverse_proxy web:3000 {
+			# Next.js/el backend necesitan saber el Host ORIGINAL que
+			# escribio la persona en el navegador (ver la nota extensa en
+			# tenant-context.middleware.ts) — sin esto, siempre verian
+			# "web:3000" como si fuera el dominio visitado.
+			header_up Host {host}
+		}
+	}
+}
+
+# Caddy ya redirige HTTP -> HTTPS automaticamente para sitios con un
+# hostname fijo en la direccion, pero el bloque de arriba es ":443" sin
+# hostname (a proposito, ver la nota grande arriba) — por eso hace falta
+# este bloque aparte a mano.
+:80 {
+	redir https://{host}{uri} permanent
+}

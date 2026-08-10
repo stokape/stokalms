@@ -110,9 +110,15 @@ services:
       KEYCLOAK_ADMIN_PASSWORD: admin_dev_password
     ports:
       - "8080:8080"
+    volumes:
+      # Tema propio ("stoka") con SOLO un CSS/JS agregado encima del tema
+      # de Keycloak de siempre (ver keycloak-themes/stoka/login/theme.properties)
+      # — el enlace "Volver" de las pantallas de login. Activado por
+      # "loginTheme" en scripts/setup-keycloak.js.
+      - ./keycloak-themes/stoka:/opt/keycloak/themes/stoka
     depends_on:
       # No es una dependencia de base de datos (usa su propio storage en
-      # modo dev), pero lo agrupamos para que arranque junto al resto.
+      # modo dev), pero lo agrupamos para que inicio junto al resto.
       postgres:
         condition: service_healthy
 

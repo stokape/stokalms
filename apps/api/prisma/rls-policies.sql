@@ -190,6 +190,24 @@ ALTER TABLE attendance_records FORCE ROW LEVEL SECURITY;
 CREATE POLICY tenant_isolation ON attendance_records
   USING (tenant_id = app_current_tenant());
 
+-- student_notes: anotaciones de desempeño que un Docente deja sobre un alumno.
+ALTER TABLE student_notes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE student_notes FORCE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON student_notes
+  USING (tenant_id = app_current_tenant());
+
+-- enrollment_attachments: sustento (archivo de respaldo) de un cambio de estado de matricula.
+ALTER TABLE enrollment_attachments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE enrollment_attachments FORCE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON enrollment_attachments
+  USING (tenant_id = app_current_tenant());
+
+-- lesson_views: primera vez que un alumno abrio una leccion (seguimiento de avance).
+ALTER TABLE lesson_views ENABLE ROW LEVEL SECURITY;
+ALTER TABLE lesson_views FORCE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON lesson_views
+  USING (tenant_id = app_current_tenant());
+
 -- certificate_templates: plantillas de certificado configuradas por el tenant.
 ALTER TABLE certificate_templates ENABLE ROW LEVEL SECURITY;
 ALTER TABLE certificate_templates FORCE ROW LEVEL SECURITY;
@@ -254,6 +272,24 @@ CREATE POLICY tenant_isolation ON tenant_features
 ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE audit_logs FORCE ROW LEVEL SECURITY;
 CREATE POLICY tenant_isolation ON audit_logs
+  USING (tenant_id = app_current_tenant());
+
+-- cohorts: agrupaciones de alumnos propias de cada tenant (ver cohort.service.ts).
+ALTER TABLE cohorts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE cohorts FORCE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON cohorts
+  USING (tenant_id = app_current_tenant());
+
+-- reminder_logs: recordatorios automaticos ya enviados (ver automations.service.ts).
+ALTER TABLE reminder_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE reminder_logs FORCE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON reminder_logs
+  USING (tenant_id = app_current_tenant());
+
+-- report_presets: reportes personalizados guardados (ver reports.service.ts).
+ALTER TABLE report_presets ENABLE ROW LEVEL SECURITY;
+ALTER TABLE report_presets FORCE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON report_presets
   USING (tenant_id = app_current_tenant());
 
 

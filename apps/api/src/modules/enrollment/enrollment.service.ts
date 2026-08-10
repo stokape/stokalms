@@ -3,19 +3,28 @@
 // docs/architecture/04-flujos-criticos.md, seccion 4.1).
 // ============================================================================
 
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { TenantContextService } from '../../common/tenant/tenant-context.service';
 import { AuthenticatedUser } from '../../auth/auth.service';
+import { CertificateService } from '../certificates/certificate.service';
+import { AutomationsService } from '../automations/automations.service';
+import { AuditService } from '../../common/audit/audit.service';
 import { CreateEnrollmentDto } from './dto/create-enrollment.dto';
 import { UpdateEnrollmentStatusDto } from './dto/update-enrollment-status.dto';
 import { BulkEnrollDto } from './dto/bulk-enroll.dto';
+import { ImportHistoricalEnrollmentsDto } from './dto/import-historical-enrollments.dto';
 
 @Injectable()
 export class EnrollmentService {
+  private readonly logger = new Logger(EnrollmentService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly tenantContext: TenantContextService,
+    private readonly certificateService: CertificateService,
+    private readonly automationsService: AutomationsService,
+    private readonly auditService: AuditService,
   ) {}
 
   async create(courseId: string, sectionId: string, dto: CreateEnrollmentDto) {
@@ -142,7 +151,14 @@ export class EnrollmentService {
 
       const enrollments = await tx.enrollment.findMany({
         where: { sectionId },
-        include: { userTenant: { include: { user: true } } },
+        include: {
+          userTenant: { include: { user: true } },
+          // Se incluye ACA (no en un endpoint aparte) para que la pantalla
+          // de matriculados pueda mostrar de un vistazo quien ya obtuvo su
+          // certificado, sin un pedido extra por alumno (ver la nota en
+          // secciones/[sectionId]/page.tsx, frontend).
+          certificates: { select: { revoked: true } },
+        },
         orderBy: { enrolledAt: 'asc' },
       });
 
@@ -157,9 +173,14 @@ export class EnrollmentService {
         enrolledAt: e.enrolledAt,
         student: {
           userId: e.userTenant.user.id,
+          userTenantId: e.userTenant.id,
           email: e.userTenant.user.email,
           fullName: e.userTenant.user.fullName,
         },
+        // "true" si tiene AL MENOS un certificado vigente (no revocado) —
+        // alguien puede tener uno revocado y otro vigente emitido despues,
+        // asi que "algun revocado" no deberia contar como "no lo tiene".
+        hasCertificate: e.certificates.some((c) => !c.revoked),
       }));
     });
   }
@@ -197,6 +218,7 @@ export class EnrollmentService {
     sectionId: string,
     id: string,
     dto: UpdateEnrollmentStatusDto,
+    actorUserId?: string,
   ) {
     const tenantId = this.tenantContext.requireTenantId();
 
@@ -216,7 +238,144 @@ export class EnrollmentService {
         );
       }
 
-      return tx.enrollment.update({ where: { id }, data: { status: dto.status } });
+      const previousStatus = enrollment.status;
+      const wasAlreadyCompleted = enrollment.status === 'completed';
+      const updated = await tx.enrollment.update({ where: { id }, data: { status: dto.status } });
+      return { updated, previousStatus, justCompleted: !wasAlreadyCompleted && dto.status === 'completed' };
+    }).then(async ({ updated, previousStatus, justCompleted }) => {
+      await this.auditService.record(tenantId, {
+        userId: actorUserId,
+        action: 'enrollment.status_changed',
+        payload: { enrollmentId: updated.id, from: previousStatus, to: updated.status },
+      });
+
+      // FUERA de la transaccion de arriba (que ya hizo commit): emitir un
+      // certificado dispara SU PROPIA transaccion (ver certificate.service.ts,
+      // "issue"), y una automatizacion que no pudo emitir (ej. el curso
+      // todavia no tiene plantilla asignada) NUNCA debe revertir ni
+      // bloquear el cambio de estado que la disparo — ver la nota extensa
+      // en automations.service.ts sobre "no romper la operacion principal".
+      if (justCompleted && (await this.automationsService.isFeatureEnabled(tenantId, 'auto_issue_certificate'))) {
+        try {
+          await this.certificateService.issue(updated.id, {});
+        } catch (err) {
+          this.logger.warn(
+            `Emision automatica de certificado no realizada para la matricula ${updated.id}: ${err instanceof Error ? err.message : err}`,
+          );
+        }
+      }
+      return updated;
     });
+  }
+
+  // "Migracion de informacion" (plan Enterprise, ver lib/pricing.ts):
+  // carga masiva de matriculas HISTORICAS (con status/fecha ya definidos,
+  // no las que se crean "hoy" via create()/bulkCreate() de arriba) para que
+  // una institucion pueda traer su historial de otro sistema sin perderlo.
+  // A PROPOSITO no toca notas/entregas: fabricar Submissions falsas contra
+  // Assessments que la persona nunca rindio de verdad corromperia el
+  // gradebook (ver gradebook.service.ts) — si la institucion necesita
+  // preservar una nota final historica, hoy no hay forma de importarla sin
+  // inventar evidencia que no existe; queda fuera de alcance a proposito.
+  async importHistorical(courseId: string, sectionId: string, dto: ImportHistoricalEnrollmentsDto, actorUserId?: string) {
+    const tenantId = this.tenantContext.requireTenantId();
+    const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const VALID_STATUSES = new Set(['active', 'completed', 'dropped']);
+    const results: Array<{ email: string; status: 'importado' | 'error'; message?: string }> = [];
+
+    await this.prisma.withTenant(tenantId, async (tx) => {
+      const section = await tx.section.findUnique({ where: { id: sectionId } });
+      if (!section || section.courseId !== courseId) {
+        throw new NotFoundException(`No existe la seccion "${sectionId}" en el curso "${courseId}".`);
+      }
+
+      for (const row of dto.rows) {
+        if (!EMAIL_PATTERN.test(row.email)) {
+          results.push({ email: row.email, status: 'error', message: 'El email no tiene un formato válido.' });
+          continue;
+        }
+
+        // "status"/"enrolledAt" se validan ACA, fila por fila (no con un
+        // decorador en el DTO, ver la nota extensa alli) — un valor
+        // invalido en UNA fila se reporta como error de ESA fila, sin
+        // tumbar el resto del archivo.
+        const status = row.status || 'active';
+        if (!VALID_STATUSES.has(status)) {
+          results.push({
+            email: row.email,
+            status: 'error',
+            message: `El estado "${status}" no es válido — usa "active", "completed" o "dropped".`,
+          });
+          continue;
+        }
+        let enrolledAtDate: Date | undefined;
+        if (row.enrolledAt) {
+          enrolledAtDate = new Date(row.enrolledAt);
+          if (Number.isNaN(enrolledAtDate.getTime())) {
+            results.push({
+              email: row.email,
+              status: 'error',
+              message: `La fecha "${row.enrolledAt}" no es válida.`,
+            });
+            continue;
+          }
+        }
+
+        try {
+          const user = await tx.user.upsert({
+            where: { email: row.email },
+            update: {},
+            create: { email: row.email, fullName: row.fullName ?? row.email },
+          });
+          const userTenant = await tx.userTenant.upsert({
+            where: { userId_tenantId: { userId: user.id, tenantId } },
+            update: {},
+            create: { userId: user.id, tenantId, status: 'active' },
+          });
+
+          const existing = await tx.enrollment.findUnique({
+            where: { sectionId_userTenantId: { sectionId, userTenantId: userTenant.id } },
+          });
+          if (existing) {
+            results.push({
+              email: row.email,
+              status: 'error',
+              message: 'Ya existe una matricula de esta persona en esta seccion — la importacion no la sobrescribe.',
+            });
+            continue;
+          }
+
+          await tx.enrollment.create({
+            data: {
+              tenantId,
+              sectionId,
+              userTenantId: userTenant.id,
+              status,
+              enrolledAt: enrolledAtDate,
+            },
+          });
+          results.push({ email: row.email, status: 'importado' });
+        } catch (err) {
+          results.push({
+            email: row.email,
+            status: 'error',
+            message: err instanceof Error ? err.message : 'Error inesperado.',
+          });
+        }
+      }
+    });
+
+    await this.auditService.record(tenantId, {
+      userId: actorUserId,
+      action: 'enrollment.historical_import',
+      payload: {
+        sectionId,
+        total: dto.rows.length,
+        importados: results.filter((r) => r.status === 'importado').length,
+        errores: results.filter((r) => r.status === 'error').length,
+      },
+    });
+
+    return { results };
   }
 }

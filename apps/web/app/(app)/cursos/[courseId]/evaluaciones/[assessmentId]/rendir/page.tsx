@@ -8,6 +8,8 @@
 import Link from 'next/link';
 import { requireAccessToken, apiFetch, toErrorMessage } from '@/lib/api';
 import { ErrorBanner } from '@/components/ErrorBanner';
+import { Button } from '@/components/ui/Button';
+import { getLocale, type Locale } from '@/lib/locale';
 import { entregarExamen } from './actions';
 
 interface Assessment {
@@ -22,6 +24,31 @@ interface Question {
   points: number;
 }
 
+const TEXT = {
+  es: {
+    back: '← Volver',
+    defaultTitle: 'Rendir evaluación',
+    noQuestions: 'Esta evaluación todavía no tiene preguntas.',
+    submit: 'Entregar',
+    mcqPrompt: 'Elige la respuesta correcta',
+    matchingPrompt: 'Empareja cada elemento con su opción correspondiente',
+    true: 'Verdadero',
+    false: 'Falso',
+    choosePlaceholder: '-- elige una opción --',
+  },
+  en: {
+    back: '← Back',
+    defaultTitle: 'Take assessment',
+    noQuestions: "This assessment doesn't have any questions yet.",
+    submit: 'Submit',
+    mcqPrompt: 'Choose the correct answer',
+    matchingPrompt: 'Match each item with its corresponding option',
+    true: 'True',
+    false: 'False',
+    choosePlaceholder: '-- choose an option --',
+  },
+};
+
 export default async function RendirExamenPage({
   params,
   searchParams,
@@ -32,6 +59,8 @@ export default async function RendirExamenPage({
   const { courseId, assessmentId } = await params;
   const { error } = await searchParams;
   const token = await requireAccessToken();
+  const locale = await getLocale();
+  const t = TEXT[locale];
 
   let assessment: Assessment;
   let questions: Question[];
@@ -50,10 +79,10 @@ export default async function RendirExamenPage({
         href={`/cursos/${courseId}/evaluaciones/${assessmentId}`}
         className="text-sm text-zinc-500 hover:underline"
       >
-        &larr; Volver
+        {t.back}
       </Link>
       <h1 className="mt-2 mb-6 text-2xl font-semibold">
-        {assessment.config.title || 'Rendir evaluación'}
+        {assessment.config.title || t.defaultTitle}
       </h1>
 
       {error && (
@@ -63,38 +92,35 @@ export default async function RendirExamenPage({
       )}
 
       {questions.length === 0 ? (
-        <p className="text-zinc-500">Esta evaluación todavía no tiene preguntas.</p>
+        <p className="text-zinc-500">{t.noQuestions}</p>
       ) : (
         <form action={entregarExamen.bind(null, courseId, assessmentId)} className="flex flex-col gap-8">
           {questions.map((q, i) => (
             <div key={q.id} className="rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
               <p className="mb-3 font-medium">
-                {i + 1}. {questionPrompt(q)}{' '}
+                {i + 1}. {questionPrompt(q, t)}{' '}
                 <span className="text-sm font-normal text-zinc-500">({q.points} pts)</span>
               </p>
-              <QuestionInput question={q} />
+              <QuestionInput question={q} t={t} />
             </div>
           ))}
-          <button
-            type="submit"
-            className="self-start rounded-full bg-foreground px-6 py-2 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc]"
-          >
-            Entregar
-          </button>
+          <Button type="submit" size="lg" className="self-start">
+            {t.submit}
+          </Button>
         </form>
       )}
     </div>
   );
 }
 
-function questionPrompt(q: Question): string {
+function questionPrompt(q: Question, t: (typeof TEXT)['es']): string {
   if (q.type === 'tf') return String(q.body.statement ?? '');
   if (q.type === 'open') return String(q.body.prompt ?? '');
-  if (q.type === 'mcq') return 'Elegí la respuesta correcta';
-  return 'Emparejá cada elemento con su opción correspondiente';
+  if (q.type === 'mcq') return t.mcqPrompt;
+  return t.matchingPrompt;
 }
 
-function QuestionInput({ question }: { question: Question }) {
+function QuestionInput({ question, t }: { question: Question; t: (typeof TEXT)['es'] }) {
   const field = `q_${question.id}`;
 
   if (question.type === 'mcq') {
@@ -116,10 +142,10 @@ function QuestionInput({ question }: { question: Question }) {
     return (
       <div className="flex gap-4 text-sm">
         <label className="flex items-center gap-2">
-          <input type="radio" name={field} value="true" /> Verdadero
+          <input type="radio" name={field} value="true" /> {t.true}
         </label>
         <label className="flex items-center gap-2">
-          <input type="radio" name={field} value="false" /> Falso
+          <input type="radio" name={field} value="false" /> {t.false}
         </label>
       </div>
     );
@@ -137,7 +163,7 @@ function QuestionInput({ question }: { question: Question }) {
               name={`${field}__${item.id}`}
               className="rounded border border-zinc-300 px-2 py-1 dark:border-zinc-700 dark:bg-zinc-900"
             >
-              <option value="">-- elegí una opción --</option>
+              <option value="">{t.choosePlaceholder}</option>
               {right.map((r) => (
                 <option key={r.id} value={r.id}>
                   {r.text}

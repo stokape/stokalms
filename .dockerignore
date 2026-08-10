@@ -1,0 +1,23 @@
+# ============================================================================
+# .dockerignore — Se aplica a CUALQUIER build de Docker que use el contexto
+# raiz del repo (ver apps/api/Dockerfile y apps/web/Dockerfile: ambos se
+# construyen con "docker build -f apps/xxx/Dockerfile ." desde la raiz, para
+# que "npm ci" pueda ver los package.json de TODOS los workspaces a la vez,
+# como exige npm en un monorepo). Mismo criterio que .gitignore.
+# ============================================================================
+
+node_modules
+**/node_modules
+dist
+**/dist
+build
+**/build
+.next
+**/.next
+.turbo
+.git
+.env
+.env.local
+.env.*.local
+docker-data
+*.log

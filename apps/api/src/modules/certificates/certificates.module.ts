@@ -23,5 +23,9 @@ import { VerifyController } from './verify.controller';
     VerifyController,
   ],
   providers: [CertificateTemplateService, CertificateService, CertificateRendererService],
+  // Exportado para que EnrollmentModule pueda reusar EXACTAMENTE la misma
+  // logica de emision (validaciones incluidas) al automatizar la emision
+  // en "completed" — ver la nota extensa en automations.service.ts.
+  exports: [CertificateService],
 })
 export class CertificatesModule {}

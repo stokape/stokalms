@@ -19,7 +19,7 @@ graph LR
 
 | Rol | Alcance típico | Notas |
 |---|---|---|
-| Super Admin | Global (proveedor) | Gestiona tenants, planes, feature flags, salud de la plataforma. No accede a contenido académico de un tenant salvo soporte auditado |
+| Super Admin | Global (proveedor) | Gestiona tenants, planes, feature flags, salud de la plataforma. Acceso completo (`*`) dentro de CUALQUIER tenant, propio o de un tercero — ver la nota debajo de esta tabla sobre cómo se otorga |
 | Administrador de entidad | Tenant | Configura branding, escalas, roles custom, usuarios, planes de módulos |
 | Coordinador académico | Tenant o facultad/sede | Gestiona periodos, cursos, matrícula masiva, reportes |
 | Docente | Curso/sección | Crea contenido, evalúa, califica, publica notas y certificados de sus cursos |
@@ -28,6 +28,8 @@ graph LR
 | Auditor/Invitado | Tenant, solo lectura | Para acreditaciones o revisiones externas |
 
 Estos roles **no son editables ni eliminables**, pero sus permisos por defecto sí pueden ajustarse dentro de un tenant (ver 3.3) para no romper el onboarding cuando un tenant necesita, por ejemplo, que el Docente no pueda eliminar entregas.
+
+**Cómo se otorga "Super Admin" en la práctica (implementación actual, más simple que "un dominio Casbin `platform` propio" — ver la nota en `configuration.ts`, `platformAdminEmails`):** no hay una asignación manual por tenant. Cualquier email en `PLATFORM_ADMIN_EMAILS` (`.env`) que inicie sesión en un tenant — el suyo propio o el de un tercero — recibe automáticamente el rol de sistema "Super Admin" en ESE tenant la primera vez que entra ahí (`auth.service.ts`, `ensureSuperAdminForPlatformAdmins`, corrido dentro del aprovisionamiento JIT de `findOrProvisionUser`). Es **aditivo**: si el tenant ya le había asignado otro rol a esa persona, no se lo quita, solo agrega Super Admin encima. Queda un rastro en los logs del backend (`AuthService`, nivel `log`) cada vez que esto ocurre — no hay todavía un registro de auditoría consultable desde el panel; si el volumen de soporte cross-tenant lo justifica más adelante, ese es el momento de sumarlo (ver 3.4 más abajo sobre por qué esta lista fija ya se sabía una simplificación deliberada del MVP).
 
 ## 3.3 Roles y permisos personalizados por tenant
 

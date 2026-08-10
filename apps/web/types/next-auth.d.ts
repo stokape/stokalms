@@ -22,6 +22,11 @@ declare module 'next-auth' {
     // sesion"): Keycloak lo exige como "id_token_hint" para cerrar tambien
     // su propia sesion de SSO, no solo la cookie de NextAuth.
     idToken?: string;
+    // "RefreshAccessTokenError" cuando el refresh_token ya no sirvio (ver
+    // auth.ts, refreshAccessToken) — requireAccessToken() (lib/api.ts) lo
+    // usa para mandar a iniciar sesion de nuevo en vez de reintentar con un
+    // access_token vencido.
+    error?: string;
     user?: DefaultSession['user'];
   }
 }
@@ -29,6 +34,11 @@ declare module 'next-auth' {
 declare module 'next-auth/jwt' {
   interface JWT {
     accessToken?: string;
+    refreshToken?: string;
     idToken?: string;
+    // Milisegundos epoch (ver auth.ts, callback "jwt") — cuando expira
+    // accessToken segun Keycloak.
+    accessTokenExpires?: number;
+    error?: string;
   }
 }

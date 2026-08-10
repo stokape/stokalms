@@ -27,6 +27,11 @@ export interface CertificateRenderData {
   issueDate: Date;
   verificationCode: string;
   verificationUrl: string;
+  institutionName: string;
+  // URL firmada (vence a la hora, igual que en tenant.service.ts) del logo
+  // de la institucion — puede no existir (institucion sin logo cargado
+  // todavia, ver configuracion-marca), por eso es opcional.
+  institutionLogoUrl?: string;
 }
 
 @Injectable()
@@ -53,12 +58,25 @@ export class CertificateRendererService {
       .replaceAll('{{courseTitle}}', escapeHtml(data.courseTitle))
       .replaceAll('{{issueDate}}', formattedDate)
       .replaceAll('{{verificationCode}}', data.verificationCode)
+      .replaceAll('{{institutionName}}', escapeHtml(data.institutionName))
+      // Igual que "{{qrCode}}" de abajo: el placeholder se reemplaza por la
+      // etiqueta <img> COMPLETA, no solo por la URL — asi quien escribe la
+      // plantilla no tiene que armar el <img> a mano, y si la institucion
+      // todavia no cargo un logo (ver configuracion-marca), el placeholder
+      // simplemente desaparece (string vacio) en vez de dejar un ícono de
+      // imagen rota.
+      .replaceAll(
+        '{{institutionLogo}}',
+        data.institutionLogoUrl
+          ? `<img src="${data.institutionLogoUrl}" alt="Logo de ${escapeHtml(data.institutionName)}" />`
+          : '',
+      )
       .replaceAll('{{qrCode}}', `<img src="${qrDataUri}" alt="Codigo QR de verificacion" />`);
 
     // Un browser Chromium por certificado: mas simple y aislado que
     // mantener una instancia compartida entre requests (que traeria
     // problemas de concurrencia si dos emisiones caen al mismo tiempo). El
-    // costo de arrancar Chromium (~200-400ms) es aceptable mientras la
+    // costo de iniciar Chromium (~200-400ms) es aceptable mientras la
     // emision sea sincrona dentro del request (ver la nota de arriba sobre
     // la cola pendiente) — si eso cambia, este es el lugar a optimizar
     // primero (browser compartido + pool de paginas).

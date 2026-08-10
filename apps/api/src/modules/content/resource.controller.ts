@@ -19,6 +19,7 @@ import {
   Delete,
   Get,
   Param,
+  Patch,
   Post,
   UploadedFile,
   UseGuards,
@@ -34,6 +35,7 @@ import { AppConfig } from '../../config/configuration';
 import { ResourceService } from './resource.service';
 import { CreateLinkResourceDto } from './dto/create-link-resource.dto';
 import { UploadResourceDto } from './dto/upload-resource.dto';
+import { UpdateResourceDto } from './dto/update-resource.dto';
 
 @Controller('courses/:courseId/modules/:moduleId/lessons/:lessonId/resources')
 @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -49,7 +51,7 @@ export class ResourceController {
     FileInterceptor('file', {
       storage: memoryStorage(),
       // El límite real se aplica dinámicamente porque depende de config,
-      // pero @UseInterceptors se evalúa en tiempo de arranque (no puede
+      // pero @UseInterceptors se evalúa en tiempo de inicio (no puede
       // leer ConfigService todavía) — por eso se fija un techo generoso
       // aquí (500MB) y el límite configurable de verdad se revisa a mano
       // dentro del método (ver el chequeo de "file.size" más abajo).
@@ -105,6 +107,18 @@ export class ResourceController {
     @Param('id') id: string,
   ) {
     return this.resourceService.getDownloadUrl(courseId, moduleId, lessonId, id);
+  }
+
+  @RequirePermission('resource', 'edit')
+  @Patch(':id')
+  update(
+    @Param('courseId') courseId: string,
+    @Param('moduleId') moduleId: string,
+    @Param('lessonId') lessonId: string,
+    @Param('id') id: string,
+    @Body() dto: UpdateResourceDto,
+  ) {
+    return this.resourceService.update(courseId, moduleId, lessonId, id, dto);
   }
 
   @RequirePermission('resource', 'delete')

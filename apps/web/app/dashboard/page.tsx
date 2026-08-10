@@ -20,6 +20,7 @@
 //   perfecto para esta primera pantalla de prueba.
 // ============================================================================
 
+import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
 
@@ -53,7 +54,7 @@ export default async function DashboardPage() {
       <div className="flex flex-1 items-center justify-center p-8">
         <p className="text-red-600">
           El backend respondio {response.status} al pedir /auth/me. ¿Esta
-          corriendo "npm run dev" dentro de apps/api?
+          corriendo &quot;npm run dev&quot; dentro de apps/api?
         </p>
       </div>
     );
@@ -72,9 +73,9 @@ export default async function DashboardPage() {
       <pre className="w-full max-w-lg overflow-auto rounded-lg bg-zinc-100 p-4 text-sm dark:bg-zinc-900">
         {JSON.stringify(user, null, 2)}
       </pre>
-      <a href="/" className="text-sm underline text-zinc-500">
+      <Link href="/" className="text-sm underline text-zinc-500">
         Volver al inicio
-      </a>
+      </Link>
     </div>
   );
 }

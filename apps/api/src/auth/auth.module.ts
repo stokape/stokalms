@@ -15,6 +15,7 @@ import { AuthService } from './auth.service';
 import { JwtStrategy } from './jwt.strategy';
 import { PlatformJwtStrategy } from './platform-jwt.strategy';
 import { PlatformAdminGuard } from './platform-admin.guard';
+import { KeycloakAdminService } from './keycloak-admin.service';
 import { TenantModule } from '../common/tenant/tenant.module';
 
 @Module({
@@ -22,11 +23,13 @@ import { TenantModule } from '../common/tenant/tenant.module';
   // saber a que tenant esta iniciando sesion la persona (ver auth.service.ts).
   imports: [PassportModule.register({ defaultStrategy: 'jwt' }), TenantModule],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, PlatformJwtStrategy, PlatformAdminGuard],
+  providers: [AuthService, JwtStrategy, PlatformJwtStrategy, PlatformAdminGuard, KeycloakAdminService],
   // Se exporta AuthService porque el motor de permisos (Casbin, proximo
   // paso) tambien necesita, en algunos flujos, resolver datos del usuario
   // autenticado. PlatformAdminGuard se exporta para que el modulo de
-  // solicitudes de alta (tenant-registration/) pueda protegerse con el.
-  exports: [AuthService, PlatformAdminGuard],
+  // solicitudes de alta (tenant-registration/) pueda protegerse con el, y
+  // KeycloakAdminService para que ESE MISMO modulo pueda crear la cuenta
+  // de Keycloak de cada institucion nueva al aprobarla.
+  exports: [AuthService, PlatformAdminGuard, KeycloakAdminService],
 })
 export class AuthModule {}

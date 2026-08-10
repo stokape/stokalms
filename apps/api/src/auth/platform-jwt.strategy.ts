@@ -56,7 +56,7 @@ export class PlatformJwtStrategy extends PassportStrategy(Strategy, 'platform-jw
     if (!email) {
       // No debería pasar nunca (Keycloak siempre manda alguno de los dos),
       // pero sin email no hay forma de chequear la lista de administradores
-      // de plataforma — más vale cortar acá con un mensaje claro.
+      // de plataforma — más vale cortar aquí con un mensaje claro.
       throw new UnauthorizedException('El token no incluye un email ni un nombre de usuario utilizable.');
     }
     return { email: email.toLowerCase() };

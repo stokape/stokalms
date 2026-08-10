@@ -14,8 +14,18 @@
 
 export function ErrorBanner({ message }: { message: string }) {
   return (
-    <p className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">
-      {message}
-    </p>
+    <div className="flex items-start gap-3 rounded-xl border border-danger/20 bg-danger-bg px-4 py-3 text-sm text-danger">
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={1.75}
+        className="mt-0.5 h-5 w-5 shrink-0"
+      >
+        <circle cx="12" cy="12" r="9" />
+        <path d="M12 8v5M12 16h.01" strokeLinecap="round" />
+      </svg>
+      <p>{message}</p>
+    </div>
   );
 }

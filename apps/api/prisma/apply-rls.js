@@ -52,6 +52,25 @@ async function main() {
     console.log('[apply-rls] Aplicando prisma/rls-policies.sql...');
     await client.query(sql);
 
+    // rls-policies.sql crea el rol "stoka_app" con "IF NOT EXISTS" (para
+    // poder correr este script varias veces sin fallar) y una contraseña de
+    // ejemplo fija ("stoka_app_dev_password") — perfectamente pública en el
+    // repo, jamas debe quedar activa fuera de un entorno de desarrollo. Este
+    // paso APARTE reconcilia la contraseña real cada vez que se corre el
+    // script (tanto si el rol se acaba de crear como si ya existia de
+    // antes), leyendo RUNTIME_DB_PASSWORD del entorno — en desarrollo, sin
+    // esa variable definida, cae de vuelta a la misma de siempre.
+    // "ALTER ROLE ... PASSWORD" es una sentencia de DDL — Postgres no
+    // acepta un parametro ($1) ahi (solo en SELECT/INSERT/UPDATE/DELETE
+    // normales), asi que se interpola el valor a mano, escapando comillas
+    // simples al estilo SQL estandar (duplicandolas) — la unica forma en la
+    // que este texto podria llevar una, si alguien la eligio a mano en vez
+    // de generar la contraseña con "openssl rand" como se sugiere en
+    // .env.production.example.
+    const runtimePassword = process.env.RUNTIME_DB_PASSWORD ?? 'stoka_app_dev_password';
+    const escapedPassword = runtimePassword.replace(/'/g, "''");
+    await client.query(`ALTER ROLE stoka_app WITH PASSWORD '${escapedPassword}'`);
+
     console.log('[apply-rls] Row-Level Security aplicada correctamente.');
   } finally {
     await client.end();

@@ -5,7 +5,7 @@
 //
 // POR QUE SE CONECTA CON EL USUARIO ADMINISTRADOR (DATABASE_URL) Y NO CON EL
 // RESTRINGIDO (RUNTIME_DATABASE_URL): sembrar roles/permisos DEL SISTEMA
-// (tenant_id = null) y crear el primer tenant son operaciones de arranque de
+// (tenant_id = null) y crear el primer tenant son operaciones de inicio de
 // la plataforma, no acciones de un tenant ya existente — no hay todavia
 // ningun "tenant activo" que fijar para Row-Level Security (ver
 // rls-policies.sql). Es el mismo tipo de operacion que una migracion:
@@ -42,7 +42,26 @@ const PERMISSIONS = [
   ['certificate', 'view'], ['certificate', 'view_own'], ['certificate', 'issue'], ['certificate', 'revoke'],
   ['certificate_template', 'view'], ['certificate_template', 'create'], ['certificate_template', 'edit'], ['certificate_template', 'delete'],
   ['attendance', 'view'], ['attendance', 'create'], ['attendance', 'edit'],
+  ['student_note', 'view'], ['student_note', 'create'], ['student_note', 'edit'], ['student_note', 'delete'],
+  ['enrollment_attachment', 'view'], ['enrollment_attachment', 'create'],
+  ['user_profile', 'edit'],
+  ['student_progress', 'view'],
   ['role', 'view'], ['role', 'create'], ['role', 'edit'], ['role', 'delete'], ['role', 'assign'],
+  // Panel (ver dashboard.controller.ts) — "view" alcanza para los widgets
+  // basicos; los widgets "empresariales" (mas ampios) se gatean aparte con
+  // "tenant:edit" (ya exclusivo de Super Admin/Administrador de entidad),
+  // no con un permiso nuevo — mismo criterio que mantenimiento/dominios.
+  ['dashboard', 'view'],
+  // Reportes (asistencia, notas, avance de matricula) — ver reports.controller.ts.
+  ['report', 'view'], ['report', 'export'],
+  // Cohortes (ver cohort.controller.ts) — agrupar alumnos para matricular y
+  // reportar en bloque.
+  ['cohort', 'view'], ['cohort', 'create'], ['cohort', 'edit'], ['cohort', 'delete'], ['cohort', 'assign'],
+  // Auditoria (ver security.controller.ts) — "seguridad avanzada" (plan
+  // Enterprise). Solo lo tienen Super Admin/Administrador de entidad (via
+  // ALL_PERMISSIONS mas abajo): ningun otro rol lo tiene explicito, mismo
+  // criterio que "tenant:edit".
+  ['audit', 'view'], ['audit', 'export'],
 ];
 
 // Atajo para no repetir "todos los permisos" al armar Super Admin / Admin
@@ -64,16 +83,63 @@ const SYSTEM_ROLES = [
       ['course', 'view'], ['course', 'create'], ['course', 'edit'], ['course', 'delete'],
       ['section', 'view'], ['section', 'create'], ['section', 'edit'], ['section', 'delete'],
       ['enrollment', 'view'], ['enrollment', 'create'], ['enrollment', 'delete'], ['enrollment', 'bulk_import'],
+      // Sustento (archivo de respaldo) al cambiar el estado de una
+      // matrícula — ver enrollment-attachment.controller.ts.
+      ['enrollment_attachment', 'view'], ['enrollment_attachment', 'create'],
       ['gradebook_category', 'view'],
-      ['module', 'view'], ['lesson', 'view'],
+      // Contenido de un curso: a diferencia del diseño original (solo
+      // "view", contenido gestionado exclusivamente por el Docente), el
+      // Coordinador ahora también puede crear/editar/borrar módulos,
+      // lecciones y recursos — pensado como CONTINGENCIA para dar de alta
+      // un curso completo (módulos, clases, material) incluso antes de
+      // que haya un Docente asignado, o si el Docente todavía no cargó
+      // nada. Sigue sin poder tocar Evaluaciones (eso es exclusivo del
+      // Docente, ver "assessment" — no está en esta lista a propósito).
+      ['module', 'view'], ['module', 'create'], ['module', 'edit'], ['module', 'delete'],
+      ['lesson', 'view'], ['lesson', 'create'], ['lesson', 'edit'], ['lesson', 'delete'],
+      ['resource', 'view'], ['resource', 'create'], ['resource', 'edit'], ['resource', 'delete'],
       ['grade', 'view'], ['certificate', 'view'], ['certificate', 'issue'], ['certificate', 'revoke'],
       ['certificate_template', 'view'], ['certificate_template', 'create'], ['certificate_template', 'edit'], ['certificate_template', 'delete'],
+      // Editar los datos de contacto/residencia de un alumno (no los
+      // propios — eso ya lo cubre "Mi perfil" para cualquier rol) — ver
+      // user-management/profile-edit.controller.ts.
+      ['user_profile', 'edit'],
+      // Ver el registro de asistencia y el progreso de cada alumno
+      // (lecciones vistas, evaluaciones rendidas, asistencia, nota
+      // parcial) — ver academic-progress módulo. Sin "attendance:create":
+      // sigue sin poder TOMAR asistencia, solo verla (eso es del Docente).
+      ['attendance', 'view'],
+      ['student_progress', 'view'],
+      // Panel y reportes (ver dashboard.controller.ts, reports.controller.ts)
+      // — mismo alcance de tenant que ya tiene para notas/asistencia arriba.
+      ['dashboard', 'view'],
+      ['report', 'view'], ['report', 'export'],
+      // Cohortes: puede VER y ASIGNAR alumnos a una cohorte existente (para
+      // matricular en bloque) pero no crear/editar/borrar la cohorte en si
+      // — eso es una decision estructural de la institucion, reservada a
+      // Administrador de entidad/Super Admin (mismo criterio que roles).
+      ['cohort', 'view'], ['cohort', 'assign'],
     ],
   ],
   [
     'Docente',
     [
       ['course', 'view'],
+      // "section:view" (sin create/edit/delete): sin esto no puede ni
+      // siquiera LLEGAR a la pantalla de matriculados de una seccion (ver
+      // cursos/[courseId]/page.tsx, frontend) — detectado probando de
+      // verdad con el usuario de prueba "docente@stoka-lms.test": sin este
+      // permiso, la lista de secciones del curso queda oculta y toda la
+      // asistencia/anotaciones/certificados de este rol son inalcanzables.
+      ['section', 'view'],
+      // "enrollment:view" (sin create/delete): el Docente puede VER quien
+      // esta matriculado en sus secciones (para tomar asistencia, dejar
+      // anotaciones, ver certificados) pero matricular/retirar alumnos
+      // sigue siendo trabajo del Coordinador académico — ver la nota en
+      // secciones/[sectionId]/page.tsx (frontend) sobre por que esos
+      // formularios se ocultan para este rol aunque la pantalla sea
+      // compartida.
+      ['enrollment', 'view'],
       ['module', 'view'], ['module', 'create'], ['module', 'edit'], ['module', 'delete'],
       ['lesson', 'view'], ['lesson', 'create'], ['lesson', 'edit'], ['lesson', 'delete'],
       ['resource', 'view'], ['resource', 'create'], ['resource', 'edit'], ['resource', 'delete'],
@@ -82,8 +148,18 @@ const SYSTEM_ROLES = [
       ['submission', 'view'], ['submission', 'grade'],
       ['grade', 'view'], ['grade', 'edit'], ['grade', 'publish'],
       ['attendance', 'view'], ['attendance', 'create'], ['attendance', 'edit'],
-      ['certificate', 'view'], ['certificate', 'issue'],
+      // El Docente NO emite certificados el mismo (eso quedo en
+      // Coordinador/Admin, ver ["certificate","issue"] mas arriba en esos
+      // roles) — solo necesita VER cuales de sus alumnos ya lo obtuvieron.
+      ['certificate', 'view'],
       ['certificate_template', 'view'],
+      ['student_note', 'view'], ['student_note', 'create'], ['student_note', 'edit'], ['student_note', 'delete'],
+      // Panel y reportes — mismo alcance de tenant que ya tiene para
+      // notas/asistencia de arriba (ver la nota en Coordinador académico
+      // sobre por que no hay "solo mis secciones": ese recorte no existe
+      // hoy en ningun otro permiso del Docente tampoco).
+      ['dashboard', 'view'],
+      ['report', 'view'], ['report', 'export'],
     ],
   ],
   [
@@ -105,22 +181,34 @@ const SYSTEM_ROLES = [
     [
       ['course', 'view'], ['term', 'view'], ['enrollment', 'view'], ['grade', 'view'],
       ['attendance', 'view'], ['certificate', 'view'],
+      // Ve todo, no cambia nada — panel y reportes en modo lectura encajan
+      // exactamente con el proposito de este rol.
+      ['dashboard', 'view'],
+      ['report', 'view'], ['report', 'export'],
     ],
   ],
 ];
 
 // ----------------------------------------------------------------------------
 // Tenant de DESARROLLO para poder probar login, matricula, etc. de punta a
-// punta sin tener que dar de alta una institucion real todavia. Se registran
-// DOS dominios apuntando al mismo tenant: "localhost" (para poder probar con
-// curl/Postman sin cabeceras especiales) y "sanmartin.localhost" (para
-// simular el caso real de subdominio propio, ver
-// docs/architecture/01-arquitectura-alto-nivel.md, seccion 1.4).
+// punta sin tener que dar de alta una institucion real todavia. Su dominio
+// es "sanmartin.localhost" -- UN SUBDOMINIO, nunca el dominio raiz desnudo
+// ("localhost") -- para que la topologia de desarrollo sea la MISMA que en
+// produccion: el dominio raiz (ver PLATFORM_ROOT_DOMAIN) siempre muestra la
+// landing de LA PLATAFORMA (ver PlatformLanding.tsx), nunca la de una
+// institucion en particular. Antes este tenant tambien reclamaba "localhost"
+// a secas, lo que tapaba la landing real en desarrollo y fue la causa de
+// bastante confusion probando el flujo "Iniciar sesion -> /entrar" (¿cual es
+// el tenant si YA estoy parado en uno?). Se puede seguir entrando a este
+// tenant escribiendo "sanmartin" en /entrar, o visitando
+// "http://sanmartin.localhost:3000" directo -- los navegadores modernos
+// resuelven cualquier "*.localhost" solos (RFC 6761), sin tocar el archivo
+// de hosts (ver docs/architecture/01-arquitectura-alto-nivel.md, seccion 1.4).
 // ----------------------------------------------------------------------------
 const DEV_TENANT = {
   id: '00000000-0000-0000-0000-000000000001',
   name: 'Instituto San Martín (desarrollo)',
-  domains: ['localhost', 'sanmartin.localhost'],
+  domains: ['sanmartin.localhost'],
 };
 
 async function main() {
@@ -181,12 +269,29 @@ async function main() {
   });
 
   for (const domain of DEV_TENANT.domains) {
+    const isPrimary = domain === DEV_TENANT.domains[0];
     await prisma.tenantDomain.upsert({
       where: { domain },
-      update: { tenantId: DEV_TENANT.id },
-      create: { domain, tenantId: DEV_TENANT.id, isPrimary: domain === DEV_TENANT.domains[0] },
+      // "isPrimary" tambien va en "update", no solo en "create": una fila
+      // que YA existia (como "sanmartin.localhost", que antes era la
+      // secundaria mientras "localhost" era la principal) tiene que poder
+      // volverse principal si la lista de arriba cambia -- si no, el
+      // dominio de este tenant queda sin ninguna fila "principal", y
+      // "/dominios" (autoservicio, ver tenant-domain.service.ts,
+      // "removeDomain") dejaria borrarla por error al no detectarla como
+      // la unica forma de entrar a esta institucion.
+      update: { tenantId: DEV_TENANT.id, isPrimary },
+      create: { domain, tenantId: DEV_TENANT.id, isPrimary },
     });
   }
+  // Mismo patron "declarativo" que SYSTEM_ROLES mas arriba: si un dominio se
+  // QUITA de DEV_TENANT.domains (como paso con "localhost" a secas, ver la
+  // nota de arriba), hay que borrar tambien su fila vieja -- si no, se queda
+  // reclamando ese dominio para siempre y la landing de la plataforma nunca
+  // se ve en "http://localhost:3000".
+  await prisma.tenantDomain.deleteMany({
+    where: { tenantId: DEV_TENANT.id, domain: { notIn: DEV_TENANT.domains } },
+  });
 
   console.log('[seed] Listo.');
 }
