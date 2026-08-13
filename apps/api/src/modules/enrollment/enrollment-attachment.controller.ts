@@ -22,6 +22,7 @@ import { PermissionsGuard } from '../../rbac/permissions.guard';
 import { RequirePermission } from '../../rbac/require-permission.decorator';
 import { CurrentUser } from '../../auth/current-user.decorator';
 import { AuthenticatedUser } from '../../auth/auth.service';
+import { ATTACHMENT_MIME_TYPES, mimeAllowlistFilter } from '../../common/storage/file-validation';
 import { EnrollmentAttachmentService } from './enrollment-attachment.service';
 
 @Controller('courses/:courseId/sections/:sectionId/enrollments/:enrollmentId/attachments')
@@ -45,6 +46,7 @@ export class EnrollmentAttachmentController {
     FileInterceptor('file', {
       storage: memoryStorage(),
       limits: { fileSize: 20 * 1024 * 1024 },
+      fileFilter: mimeAllowlistFilter(ATTACHMENT_MIME_TYPES),
     }),
   )
   async upload(

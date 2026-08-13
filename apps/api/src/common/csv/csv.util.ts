@@ -7,15 +7,29 @@
 
 import type { Response } from 'express';
 
+// Neutraliza "CSV Injection" / "Formula Injection" (CWE-1236, ver auditoria
+// de seguridad F-01): si una celda empieza con "=", "+", "-", "@", tab o
+// retorno de carro, Excel/LibreOffice/Google Sheets la interpretan como una
+// FORMULA al abrir el archivo (ej. un nombre "=HYPERLINK(...)" cargado por
+// cualquier persona via "Mi perfil" terminaria ejecutandose en la maquina
+// de quien exporta el reporte, tipicamente un Coordinador/Administrador).
+// Anteponer una comilla simple es la mitigacion estandar (OWASP CSV
+// Injection Cheat Sheet): las hojas de calculo la interpretan como "fuerza
+// texto literal", igual que si alguien la tipeara a mano antes del "=".
+function neutralizeFormula(str: string): string {
+  return /^[=+\-@\t\r]/.test(str) ? `'${str}` : str;
+}
+
 // Escapa un valor para CSV (RFC 4180): si contiene coma, comilla o salto de
 // linea, se envuelve entre comillas dobles y cualquier comilla interna se
 // duplica. Cualquier otro valor se manda tal cual, sin comillas de mas.
 function escapeCsvValue(value: unknown): string {
   const str = value === null || value === undefined ? '' : String(value);
-  if (/[",\n]/.test(str)) {
-    return `"${str.replace(/"/g, '""')}"`;
+  const safe = neutralizeFormula(str);
+  if (/[",\n]/.test(safe)) {
+    return `"${safe.replace(/"/g, '""')}"`;
   }
-  return str;
+  return safe;
 }
 
 // "columns" define el orden Y el encabezado (la clave del objeto puede ser

@@ -96,6 +96,7 @@ export default async function EditarPerfilDeAlumnoPage({
           <input
             name="firstName"
             type="text"
+            maxLength={120}
             defaultValue={profile.firstName ?? ''}
             className="mt-1 w-full rounded border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
           />
@@ -105,6 +106,7 @@ export default async function EditarPerfilDeAlumnoPage({
           <input
             name="lastName"
             type="text"
+            maxLength={120}
             defaultValue={profile.lastName ?? ''}
             className="mt-1 w-full rounded border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
           />
@@ -113,7 +115,8 @@ export default async function EditarPerfilDeAlumnoPage({
           {t.phone}
           <input
             name="phone"
-            type="text"
+            type="tel"
+            maxLength={30}
             defaultValue={profile.phone ?? ''}
             className="mt-1 w-full rounded border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
           />
@@ -123,6 +126,7 @@ export default async function EditarPerfilDeAlumnoPage({
           <input
             name="address"
             type="text"
+            maxLength={300}
             defaultValue={profile.address ?? ''}
             className="mt-1 w-full rounded border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
           />
@@ -132,6 +136,7 @@ export default async function EditarPerfilDeAlumnoPage({
           <input
             name="department"
             type="text"
+            maxLength={120}
             defaultValue={profile.department ?? ''}
             className="mt-1 w-full rounded border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
           />
@@ -141,6 +146,7 @@ export default async function EditarPerfilDeAlumnoPage({
           <input
             name="province"
             type="text"
+            maxLength={120}
             defaultValue={profile.province ?? ''}
             className="mt-1 w-full rounded border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
           />
@@ -150,6 +156,7 @@ export default async function EditarPerfilDeAlumnoPage({
           <input
             name="district"
             type="text"
+            maxLength={120}
             defaultValue={profile.district ?? ''}
             className="mt-1 w-full rounded border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
           />

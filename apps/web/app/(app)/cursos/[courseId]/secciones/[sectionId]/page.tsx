@@ -14,10 +14,12 @@
 import Link from 'next/link';
 import { requireAccessToken, apiFetch, toErrorMessage, getCoursePermissions, can } from '@/lib/api';
 import { ErrorBanner } from '@/components/ErrorBanner';
+import { SuccessBanner } from '@/components/SuccessBanner';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { ConfirmSubmitButton } from '@/components/ui/ConfirmSubmitButton';
 import { LinkButton } from '@/components/ui/LinkButton';
 import { fieldClasses, fileInputClasses } from '@/components/ui/field-styles';
 import { getLocale, type Locale } from '@/lib/locale';
@@ -78,6 +80,7 @@ const TEXT = {
     markCompleted: 'Marcar completado',
     supportTitle: 'Sustento (opcional): carta de retiro, justificativo, etc.',
     withdraw: 'Retirar',
+    withdrawConfirm: (name: string) => `¿Retirar a ${name} de esta sección?`,
     enrollStudent: 'Matricular estudiante',
     enrollHelp: 'Si el email todavía no tiene cuenta en la plataforma, se crea automáticamente (con el nombre que pongas abajo); cuando esa persona inicie sesión por primera vez, va a encontrar esta matrícula ya lista.',
     emailPlaceholder: 'Email del estudiante',
@@ -117,6 +120,7 @@ const TEXT = {
     markCompleted: 'Mark completed',
     supportTitle: 'Supporting document (optional): withdrawal letter, justification, etc.',
     withdraw: 'Withdraw',
+    withdrawConfirm: (name: string) => `Withdraw ${name} from this section?`,
     enrollStudent: 'Enroll a student',
     enrollHelp: "If the email doesn't have an account on the platform yet, it's created automatically (with the name you enter below); when that person logs in for the first time, they'll find this enrollment already set up.",
     emailPlaceholder: "Student's email",
@@ -203,7 +207,7 @@ export default async function SectionDetailPage({
       )}
 
       {bulkOk !== undefined && (
-        <Card className="mb-6 border-success/30 bg-success-bg text-sm text-success">
+        <SuccessBanner>
           <p>
             {t.bulkOk(
               Number(bulkOk),
@@ -221,11 +225,11 @@ export default async function SectionDetailPage({
               ))}
             </ul>
           )}
-        </Card>
+        </SuccessBanner>
       )}
 
       {importOk !== undefined && (
-        <Card className="mb-6 border-success/30 bg-success-bg text-sm text-success">
+        <SuccessBanner>
           <p>
             {t.importOk(
               Number(importOk),
@@ -243,7 +247,7 @@ export default async function SectionDetailPage({
               ))}
             </ul>
           )}
-        </Card>
+        </SuccessBanner>
       )}
 
       <h2 className="mb-3 text-lg font-medium">{t.enrolledStudents}</h2>
@@ -331,9 +335,12 @@ export default async function SectionDetailPage({
                               title={t.supportTitle}
                               className={'w-40 ' + fileInputClasses}
                             />
-                            <button type="submit" className="text-xs font-medium text-danger hover:underline">
+                            <ConfirmSubmitButton
+                              className="text-xs font-medium text-danger hover:underline"
+                              confirmMessage={t.withdrawConfirm(e.student.fullName)}
+                            >
                               {t.withdraw}
-                            </button>
+                            </ConfirmSubmitButton>
                           </form>
                         )}
                       </div>
@@ -362,6 +369,7 @@ export default async function SectionDetailPage({
               <input
                 name="fullName"
                 type="text"
+                maxLength={200}
                 placeholder={t.fullNamePlaceholder}
                 className={fieldClasses}
               />

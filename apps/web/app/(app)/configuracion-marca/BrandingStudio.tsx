@@ -218,6 +218,7 @@ export function BrandingStudio({
               label={t.institutionName}
               name="name"
               required
+              maxLength={200}
               value={name}
               onChange={(e) => setName(e.target.value)}
             />

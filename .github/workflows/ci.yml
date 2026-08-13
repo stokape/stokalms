@@ -1,0 +1,64 @@
+# ============================================================================
+# ci.yml — Gate minimo antes de mergear a "main" (ver auditoria de
+# seguridad, hallazgo SECURITY-05: hasta ahora este repositorio no tenia
+# NINGUN pipeline — un commit con un error de lint, un typecheck roto, o una
+# dependencia con una CVE nueva podia llegar a produccion sin que nada lo
+# frenara).
+#
+# Deliberadamente ACOTADO por ahora: lint + typecheck/build + tests
+# unitarios + auditoria de dependencias. NO levanta Postgres/Keycloak/MinIO
+# (no hay pruebas de integracion/e2e todavia, ver jest.config.js en
+# apps/api) — el dia que existan, van en un job aparte con "services:" de
+# GitHub Actions para esa infraestructura, sin tocar este job.
+# ============================================================================
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Si se empuja un commit nuevo mientras el anterior todavia esta corriendo
+# en el mismo PR, cancela el anterior — no tiene sentido terminar de validar
+# un commit que ya quedo obsoleto.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Instalar dependencias (monorepo completo)
+        run: npm ci
+
+      # "prisma generate" no necesita conexion a una base de datos (solo lee
+      # schema.prisma) — pero @prisma/client no existe hasta que esto corre
+      # una vez, y "nest build"/tsc de apps/api fallarian sin el.
+      - name: Generar cliente de Prisma
+        run: npm run prisma:generate --workspace=@stoka/api
+
+      - name: Lint (todas las apps)
+        run: npm run lint
+
+      - name: Build (todas las apps)
+        run: npm run build
+
+      - name: Tests unitarios
+        run: npm run test
+
+      # "--audit-level=high": vulnerabilidades MODERADAS no bloquean el
+      # merge (hay varias transitivas conocidas sin fix directo todavia,
+      # ver la auditoria de seguridad) — pero una ALTA o CRITICA nueva si
+      # corta el pipeline, en vez de descubrirse recien en produccion.
+      - name: Auditoria de dependencias (solo produccion, HIGH+)
+        run: npm audit --omit=dev --audit-level=high

@@ -7,6 +7,7 @@
 
 import { requireAccessToken, apiFetch, toErrorMessage } from '@/lib/api';
 import { ErrorBanner } from '@/components/ErrorBanner';
+import { SuccessBanner } from '@/components/SuccessBanner';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -88,7 +89,7 @@ export default async function AutomatizacionesPage({
           <ErrorBanner message={decodeURIComponent(error)} />
         </div>
       )}
-      {saved && <Card className="mb-6 border-success/30 bg-success-bg text-sm text-success">{t.done}</Card>}
+      {saved && <SuccessBanner>{t.done}</SuccessBanner>}
 
       <Card>
         <form action={guardarAutomatizaciones} className="flex flex-col gap-6">

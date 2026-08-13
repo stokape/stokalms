@@ -11,6 +11,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { TenantContextService } from '../../common/tenant/tenant-context.service';
 import { CasbinService } from '../../rbac/casbin.service';
 import { AuditService } from '../../common/audit/audit.service';
+import { NotificationService } from '../notifications/notification.service';
 import { AssignRoleDto } from './dto/assign-role.dto';
 import { EditUserProfileDto } from './dto/edit-user-profile.dto';
 import { BulkAssignRoleDto } from './dto/bulk-assign-role.dto';
@@ -22,6 +23,7 @@ export class UserService {
     private readonly tenantContext: TenantContextService,
     private readonly casbin: CasbinService,
     private readonly auditService: AuditService,
+    private readonly notificationService: NotificationService,
   ) {}
 
   async findAll() {
@@ -69,7 +71,7 @@ export class UserService {
   async assignRole(userTenantId: string, dto: AssignRoleDto, actorUserId?: string) {
     const tenantId = this.tenantContext.requireTenantId();
 
-    await this.prisma.withTenant(tenantId, async (tx) => {
+    const { roleName, courseTitle } = await this.prisma.withTenant(tenantId, async (tx) => {
       const userTenant = await tx.userTenant.findUnique({ where: { id: userTenantId } });
       if (!userTenant) {
         throw new NotFoundException(`No existe la membresia "${userTenantId}" en este tenant.`);
@@ -80,11 +82,13 @@ export class UserService {
         throw new NotFoundException(`No existe el rol "${dto.roleId}" disponible para este tenant.`);
       }
 
+      let courseTitle: string | undefined;
       if (dto.scopeCourseId) {
         const course = await tx.course.findUnique({ where: { id: dto.scopeCourseId } });
         if (!course) {
           throw new NotFoundException(`No existe el curso "${dto.scopeCourseId}" en este tenant.`);
         }
+        courseTitle = course.title;
       }
 
       await tx.userRole.create({
@@ -95,6 +99,8 @@ export class UserService {
           scopeCourseId: dto.scopeCourseId,
         },
       });
+
+      return { roleName: role.name, courseTitle };
     });
 
     // El rol asignado debe quedar VIGENTE de inmediato, sin esperar a que
@@ -105,6 +111,13 @@ export class UserService {
       userId: actorUserId,
       action: 'role.assigned',
       payload: { userTenantId, roleId: dto.roleId, scopeCourseId: dto.scopeCourseId ?? null },
+    });
+
+    await this.notificationService.notify(userTenantId, {
+      type: 'role_assigned',
+      title: `Se te asignó el rol "${roleName}"`,
+      body: courseTitle ? `Solo en el curso "${courseTitle}".` : undefined,
+      link: '/perfil',
     });
 
     return { assigned: true };
@@ -118,6 +131,10 @@ export class UserService {
   async bulkAssignRole(dto: BulkAssignRoleDto, actorUserId?: string) {
     const tenantId = this.tenantContext.requireTenantId();
     const results: Array<{ email: string; status: 'asignado' | 'ya_tenia' | 'error'; message?: string }> = [];
+    // Se notifica DESPUES de que la transaccion cierre (ver assignRole,
+    // mismo criterio) — juntar los pares aca evita abrir una transaccion
+    // nueva por fila mientras la de arriba todavia esta abierta.
+    const newlyAssigned: Array<{ userTenantId: string; roleName: string }> = [];
 
     await this.prisma.withTenant(tenantId, async (tx) => {
       for (const row of dto.rows) {
@@ -156,6 +173,7 @@ export class UserService {
             data: { tenantId, userTenantId: userTenant.id, roleId: row.roleId },
           });
           results.push({ email: row.email, status: 'asignado' });
+          newlyAssigned.push({ userTenantId: userTenant.id, roleName: role.name });
         } catch (err) {
           results.push({
             email: row.email,
@@ -181,6 +199,14 @@ export class UserService {
         errores: results.filter((r) => r.status === 'error').length,
       },
     });
+
+    for (const { userTenantId, roleName } of newlyAssigned) {
+      await this.notificationService.notify(userTenantId, {
+        type: 'role_assigned',
+        title: `Se te asignó el rol "${roleName}"`,
+        link: '/perfil',
+      });
+    }
 
     return { results };
   }

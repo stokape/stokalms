@@ -32,6 +32,7 @@ import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
 import { apiFetch, apiFetchPublic, can, type Permissions } from '@/lib/api';
 import { IdleSessionGuard } from '@/components/IdleSessionGuard';
+import { NotificationBell } from '@/components/NotificationBell';
 import { LocaleSwitcher } from '@/components/LocaleSwitcher';
 import { StokaWordmark, StokaMark } from '@/components/StokaLogo';
 import { StokaBrandingBadge } from '@/components/StokaBrandingBadge';
@@ -88,6 +89,17 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const permissions: Permissions = new Set(me?.permissions ?? []);
   const isStaff = can(permissions, 'enrollment', 'view') || can(permissions, 'enrollment', 'create');
 
+  // Mismo criterio "best effort" que "me"/"tenantInfo" arriba: si esto
+  // falla, la campana simplemente se ve sin pastilla — nunca motivo para
+  // bloquear el resto de la navegación.
+  let unreadNotifications = 0;
+  try {
+    const { count } = await apiFetch<{ count: number }>(session.accessToken, '/notifications/unread-count');
+    unreadNotifications = count;
+  } catch {
+    unreadNotifications = 0;
+  }
+
   // Modo mantenimiento (ver /mantenimiento y app/page.tsx): igual que en el
   // home publico, solo "tenant:edit" (Super Admin / Administrador de
   // entidad) puede seguir usando el resto de la app mientras esta prendido
@@ -141,7 +153,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <Link href="/cursos">
             <StokaWordmark markClassName="h-8 w-8" />
           </Link>
-          <LocaleSwitcher locale={locale} path="/cursos" />
+          <div className="flex items-center gap-2">
+            <NotificationBell count={unreadNotifications} label={t.nav.notifications} />
+            <LocaleSwitcher locale={locale} path="/cursos" />
+          </div>
         </div>
 
         <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
@@ -263,7 +278,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           </label>
           <StokaMark className="h-6 w-6" />
           <span className="text-sm font-semibold">Stoka LMS</span>
-          <span className="ml-auto">
+          <span className="ml-auto flex items-center gap-2">
+            <NotificationBell count={unreadNotifications} label={t.nav.notifications} />
             <LocaleSwitcher locale={locale} path="/cursos" />
           </span>
         </header>

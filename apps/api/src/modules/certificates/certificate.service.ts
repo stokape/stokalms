@@ -14,6 +14,7 @@ import { StorageService } from '../../common/storage/storage.service';
 import { CasbinService } from '../../rbac/casbin.service';
 import { AuthenticatedUser } from '../../auth/auth.service';
 import { AuditService } from '../../common/audit/audit.service';
+import { NotificationService } from '../notifications/notification.service';
 import { CertificateRendererService } from './certificate-renderer.service';
 import { IssueCertificateDto } from './dto/issue-certificate.dto';
 
@@ -27,6 +28,7 @@ export class CertificateService {
     private readonly casbin: CasbinService,
     private readonly configService: ConfigService,
     private readonly auditService: AuditService,
+    private readonly notificationService: NotificationService,
   ) {}
 
   // "actorUserId" ausente = lo emitio el sistema (ver
@@ -103,8 +105,14 @@ export class CertificateService {
     const issuedAt = new Date();
 
     const branding = (tenant?.branding as { logoKey?: string } | undefined) ?? {};
+    // "image/png" aca es un marcador de "esto viene del endpoint de subida
+    // de logo, que solo acepta imagenes" (ver tenant.controller.ts,
+    // IMAGE_UPLOAD_OPTIONS) — no se guarda el mimetype exacto del logo, y no
+    // hace falta: cualquier valor de la lista de "seguro para inline" evita
+    // que getPresignedDownloadUrl fuerce descarga, que es lo que este <img>
+    // dentro del PDF necesita para poder cargar el logo.
     const institutionLogoUrl = branding.logoKey
-      ? await this.storage.getPresignedDownloadUrl(branding.logoKey)
+      ? await this.storage.getPresignedDownloadUrl(branding.logoKey, 3600, 'image/png')
       : undefined;
 
     const pdfBuffer = await this.renderer.render(template.htmlTemplate, {
@@ -137,6 +145,12 @@ export class CertificateService {
       userId: actorUserId,
       action: 'certificate.issued',
       payload: { certificateId: certificate.id, enrollmentId, verificationCode },
+    });
+
+    await this.notificationService.notify(enrollment.userTenantId, {
+      type: 'certificate_issued',
+      title: `Tu certificado de "${enrollment.section.course.title}" ya está disponible`,
+      link: `/matriculas/${enrollmentId}/certificados`,
     });
 
     return this.toResponse(certificate);
@@ -246,25 +260,37 @@ export class CertificateService {
         },
       });
 
+      // Logo de la institucion para esta pantalla pública — mismo patron
+      // que "issue()" mas arriba (placeholders del PDF): "logoKey" nunca es
+      // una URL directa (el bucket no es publico, ver storage.service.ts),
+      // se resuelve a una URL firmada FRESCA en cada verificacion.
+      const branding = (certificate.tenant.branding as { logoKey?: string; hideStokaBranding?: boolean }) ?? {};
+      const institutionLogoUrl = branding.logoKey
+        ? await this.storage.getPresignedDownloadUrl(branding.logoKey, 3600, 'image/png')
+        : undefined;
+
       return {
         valid: !certificate.revoked,
         revoked: certificate.revoked,
         studentName: certificate.enrollment.userTenant.user.fullName,
         courseTitle: certificate.enrollment.section.course.title,
         institution: certificate.tenant.name,
+        institutionLogoUrl,
         issuedAt: certificate.issuedAt,
         // Ver update-tenant.dto.ts ("hideStokaBranding"): esta es la
         // pagina publica de verificacion, el lugar de mas visibilidad
         // fuera de la propia institucion para el sello "Hecho con
         // Stoka LMS" — quien lo desactivo en /configuracion-marca
         // tambien lo espera oculto aca.
-        hideStokaBranding: Boolean((certificate.tenant.branding as { hideStokaBranding?: boolean })?.hideStokaBranding),
+        hideStokaBranding: Boolean(branding.hideStokaBranding),
       };
     });
   }
 
   private async toResponse(certificate: { id: string; pdfUrl: string; [key: string]: unknown }) {
-    const downloadUrl = await this.storage.getPresignedDownloadUrl(certificate.pdfUrl);
+    // "application/pdf" es exacto aca (siempre se sube asi, ver "issue()"
+    // arriba) — se puede ver inline en el navegador.
+    const downloadUrl = await this.storage.getPresignedDownloadUrl(certificate.pdfUrl, 3600, 'application/pdf');
     return { ...certificate, downloadUrl };
   }
 

@@ -17,6 +17,7 @@ import { memoryStorage } from 'multer';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { CurrentUser } from '../../auth/current-user.decorator';
 import { AuthenticatedUser } from '../../auth/auth.service';
+import { IMAGE_MIME_TYPES, mimeAllowlistFilter } from '../../common/storage/file-validation';
 import { ProfileService } from './profile.service';
 
 @Controller('profile')
@@ -38,6 +39,7 @@ export class ProfileController {
       // cualquier foto real y evita que alguien suba, por error o a
       // proposito, un archivo enorme como "avatar".
       limits: { fileSize: 5 * 1024 * 1024 },
+      fileFilter: mimeAllowlistFilter(IMAGE_MIME_TYPES),
     }),
   )
   async updatePhoto(

@@ -16,6 +16,8 @@ import { requireAccessToken, apiFetch, getPermissions, can, toErrorMessage } fro
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Card } from '@/components/ui/Card';
+import { HorizontalBars } from '@/components/ui/charts/HorizontalBars';
+import { GroupedColumns } from '@/components/ui/charts/GroupedColumns';
 import { getLocale } from '@/lib/locale';
 
 const TEXT = {
@@ -37,6 +39,7 @@ const TEXT = {
     enrollmentTrend: 'Matrículas nuevas',
     last30: 'Últimos 30 días',
     previous30: '30 días anteriores',
+    lastUpdated: (time: string) => `Actualizado recién · ${time}`,
   },
   en: {
     title: 'Panel',
@@ -56,6 +59,7 @@ const TEXT = {
     enrollmentTrend: 'New enrollments',
     last30: 'Last 30 days',
     previous30: 'Previous 30 days',
+    lastUpdated: (time: string) => `Updated just now · ${time}`,
   },
 };
 
@@ -76,7 +80,15 @@ interface EnterpriseSummary {
 
 export default async function PanelPage() {
   const token = await requireAccessToken();
-  const t = TEXT[await getLocale()];
+  const locale = await getLocale();
+  const t = TEXT[locale];
+  // Esta pantalla se renderiza de nuevo en CADA visita (sin cache, ver
+  // apiFetch en lib/api.ts) — la hora de este render ES la hora real de
+  // los datos que se ven abajo, no hace falta guardar un timestamp aparte.
+  const updatedAt = new Date().toLocaleTimeString(locale === 'en' ? 'en-US' : 'es-PE', {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
   const permissions = await getPermissions(token);
   const canSeeEnterprise = can(permissions, 'tenant', 'edit');
 
@@ -98,7 +110,11 @@ export default async function PanelPage() {
 
   return (
     <div>
-      <PageHeader title={t.title} description={t.description} />
+      <PageHeader
+        title={t.title}
+        description={t.description}
+        actions={<p className="text-xs text-muted">{t.lastUpdated(updatedAt)}</p>}
+      />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <StatCard label={t.activeCourses} value={summary.activeCourses} />
@@ -121,16 +137,13 @@ export default async function PanelPage() {
               {enterprise.topCourses.length === 0 ? (
                 <p className="text-sm text-muted">{t.noCourses}</p>
               ) : (
-                <ul className="flex flex-col gap-2 text-sm">
-                  {enterprise.topCourses.map((c) => (
-                    <li key={c.sectionId} className="flex items-center justify-between gap-2">
-                      <span className="truncate">
-                        {c.courseTitle} <span className="text-muted">· {c.sectionName}</span>
-                      </span>
-                      <span className="shrink-0 font-medium">{c.activeEnrollments}</span>
-                    </li>
-                  ))}
-                </ul>
+                <HorizontalBars
+                  data={enterprise.topCourses.map((c) => ({
+                    key: c.sectionId,
+                    label: `${c.courseTitle} · ${c.sectionName}`,
+                    value: c.activeEnrollments,
+                  }))}
+                />
               )}
             </Card>
 
@@ -139,29 +152,22 @@ export default async function PanelPage() {
               {enterprise.cohortBreakdown.length === 0 ? (
                 <p className="text-sm text-muted">{t.noCohorts}</p>
               ) : (
-                <ul className="flex flex-col gap-2 text-sm">
-                  {enterprise.cohortBreakdown.map((c) => (
-                    <li key={c.cohortId} className="flex items-center justify-between gap-2">
-                      <span className="truncate">{c.name}</span>
-                      <span className="shrink-0 font-medium">{c.memberCount}</span>
-                    </li>
-                  ))}
-                </ul>
+                <HorizontalBars
+                  data={enterprise.cohortBreakdown.map((c) => ({ key: c.cohortId, label: c.name, value: c.memberCount }))}
+                />
               )}
             </Card>
 
             <Card>
               <h3 className="mb-3 text-sm font-semibold">{t.enrollmentTrend}</h3>
-              <div className="flex flex-col gap-3">
-                <div>
-                  <p className="font-display text-2xl font-semibold">{enterprise.enrollmentTrend.last30Days}</p>
-                  <p className="text-xs text-muted">{t.last30}</p>
-                </div>
-                <div>
-                  <p className="text-lg font-medium text-muted">{enterprise.enrollmentTrend.previous30Days}</p>
-                  <p className="text-xs text-muted">{t.previous30}</p>
-                </div>
-              </div>
+              <GroupedColumns
+                data={[
+                  { key: 'last30', category: t.last30, values: { count: enterprise.enrollmentTrend.last30Days } },
+                  { key: 'previous30', category: t.previous30, values: { count: enterprise.enrollmentTrend.previous30Days } },
+                ]}
+                series={[{ key: 'count', label: t.enrollmentTrend, color: 'var(--chart-1)' }]}
+                height={120}
+              />
             </Card>
           </div>
         </div>

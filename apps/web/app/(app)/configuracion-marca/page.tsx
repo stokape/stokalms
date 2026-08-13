@@ -15,8 +15,8 @@
 
 import { requireAccessToken, apiFetch, toErrorMessage } from '@/lib/api';
 import { ErrorBanner } from '@/components/ErrorBanner';
+import { SuccessBanner } from '@/components/SuccessBanner';
 import { PageHeader } from '@/components/ui/PageHeader';
-import { Card } from '@/components/ui/Card';
 import { getLocale } from '@/lib/locale';
 import { actualizarMarca, actualizarLogo, actualizarFondo, actualizarFavicon } from './actions';
 import { BrandingStudio } from './BrandingStudio';
@@ -85,7 +85,7 @@ export default async function ConfiguracionMarcaPage({
         </div>
       )}
       {saved && (
-        <Card className="mb-6 border-success/30 bg-success-bg text-sm text-success">{t.saved}</Card>
+        <SuccessBanner>{t.saved}</SuccessBanner>
       )}
 
       <BrandingStudio

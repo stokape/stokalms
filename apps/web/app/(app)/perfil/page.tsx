@@ -15,6 +15,7 @@
 
 import { requireAccessToken, apiFetch, toErrorMessage, getPermissions, can } from '@/lib/api';
 import { ErrorBanner } from '@/components/ErrorBanner';
+import { SuccessBanner } from '@/components/SuccessBanner';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -115,11 +116,7 @@ export default async function PerfilPage({
           <ErrorBanner message={decodeURIComponent(error)} />
         </div>
       )}
-      {ok && (
-        <Card className="mb-6 border-success/30 bg-success-bg text-sm text-success">
-          {t.updated}
-        </Card>
-      )}
+      {ok && <SuccessBanner>{t.updated}</SuccessBanner>}
 
       <Card className="mb-6 flex flex-wrap items-center gap-6">
         {profile.avatarUrl ? (
@@ -153,22 +150,23 @@ export default async function PerfilPage({
             action={actualizarMiPerfil.bind(null, profile.userTenantId)}
             className="grid max-w-xl grid-cols-1 gap-4 sm:grid-cols-2"
           >
-            <Field label={t.firstName} name="firstName" defaultValue={profile.firstName ?? ''} />
-            <Field label={t.lastName} name="lastName" defaultValue={profile.lastName ?? ''} />
+            <Field label={t.firstName} name="firstName" maxLength={120} defaultValue={profile.firstName ?? ''} />
+            <Field label={t.lastName} name="lastName" maxLength={120} defaultValue={profile.lastName ?? ''} />
             <div>
               <dt className="text-xs text-muted">{t.email}</dt>
               <dd className="mt-0.5">{profile.email}</dd>
             </div>
-            <Field label={t.phone} name="phone" defaultValue={profile.phone ?? ''} />
+            <Field label={t.phone} name="phone" type="tel" maxLength={30} defaultValue={profile.phone ?? ''} />
             <Field
               label={t.address}
               name="address"
+              maxLength={300}
               defaultValue={profile.address ?? ''}
               className="sm:col-span-2"
             />
-            <Field label={t.department} name="department" defaultValue={profile.department ?? ''} />
-            <Field label={t.province} name="province" defaultValue={profile.province ?? ''} />
-            <Field label={t.district} name="district" defaultValue={profile.district ?? ''} />
+            <Field label={t.department} name="department" maxLength={120} defaultValue={profile.department ?? ''} />
+            <Field label={t.province} name="province" maxLength={120} defaultValue={profile.province ?? ''} />
+            <Field label={t.district} name="district" maxLength={120} defaultValue={profile.district ?? ''} />
             <div>
               <dt className="text-xs text-muted">{t.enrolledOn}</dt>
               <dd className="mt-0.5">

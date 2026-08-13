@@ -10,10 +10,12 @@
 
 import { requireAccessToken, apiFetch, toErrorMessage } from '@/lib/api';
 import { ErrorBanner } from '@/components/ErrorBanner';
+import { SuccessBanner } from '@/components/SuccessBanner';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { ConfirmSubmitButton } from '@/components/ui/ConfirmSubmitButton';
 import { fieldClasses } from '@/components/ui/field-styles';
 import { getLocale } from '@/lib/locale';
 import { agregarDominio, verificarDominio, eliminarDominio } from './actions';
@@ -38,7 +40,9 @@ const TEXT = {
     value: 'Valor',
     verifyNow: 'Verificar ahora',
     delete: 'Eliminar',
+    deleteConfirm: (domain: string) => `¿Eliminar el dominio "${domain}"?`,
     placeholder: 'campus.institutosanmartin.edu.pe',
+    patternHint: 'Escribe solo el dominio, sin "http://" ni rutas (ej. campus.institutosanmartin.edu.pe).',
     addDomain: 'Agregar dominio',
   },
   en: {
@@ -60,7 +64,9 @@ const TEXT = {
     value: 'Value',
     verifyNow: 'Verify now',
     delete: 'Delete',
+    deleteConfirm: (domain: string) => `Delete the "${domain}" domain?`,
     placeholder: 'campus.institutosanmartin.edu.pe',
+    patternHint: 'Enter just the domain, without "http://" or a path (e.g. campus.institutosanmartin.edu.pe).',
     addDomain: 'Add domain',
   },
 };
@@ -99,7 +105,7 @@ export default async function DominiosPage({
         </div>
       )}
       {saved && (
-        <Card className="mb-6 border-success/30 bg-success-bg text-sm text-success">{t.done}</Card>
+        <SuccessBanner>{t.done}</SuccessBanner>
       )}
 
       <Card>
@@ -148,12 +154,12 @@ export default async function DominiosPage({
                     )}
                     {!d.isPrimary && (
                       <form action={eliminarDominio.bind(null, d.id)}>
-                        <button
-                          type="submit"
+                        <ConfirmSubmitButton
                           className="text-xs font-medium text-danger hover:underline"
+                          confirmMessage={t.deleteConfirm(d.domain)}
                         >
                           {t.delete}
-                        </button>
+                        </ConfirmSubmitButton>
                       </form>
                     )}
                   </div>
@@ -168,6 +174,8 @@ export default async function DominiosPage({
             name="domain"
             type="text"
             required
+            pattern="^([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,63}$"
+            title={t.patternHint}
             placeholder={t.placeholder}
             className={`max-w-xs ${fieldClasses}`}
           />

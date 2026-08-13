@@ -174,22 +174,32 @@ docker compose -f docker-compose.prod.yml --env-file .env.production up -d
 
 ## Backups
 
-Nada de esto viene automatizado todavía (ver la tabla de "Backups y
-recuperación" en
-[07-infraestructura.md](../architecture/07-infraestructura.md), que
-describe la versión "a escala" con point-in-time recovery). Lo mínimo
-razonable para iniciar, un cron diario en la VM:
+Automatización mínima (ver `scripts/backup-postgres.sh`, versionado en el
+repo — ver la auditoría de seguridad, hallazgo "Backups"): sigue siendo
+"a escala pequeña", ver la tabla de "Backups y recuperación" en
+[07-infraestructura.md](../architecture/07-infraestructura.md) para la
+versión "a escala" con point-in-time recovery. Para arrancar, en la VM:
 
 ```bash
-# /etc/cron.daily/stoka-backup (dale permiso de ejecución con chmod +x)
-#!/bin/sh
-docker exec stoka-postgres pg_dump -U stoka stoka_lms | gzip > /root/backups/stoka-$(date +%F).sql.gz
-find /root/backups -mtime +14 -delete
+# Copiar el script y darle permiso de ejecución:
+scp scripts/backup-postgres.sh root@tu-servidor:/root/scripts/backup-postgres.sh
+ssh root@tu-servidor chmod +x /root/scripts/backup-postgres.sh
+
+# Agregarlo a cron (corre todos los días a las 3am):
+crontab -e
+# 0 3 * * * /root/scripts/backup-postgres.sh >> /var/log/stoka-backup.log 2>&1
 ```
 
-Y bajate esos `.sql.gz` a otro lugar (tu máquina, un bucket) de tanto en
-tanto — un backup que vive solo en el mismo servidor que puede fallar no
-es un backup real.
+Retiene 14 días localmente por defecto (`STOKA_BACKUP_RETENTION_DAYS`) y
+escribe a `/root/backups` (`STOKA_BACKUP_DIR`) — ambos configurables por
+variable de entorno, ver los comentarios del script. Bajate esos `.sql.gz`
+a otro lugar (tu máquina, un bucket) de tanto en tanto — un backup que vive
+solo en el mismo servidor que puede fallar no es un backup real.
+
+**Probá la restauración de verdad** al menos una vez (el script trae el
+comando exacto en su propio comentario, contra una base `_restore_test`
+aparte, nunca la real) — un backup nunca restaurado no debe considerarse
+suficiente.
 
 ## Problemas comunes
 

@@ -14,7 +14,11 @@
 
 export function ErrorBanner({ message }: { message: string }) {
   return (
-    <div className="flex items-start gap-3 rounded-xl border border-danger/20 bg-danger-bg px-4 py-3 text-sm text-danger">
+    <div
+      role="alert"
+      aria-live="assertive"
+      className="flex items-start gap-3 rounded-xl border border-danger/20 bg-danger-bg px-4 py-3 text-sm text-danger"
+    >
       <svg
         viewBox="0 0 24 24"
         fill="none"

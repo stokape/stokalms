@@ -16,10 +16,12 @@
 import Link from 'next/link';
 import { requireAccessToken, apiFetch, toErrorMessage } from '@/lib/api';
 import { ErrorBanner } from '@/components/ErrorBanner';
+import { SuccessBanner } from '@/components/SuccessBanner';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { ConfirmSubmitButton } from '@/components/ui/ConfirmSubmitButton';
 import { fieldClasses, labelClasses, fileInputClasses, selectClasses } from '@/components/ui/field-styles';
 import { getLocale } from '@/lib/locale';
 import {
@@ -69,6 +71,7 @@ const TEXT = {
     value: 'Valor',
     verifyNow: 'Verificar ahora',
     delete: 'Eliminar',
+    deleteConfirm: (domain: string) => `¿Eliminar el dominio "${domain}"?`,
     placeholder: 'campus.institutosanmartin.edu.pe',
     addDomain: 'Agregar dominio',
     maintenanceTitle: 'Mantenimiento',
@@ -82,6 +85,7 @@ const TEXT = {
     save: 'Guardar',
     maintenanceImage: 'Imagen de fondo del aviso (opcional)',
     removeImage: 'Quitar imagen',
+    removeImageConfirm: '¿Quitar esta imagen?',
     replace: 'Reemplazar',
     uploadImage: 'Subir imagen',
     membersTitle: 'Miembros y roles',
@@ -91,7 +95,10 @@ const TEXT = {
     noRole: 'Sin rol asignado',
     status: 'Estado',
     remove: 'Quitar',
+    removeConfirm: (role: string, name: string) => `¿Quitarle el rol "${role}" a ${name}?`,
     assignRole: 'Asignar rol',
+    deactivateConfirm:
+      'Al desactivarla, nadie de esta institución (ni siquiera su Super Admin) va a poder iniciar sesión hasta que se reactive. ¿Continuar?',
   },
   en: {
     back: '← Institutions',
@@ -123,6 +130,7 @@ const TEXT = {
     value: 'Value',
     verifyNow: 'Verify now',
     delete: 'Delete',
+    deleteConfirm: (domain: string) => `Delete the "${domain}" domain?`,
     placeholder: 'campus.institutosanmartin.edu.pe',
     addDomain: 'Add domain',
     maintenanceTitle: 'Maintenance',
@@ -136,6 +144,7 @@ const TEXT = {
     save: 'Save',
     maintenanceImage: 'Notice background image (optional)',
     removeImage: 'Remove image',
+    removeImageConfirm: 'Remove this image?',
     replace: 'Replace',
     uploadImage: 'Upload image',
     membersTitle: 'Members and roles',
@@ -145,7 +154,10 @@ const TEXT = {
     noRole: 'No role assigned',
     status: 'Status',
     remove: 'Remove',
+    removeConfirm: (role: string, name: string) => `Remove the "${role}" role from ${name}?`,
     assignRole: 'Assign role',
+    deactivateConfirm:
+      "Once deactivated, no one at this institution (not even its Super Admin) will be able to log in until it's reactivated. Continue?",
   },
 };
 
@@ -263,9 +275,15 @@ export default async function InstitucionDetallePage({
         description={tenant.active ? <Badge tone="success">{t.active}</Badge> : <Badge tone="danger">{t.inactive}</Badge>}
         actions={
           <form action={cambiarEstadoInstitucion.bind(null, tenantId, !tenant.active)}>
-            <Button type="submit" variant={tenant.active ? 'danger' : 'primary'} size="sm">
-              {tenant.active ? t.deactivate : t.activate}
-            </Button>
+            {tenant.active ? (
+              <ConfirmSubmitButton variant="danger" size="sm" confirmMessage={t.deactivateConfirm}>
+                {t.deactivate}
+              </ConfirmSubmitButton>
+            ) : (
+              <Button type="submit" variant="primary" size="sm">
+                {t.activate}
+              </Button>
+            )}
           </form>
         }
       />
@@ -277,7 +295,7 @@ export default async function InstitucionDetallePage({
         </div>
       )}
       {saved && (
-        <Card className="mb-6 border-success/30 bg-success-bg text-sm text-success">{t.done}</Card>
+        <SuccessBanner>{t.done}</SuccessBanner>
       )}
 
       {/* --- Marca --- */}
@@ -417,9 +435,12 @@ export default async function InstitucionDetallePage({
                     )}
                     {!d.isPrimary && (
                       <form action={eliminarDominio.bind(null, tenantId, d.id)}>
-                        <button type="submit" className="text-xs font-medium text-danger hover:underline">
+                        <ConfirmSubmitButton
+                          className="text-xs font-medium text-danger hover:underline"
+                          confirmMessage={t.deleteConfirm(d.domain)}
+                        >
                           {t.delete}
-                        </button>
+                        </ConfirmSubmitButton>
                       </form>
                     )}
                   </div>
@@ -508,9 +529,12 @@ export default async function InstitucionDetallePage({
               className="mb-2 h-28 w-full rounded-lg border border-border object-cover"
             />
             <form action={quitarImagenMantenimientoInstitucion.bind(null, tenantId)}>
-              <button type="submit" className="text-xs font-medium text-danger hover:underline">
+              <ConfirmSubmitButton
+                className="text-xs font-medium text-danger hover:underline"
+                confirmMessage={t.removeImageConfirm}
+              >
                 {t.removeImage}
-              </button>
+              </ConfirmSubmitButton>
             </form>
           </div>
         )}
@@ -579,9 +603,12 @@ export default async function InstitucionDetallePage({
                           {r.scopeCourseTitle && <span className="text-muted"> · {r.scopeCourseTitle}</span>}
                         </span>
                         <form action={quitarRol.bind(null, tenantId, m.userTenantId, r.userRoleId)}>
-                          <button type="submit" className="text-xs font-medium text-danger hover:underline">
+                          <ConfirmSubmitButton
+                            className="text-xs font-medium text-danger hover:underline"
+                            confirmMessage={t.removeConfirm(r.roleName, m.fullName)}
+                          >
                             {t.remove}
-                          </button>
+                          </ConfirmSubmitButton>
                         </form>
                       </li>
                     ))}

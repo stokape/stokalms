@@ -85,6 +85,15 @@ export interface AppConfig {
   // distintos niveles de acceso, ese es el momento de modelar un dominio
   // Casbin "platform" de verdad en vez de esta lista fija.
   platformAdminEmails: string[];
+  // Secreto compartido SOLO entre el servidor de Next.js (apps/web) y esta
+  // API, para "POST /analytics/events" (ver analytics.controller.ts) — el
+  // unico endpoint de escritura sin autenticacion de usuario. Sin esto,
+  // cualquiera en internet podia mandar eventos falsos directo a la API
+  // (ver auditoria de seguridad, hallazgo F-06), contaminando el embudo de
+  // metricas de onboarding. Vacio = advertencia + endpoint sigue abierto
+  // (mismo criterio "no romper nada por una config que falta" que "mail"/
+  // "ai" mas abajo) — pero se recomienda fuerte configurarlo en produccion.
+  analyticsIngestSecret: string;
   // Envio de correo (ver common/mail/mail.service.ts, usado por
   // automations.service.ts para los recordatorios) — SIN valores por
   // defecto reales a proposito: en desarrollo, sin estas variables
@@ -189,6 +198,8 @@ export default (): AppConfig => ({
     .split(',')
     .map((email) => email.trim().toLowerCase())
     .filter(Boolean),
+
+  analyticsIngestSecret: process.env.ANALYTICS_INGEST_SECRET ?? '',
 
   corsAllowedOrigins: (process.env.CORS_ALLOWED_ORIGINS ?? 'http://localhost:3000')
     .split(',')

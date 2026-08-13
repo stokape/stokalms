@@ -37,6 +37,43 @@ export async function quitarRol(userTenantId: string, userRoleId: string) {
   redirect(PATH);
 }
 
+// Asignar un rol a un GRUPO de personas ya visibles en la lista, elegidas
+// con checkboxes — sin CSV, para el caso comun de "estos 5 son Docentes".
+// Los checkboxes de cada fila NO estan anidados dentro de este <form> (ver
+// page.tsx: viven dentro de cada <details>, y HTML no permite <form> dentro
+// de <form>) — se asocian via el atributo "form" nativo, apuntando al id de
+// este formulario, asi que llegan igual en el FormData sin ninguna linea de
+// JavaScript. Reutiliza el mismo endpoint que el CSV (bulk-assign-role, ver
+// arriba) porque el resultado es identico: N filas de "email + roleId".
+export async function asignarRolMasivo(formData: FormData) {
+  const token = await requireAccessToken();
+  const roleId = String(formData.get('roleId') ?? '');
+  const emails = formData.getAll('emails').map(String);
+
+  if (emails.length === 0) {
+    redirect(`${PATH}?error=${encodeURIComponent('Selecciona al menos una persona antes de asignar un rol.')}`);
+  }
+
+  const rows = emails.map((email) => ({ email, roleId }));
+
+  let results: Array<{ email: string; status: 'asignado' | 'ya_tenia' | 'error'; message?: string }>;
+  try {
+    const response = await apiFetch<{ results: typeof results }>(token, '/users/bulk-assign-role', {
+      method: 'POST',
+      body: JSON.stringify({ rows }),
+    });
+    results = response.results;
+  } catch (err) {
+    redirect(`${PATH}?error=${encodeURIComponent(toErrorMessage(err))}`);
+  }
+
+  const okCount = results.filter((r) => r.status === 'asignado' || r.status === 'ya_tenia').length;
+  const errors = results.filter((r) => r.status === 'error').slice(0, 20);
+
+  revalidatePath(PATH);
+  redirect(`${PATH}?bulkOk=${okCount}&bulkErrors=${encodeURIComponent(JSON.stringify(errors))}`);
+}
+
 // "Gestion avanzada de usuarios": asignar un rol a muchas personas de una
 // vez desde un CSV de dos columnas "email,nombre del rol" — mismo patron
 // que matricularCSV (ver cursos/[courseId]/secciones/[sectionId]/actions.ts):

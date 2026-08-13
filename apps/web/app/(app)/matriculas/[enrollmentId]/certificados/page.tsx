@@ -17,6 +17,7 @@ import Link from 'next/link';
 import { requireAccessToken, apiFetch, toErrorMessage, getPermissions, can } from '@/lib/api';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { Button } from '@/components/ui/Button';
+import { ConfirmSubmitButton } from '@/components/ui/ConfirmSubmitButton';
 import { getLocale } from '@/lib/locale';
 import { emitirCertificado, revocarCertificado } from './actions';
 
@@ -31,6 +32,7 @@ const TEXT = {
     viewVerification: 'Ver página de verificación pública',
     downloadPdf: 'Descargar PDF',
     revoke: 'Revocar',
+    revokeConfirm: '¿Revocar este certificado? Queda marcado como inválido en la verificación pública — no se puede deshacer.',
     issueNew: 'Emitir un nuevo certificado',
     issueHelp: 'Se emite con la plantilla ya asignada al curso. Solo se puede emitir si la matrícula ya está en estado "Completado" y el curso tiene una plantilla asignada (esto último se configura desde el detalle del curso).',
     issue: 'Emitir certificado',
@@ -45,6 +47,7 @@ const TEXT = {
     viewVerification: 'View public verification page',
     downloadPdf: 'Download PDF',
     revoke: 'Revoke',
+    revokeConfirm: "Revoke this certificate? It's marked invalid on the public verification page — this can't be undone.",
     issueNew: 'Issue a new certificate',
     issueHelp: 'It\'s issued with the template already assigned to the course. It can only be issued if the enrollment is already "Completed" and the course has a template assigned (the latter is configured from the course detail page).',
     issue: 'Issue certificate',
@@ -123,9 +126,12 @@ export default async function CertificadosDeMatriculaPage({
                 </a>
                 {!c.revoked && canRevoke && (
                   <form action={revocarCertificado.bind(null, enrollmentId, c.id)}>
-                    <button type="submit" className="text-xs text-red-600 underline dark:text-red-400">
+                    <ConfirmSubmitButton
+                      className="text-xs text-red-600 underline dark:text-red-400"
+                      confirmMessage={t.revokeConfirm}
+                    >
                       {t.revoke}
-                    </button>
+                    </ConfirmSubmitButton>
                   </form>
                 )}
               </div>

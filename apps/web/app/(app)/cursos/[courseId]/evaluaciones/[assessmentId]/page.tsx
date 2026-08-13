@@ -13,11 +13,12 @@
 // "submission:create" (ver lib/api.ts, getCoursePermissions).
 // ============================================================================
 
-import Link from 'next/link';
 import { requireAccessToken, apiFetch, toErrorMessage, getCoursePermissions, can } from '@/lib/api';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { Button } from '@/components/ui/Button';
+import { ConfirmSubmitButton } from '@/components/ui/ConfirmSubmitButton';
 import { LinkButton } from '@/components/ui/LinkButton';
+import { Breadcrumbs } from '@/components/ui/Breadcrumbs';
 import { getLocale, type Locale } from '@/lib/locale';
 import { crearPregunta, eliminarPregunta, calificarRespuesta } from './actions';
 
@@ -67,7 +68,8 @@ const TYPE_LABELS_BY_LOCALE: Record<Locale, Record<string, string>> = {
 
 const TEXT = {
   es: {
-    back: '← Evaluaciones',
+    back: 'Evaluaciones',
+    coursesBreadcrumb: 'Cursos',
     untitled: (type: string) => `${type} sin título`,
     attempt: 'intento',
     attempts: 'intentos',
@@ -77,6 +79,7 @@ const TEXT = {
     noQuestions: 'Todavía no se agregó ninguna pregunta.',
     correctAnswer: 'Respuesta correcta',
     delete: 'Eliminar',
+    deleteConfirm: '¿Eliminar esta pregunta? No se puede deshacer.',
     addQuestion: 'Agregar una pregunta',
     points: 'Puntos',
     fillMatchingType: 'Completa solo los campos de abajo que correspondan al tipo elegido.',
@@ -110,7 +113,8 @@ const TEXT = {
     matchSummary: (left: number, right: number) => `${left} elementos a emparejar con ${right} opciones`,
   },
   en: {
-    back: '← Assessments',
+    back: 'Assessments',
+    coursesBreadcrumb: 'Courses',
     untitled: (type: string) => `Untitled ${type}`,
     attempt: 'attempt',
     attempts: 'attempts',
@@ -120,6 +124,7 @@ const TEXT = {
     noQuestions: 'No questions have been added yet.',
     correctAnswer: 'Correct answer',
     delete: 'Delete',
+    deleteConfirm: "Delete this question? This can't be undone.",
     addQuestion: 'Add a question',
     points: 'Points',
     fillMatchingType: 'Only fill in the fields below that match the type you chose.',
@@ -193,6 +198,15 @@ export default async function EvaluacionDetallePage({
     return <ErrorBanner message={toErrorMessage(err)} />;
   }
 
+  // Solo para el breadcrumb — best-effort, ver la misma nota en
+  // modulos/[moduleId]/[lessonId]/page.tsx.
+  let courseTitle = '';
+  try {
+    courseTitle = (await apiFetch<{ title: string }>(token, `/courses/${courseId}`)).title;
+  } catch {
+    // Intencionalmente silencioso.
+  }
+
   // Presencia de "correctAnswer" es la señal que el propio backend ya
   // calcula para distinguir el rol (ver question.service.ts,
   // findAllByAssessment): si viene, este usuario puede editar la
@@ -215,18 +229,19 @@ export default async function EvaluacionDetallePage({
   const permissions = await getCoursePermissions(token, courseId);
   const canSubmit = can(permissions, 'submission', 'create');
   const canGrade = can(permissions, 'submission', 'grade');
+  const assessmentLabel = assessment.config.title || t.untitled(TYPE_LABELS[assessment.type]);
 
   return (
     <div className="mx-auto max-w-3xl">
-      <Link
-        href={`/cursos/${courseId}/evaluaciones`}
-        className="text-sm text-zinc-500 hover:underline"
-      >
-        {t.back}
-      </Link>
-      <h1 className="mt-2 mb-1 text-2xl font-semibold">
-        {assessment.config.title || t.untitled(TYPE_LABELS[assessment.type])}
-      </h1>
+      <Breadcrumbs
+        items={[
+          { label: t.coursesBreadcrumb, href: '/cursos' },
+          { label: courseTitle || courseId, href: `/cursos/${courseId}` },
+          { label: t.back, href: `/cursos/${courseId}/evaluaciones` },
+          { label: assessmentLabel },
+        ]}
+      />
+      <h1 className="mt-1 mb-1 text-2xl font-semibold">{assessmentLabel}</h1>
       <p className="mb-6 text-sm text-zinc-500">
         {TYPE_LABELS[assessment.type] ?? assessment.type} · {assessment.maxPoints} pts ·{' '}
         {assessment.maxAttempts} {assessment.maxAttempts === 1 ? t.attempt : t.attempts}
@@ -275,9 +290,12 @@ export default async function EvaluacionDetallePage({
               </div>
               {canSeeAnswers && (
                 <form action={eliminarPregunta.bind(null, courseId, assessmentId, q.id)}>
-                  <button type="submit" className="text-xs text-red-600 underline dark:text-red-400">
+                  <ConfirmSubmitButton
+                    className="text-xs text-red-600 underline dark:text-red-400"
+                    confirmMessage={t.deleteConfirm}
+                  >
                     {t.delete}
-                  </button>
+                  </ConfirmSubmitButton>
                 </form>
               )}
             </li>

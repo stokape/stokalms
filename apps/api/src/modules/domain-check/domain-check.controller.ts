@@ -24,11 +24,17 @@
 // ============================================================================
 
 import { Controller, Get, NotFoundException, Query } from '@nestjs/common';
-import { SkipThrottle } from '@nestjs/throttler';
+import { Throttle } from '@nestjs/throttler';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../prisma/prisma.service';
 
-@SkipThrottle()
+// Antes "@SkipThrottle()" (sin ningun limite) — Caddy si trae su propio
+// limite ("on_demand_tls", burst 5/interval 2m, ver Caddyfile), pero este
+// endpoint sigue siendo alcanzable directo por cualquiera sin pasar por
+// Caddy. 1000/min es generoso de sobra para el trafico legitimo (Caddy +
+// /entrar del frontend) y a la vez pone un techo real (ver auditoria de
+// seguridad, hallazgo F-05) en vez de dejarlo completamente sin limite.
+@Throttle({ default: { limit: 1000, ttl: 60_000 } })
 @Controller('domain-check')
 export class DomainCheckController {
   constructor(

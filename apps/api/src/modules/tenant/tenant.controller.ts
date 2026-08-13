@@ -25,14 +25,19 @@ import { PermissionsGuard } from '../../rbac/permissions.guard';
 import { RequirePermission } from '../../rbac/require-permission.decorator';
 import { CurrentUser } from '../../auth/current-user.decorator';
 import { AuthenticatedUser } from '../../auth/auth.service';
+import { IMAGE_MIME_TYPES, mimeAllowlistFilter } from '../../common/storage/file-validation';
 import { TenantService } from './tenant.service';
 import { UpdateTenantDto } from './dto/update-tenant.dto';
 
 // Mismo limite que profile.controller.ts (foto de perfil): un logo/fondo
-// institucional no necesita mas que esto.
+// institucional no necesita mas que esto. "fileFilter" es la primera capa
+// (barata) de la mitigacion de la auditoria de seguridad F-03/SECURITY-03 —
+// rechaza tipos no-imagen segun el Content-Type declarado; storage.service.ts
+// ("upload") aplica la segunda capa, verificando el CONTENIDO real.
 const IMAGE_UPLOAD_OPTIONS = {
   storage: memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: mimeAllowlistFilter(IMAGE_MIME_TYPES),
 };
 
 @Controller('tenant')

@@ -21,6 +21,7 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { ConfirmSubmitButton } from '@/components/ui/ConfirmSubmitButton';
 import { LinkButton } from '@/components/ui/LinkButton';
 import { fieldClasses } from '@/components/ui/field-styles';
 import { readTempCredentialsCookie } from '../temp-credentials';
@@ -39,6 +40,7 @@ const TEXT = {
     approve: 'Aprobar',
     reasonPlaceholder: 'Motivo (opcional)',
     reject: 'Rechazar',
+    rejectConfirm: '¿Rechazar esta solicitud?',
     reviewed: 'Ya revisadas',
     approved: 'Aprobada',
     rejected: 'Rechazada',
@@ -54,6 +56,7 @@ const TEXT = {
     approve: 'Approve',
     reasonPlaceholder: 'Reason (optional)',
     reject: 'Reject',
+    rejectConfirm: 'Reject this request?',
     reviewed: 'Already reviewed',
     approved: 'Approved',
     rejected: 'Rejected',
@@ -162,9 +165,12 @@ export default async function SolicitudesPage({
                     placeholder={t.reasonPlaceholder}
                     className={`${fieldClasses} py-1.5 text-sm`}
                   />
-                  <button type="submit" className="text-sm font-medium text-danger hover:underline">
+                  <ConfirmSubmitButton
+                    className="text-sm font-medium text-danger hover:underline"
+                    confirmMessage={t.rejectConfirm}
+                  >
                     {t.reject}
-                  </button>
+                  </ConfirmSubmitButton>
                 </form>
               </div>
             </Card>

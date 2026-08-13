@@ -11,6 +11,7 @@ import Link from 'next/link';
 import { requireAccessToken, apiFetch, toErrorMessage, getCoursePermissions, can } from '@/lib/api';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { Button } from '@/components/ui/Button';
+import { ConfirmSubmitButton } from '@/components/ui/ConfirmSubmitButton';
 import { getLocale, type Locale } from '@/lib/locale';
 import { crearLeccion, actualizarModulo, actualizarLeccionTitulo, eliminarLeccion } from './actions';
 
@@ -45,6 +46,7 @@ const TEXT = {
     noLessons: 'Este módulo todavía no tiene ninguna lección.',
     save: 'Guardar',
     delete: 'Eliminar',
+    deleteConfirm: (title: string) => `¿Eliminar la lección "${title}"? Se pierden también sus recursos. No se puede deshacer.`,
     createLesson: 'Crear una lección nueva',
     lessonPlaceholder: 'Ej. "Lección 1 - Introducción"',
     contentPlaceholder: 'Texto de la lección (opcional, se puede completar después). Los archivos y enlaces se agregan aparte, una vez creada la lección.',
@@ -61,6 +63,7 @@ const TEXT = {
     noLessons: "This module doesn't have any lessons yet.",
     save: 'Save',
     delete: 'Delete',
+    deleteConfirm: (title: string) => `Delete the "${title}" lesson? Its resources are lost too. This can't be undone.`,
     createLesson: 'Create a new lesson',
     lessonPlaceholder: 'E.g. "Lesson 1 - Introduction"',
     contentPlaceholder: 'Lesson text (optional, can be filled in later). Files and links are added separately, once the lesson is created.',
@@ -185,9 +188,12 @@ export default async function LeccionesDelModuloPage({
                 )}
                 {canDeleteLesson && (
                   <form action={eliminarLeccion.bind(null, courseId, moduleId, lesson.id)}>
-                    <button type="submit" className="text-xs text-red-600 underline dark:text-red-400">
+                    <ConfirmSubmitButton
+                      className="text-xs text-red-600 underline dark:text-red-400"
+                      confirmMessage={t.deleteConfirm(lesson.title)}
+                    >
                       {t.delete}
-                    </button>
+                    </ConfirmSubmitButton>
                   </form>
                 )}
               </div>

@@ -31,6 +31,7 @@ const es = {
     logout: 'Cerrar sesión',
     openMenu: 'Abrir menú',
     defaultUserLabel: 'Tu cuenta',
+    notifications: 'Notificaciones',
   },
   maintenanceBanner: {
     message: 'Modo mantenimiento activo — el resto de las personas no puede entrar a la plataforma.',
@@ -97,6 +98,7 @@ const en = {
     logout: 'Log out',
     openMenu: 'Open menu',
     defaultUserLabel: 'Your account',
+    notifications: 'Notifications',
   },
   maintenanceBanner: {
     message: 'Maintenance mode is on — everyone else is locked out of the platform.',

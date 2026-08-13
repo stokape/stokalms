@@ -90,14 +90,18 @@ export class TenantService {
   // para que nunca se guarde una URL que vence a la hora.
   private async withResolvedBranding(name: string, branding: unknown) {
     const stored = (branding as StoredBranding) ?? {};
+    // "image/png" marca "esto es una imagen" para que la URL firmada no
+    // fuerce descarga (ver la nota extensa en storage.service.ts) — los 4
+    // endpoints que guardan estas keys solo aceptan imagenes (ver
+    // tenant.controller.ts, IMAGE_UPLOAD_OPTIONS).
     const [logoUrl, backgroundImageUrl, faviconUrl, maintenanceImageUrl] = await Promise.all([
-      stored.logoKey ? this.storage.getPresignedDownloadUrl(stored.logoKey) : undefined,
+      stored.logoKey ? this.storage.getPresignedDownloadUrl(stored.logoKey, 3600, 'image/png') : undefined,
       stored.backgroundImageKey
-        ? this.storage.getPresignedDownloadUrl(stored.backgroundImageKey)
+        ? this.storage.getPresignedDownloadUrl(stored.backgroundImageKey, 3600, 'image/png')
         : undefined,
-      stored.faviconKey ? this.storage.getPresignedDownloadUrl(stored.faviconKey) : undefined,
+      stored.faviconKey ? this.storage.getPresignedDownloadUrl(stored.faviconKey, 3600, 'image/png') : undefined,
       stored.maintenanceImageKey
-        ? this.storage.getPresignedDownloadUrl(stored.maintenanceImageKey)
+        ? this.storage.getPresignedDownloadUrl(stored.maintenanceImageKey, 3600, 'image/png')
         : undefined,
     ]);
 

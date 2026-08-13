@@ -56,10 +56,36 @@ const ADMIN_USER = process.env.KEYCLOAK_ADMIN_USER ?? 'admin';
 const ADMIN_PASSWORD = process.env.KEYCLOAK_ADMIN_PASSWORD ?? 'admin_dev_password';
 
 // Las 7 cuentas de prueba de abajo (contraseñas publicadas en este mismo
-// archivo) son solo para desarrollo — jamas deben terminar en un Keycloak
-// real con instituciones reales. "docs/deploy/produccion.md" corre este
-// script con KEYCLOAK_SEED_TEST_USERS=false explicitamente.
-const SEED_TEST_USERS = process.env.KEYCLOAK_SEED_TEST_USERS !== 'false';
+// archivo, incluida una de Super Admin) son solo para desarrollo — jamas
+// deben terminar en un Keycloak real con instituciones reales.
+//
+// SECURE BY DEFAULT (ver auditoria de seguridad, hallazgo F-02): este valor
+// tiene que ser un OPT-IN explicito ("=== 'true'"), nunca un opt-out. Antes
+// decia "!== 'false'" — si alguien corria este script contra un Keycloak de
+// produccion real SIN acordarse de fijar la variable a mano, quedaban
+// creadas en silencio las 7 cuentas de prueba con contraseñas publicadas en
+// este mismo archivo, incluida un Super Admin con privilegios de plataforma
+// completos. "docs/deploy/produccion.md" ya pasaba KEYCLOAK_SEED_TEST_USERS
+// =false explicitamente, asi que ese flujo documentado sigue funcionando
+// igual — la diferencia es que ahora OLVIDARSE de la variable es lo seguro,
+// no lo inseguro.
+const SEED_TEST_USERS = process.env.KEYCLOAK_SEED_TEST_USERS === 'true';
+
+// Segunda barrera, independiente de que alguien ponga "=true" sin querer:
+// si el propio proceso corre con NODE_ENV=production, este script se niega
+// a crear las cuentas de prueba pase lo que pase con SEED_TEST_USERS — no
+// hay ningun escenario legitimo en el que un Keycloak de produccion
+// necesite estas contraseñas publicas. Quien de verdad necesite reproducir
+// estos datos en un ambiente de staging debe correr el script con
+// NODE_ENV distinto de "production" (ej. sin definirlo, o "staging").
+if (SEED_TEST_USERS && process.env.NODE_ENV === 'production') {
+  console.error(
+    '[keycloak-setup] NODE_ENV=production y KEYCLOAK_SEED_TEST_USERS=true al mismo tiempo — ' +
+      'me niego a crear cuentas de prueba con contraseñas publicas en un ambiente de produccion. ' +
+      'Si esto es realmente un ambiente de staging, corre el script con un NODE_ENV distinto de "production".',
+  );
+  process.exit(1);
+}
 
 // Usuarios de prueba que este script crea, para poder validar el login real
 // (ver apps/api/src/auth/) sin tener que registrar una cuenta. Hay UNO por

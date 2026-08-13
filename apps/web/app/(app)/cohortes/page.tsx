@@ -14,6 +14,8 @@ import { ErrorBanner } from '@/components/ErrorBanner';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { CohortIcon } from '@/components/ui/icons';
 import { fieldClasses, labelClasses } from '@/components/ui/field-styles';
 import { getLocale } from '@/lib/locale';
 import { crearCohorte } from './actions';
@@ -25,6 +27,9 @@ const TEXT = {
     members: (n: number) => `${n} ${n === 1 ? 'miembro' : 'miembros'}`,
     manage: 'Gestionar →',
     empty: 'Todavía no hay cohortes creadas.',
+    emptyWithCreate: 'Creá la primera para agrupar alumnos y matricularlos en bloque.',
+    emptyNoCreate: 'Pedile a un administrador de la institución que cree una.',
+    createCta: 'Crear cohorte ↓',
     createTitle: 'Crear cohorte',
     nameLabel: 'Nombre',
     namePlaceholder: 'Ej. Promoción 2026',
@@ -37,6 +42,9 @@ const TEXT = {
     members: (n: number) => `${n} ${n === 1 ? 'member' : 'members'}`,
     manage: 'Manage →',
     empty: 'No cohorts created yet.',
+    emptyWithCreate: 'Create the first one to group students and enroll them in bulk.',
+    emptyNoCreate: 'Ask an institution administrator to create one.',
+    createCta: 'Create cohort ↓',
     createTitle: 'Create cohort',
     nameLabel: 'Name',
     namePlaceholder: 'E.g. Class of 2026',
@@ -81,7 +89,20 @@ export default async function CohortesPage({
       )}
 
       {cohorts.length === 0 ? (
-        <p className="mb-8 text-sm text-muted">{t.empty}</p>
+        <div className="mb-8">
+          <EmptyState
+            icon={CohortIcon}
+            title={t.empty}
+            description={canCreate ? t.emptyWithCreate : t.emptyNoCreate}
+            action={
+              canCreate && (
+                <a href="#crear-cohorte" className="text-sm font-medium text-primary hover:underline">
+                  {t.createCta}
+                </a>
+              )
+            }
+          />
+        </div>
       ) : (
         <div className="mb-8 overflow-hidden rounded-xl border border-border bg-surface">
           <ul className="divide-y divide-border">
@@ -104,16 +125,16 @@ export default async function CohortesPage({
       )}
 
       {canCreate && (
-        <Card>
+        <Card id="crear-cohorte">
           <h2 className="mb-4 text-base font-medium">{t.createTitle}</h2>
           <form action={crearCohorte} className="flex flex-col gap-4">
             <label className="flex flex-col gap-1.5 text-sm">
               <span className={labelClasses}>{t.nameLabel}</span>
-              <input name="name" type="text" required placeholder={t.namePlaceholder} className={fieldClasses} />
+              <input name="name" type="text" required maxLength={120} placeholder={t.namePlaceholder} className={fieldClasses} />
             </label>
             <label className="flex flex-col gap-1.5 text-sm">
               <span className={labelClasses}>{t.descriptionLabel}</span>
-              <input name="description" type="text" className={fieldClasses} />
+              <input name="description" type="text" maxLength={500} className={fieldClasses} />
             </label>
             <Button type="submit" className="self-start">
               {t.create}

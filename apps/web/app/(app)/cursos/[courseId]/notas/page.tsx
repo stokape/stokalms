@@ -162,6 +162,7 @@ export default async function CourseGradesPage({
               </button>
             </form>
           )}
+        <div className="overflow-x-auto">
         <table className="w-full text-left text-sm">
           <thead>
             <tr className="border-b border-zinc-200 dark:border-zinc-800">
@@ -182,6 +183,7 @@ export default async function CourseGradesPage({
             ))}
           </tbody>
         </table>
+        </div>
         </>
       )}
     </div>

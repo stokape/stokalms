@@ -28,7 +28,7 @@
 // - jwt-auth.guard.ts es quien realmente "activa" esta estrategia en una ruta.
 // ============================================================================
 
-import { Injectable } from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
@@ -45,7 +45,21 @@ export interface KeycloakJwtPayload {
   name?: string;
   given_name?: string;
   family_name?: string;
+  // "Authorized Party" — el client_id que de verdad pidio este token (ver
+  // la nota extensa mas abajo sobre por que se usa esto y no "aud").
+  azp?: string;
 }
+
+// Clientes de ESTE realm cuyos tokens la API debe aceptar (ver auditoria de
+// seguridad, hallazgo F-11). Por defecto, Keycloak pone SIEMPRE "aud":
+// "account" en el access token (su cliente interno de cuenta de usuario),
+// sin importar que cliente lo pidio — validar "aud" tal cual, sin agregar
+// primero un mapper de audiencia propio en Keycloak, rechazaria TODOS los
+// logins reales. "azp" (Authorized Party) si identifica correctamente al
+// cliente que pidio el token, y Keycloak lo incluye siempre — es el campo
+// correcto para esta comprobacion sin tener que tocar la configuracion del
+// realm.
+const TRUSTED_CLIENT_IDS = ['stoka-api', 'stoka-web'];
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
@@ -86,6 +100,13 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
   // aqui, el token es autentico y vigente. Lo que devolvemos se convierte en
   // "req.user" para el resto del request (ver current-user.decorator.ts).
   async validate(payload: KeycloakJwtPayload) {
+    // Sin esto, un token real de OTRO cliente que se llegara a registrar
+    // algun dia en este MISMO realm (ej. una integracion de un tercero)
+    // seria igual de valido contra esta API sin que nadie lo decidiera
+    // explicitamente — ver auditoria de seguridad, hallazgo F-11.
+    if (!payload.azp || !TRUSTED_CLIENT_IDS.includes(payload.azp)) {
+      throw new UnauthorizedException('Este token no fue emitido para un cliente reconocido.');
+    }
     return this.authService.findOrProvisionUser(payload);
   }
 }

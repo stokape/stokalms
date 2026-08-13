@@ -12,6 +12,7 @@ import { ErrorBanner } from '@/components/ErrorBanner';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { ConfirmSubmitButton } from '@/components/ui/ConfirmSubmitButton';
 import { selectClasses } from '@/components/ui/field-styles';
 import { getLocale } from '@/lib/locale';
 import { agregarMiembro, quitarMiembro, eliminarCohorte } from '../actions';
@@ -22,10 +23,12 @@ const TEXT = {
     membersTitle: 'Miembros',
     noMembers: 'Todavía no hay nadie en esta cohorte.',
     remove: 'Quitar',
+    removeConfirm: (name: string) => `¿Quitar a ${name} de esta cohorte?`,
     addMember: 'Agregar alumno',
     pickPerson: 'Elige a quién agregar',
     add: 'Agregar',
     deleteCohort: 'Eliminar cohorte',
+    deleteCohortConfirm: (name: string) => `¿Eliminar la cohorte "${name}"? No se puede deshacer.`,
     everyoneAssigned: 'No hay nadie más para agregar (o ya están todos en esta cohorte).',
   },
   en: {
@@ -33,10 +36,12 @@ const TEXT = {
     membersTitle: 'Members',
     noMembers: 'No one is in this cohort yet.',
     remove: 'Remove',
+    removeConfirm: (name: string) => `Remove ${name} from this cohort?`,
     addMember: 'Add student',
     pickPerson: 'Choose who to add',
     add: 'Add',
     deleteCohort: 'Delete cohort',
+    deleteCohortConfirm: (name: string) => `Delete the "${name}" cohort? This can't be undone.`,
     everyoneAssigned: 'No one else to add (or everyone is already in this cohort).',
   },
 };
@@ -98,9 +103,13 @@ export default async function CohortDetallePage({
         actions={
           canDelete && (
             <form action={eliminarCohorte.bind(null, cohortId)}>
-              <Button type="submit" variant="danger" size="sm">
+              <ConfirmSubmitButton
+                variant="danger"
+                size="sm"
+                confirmMessage={t.deleteCohortConfirm(cohort.name)}
+              >
                 {t.deleteCohort}
-              </Button>
+              </ConfirmSubmitButton>
             </form>
           )
         }
@@ -125,9 +134,12 @@ export default async function CohortDetallePage({
                   <p className="truncate text-xs text-muted">{m.email}</p>
                 </div>
                 <form action={quitarMiembro.bind(null, cohortId, m.userTenantId)}>
-                  <button type="submit" className="shrink-0 text-xs font-medium text-danger hover:underline">
+                  <ConfirmSubmitButton
+                    className="shrink-0 text-xs font-medium text-danger hover:underline"
+                    confirmMessage={t.removeConfirm(m.fullName)}
+                  >
                     {t.remove}
-                  </button>
+                  </ConfirmSubmitButton>
                 </form>
               </li>
             ))}

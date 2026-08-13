@@ -139,11 +139,19 @@ export class ResourceService {
     return Promise.all(resources.map((resource) => this.withDownloadUrl(resource)));
   }
 
-  private async withDownloadUrl(resource: { type: string; storageUrl: string }) {
+  private async withDownloadUrl(resource: { type: string; storageUrl: string; metadata: Prisma.JsonValue }) {
     if (resource.type === 'link') {
       return { ...resource, downloadUrl: resource.storageUrl };
     }
-    const downloadUrl = await this.storage.getPresignedDownloadUrl(resource.storageUrl);
+    // El mimetype real (guardado al subir, ver uploadFile arriba) decide si
+    // la URL firmada permite verse inline (video/imagen/PDF) o fuerza
+    // descarga (cualquier otro tipo) — ver la nota extensa en
+    // storage.service.ts, parte de la mitigacion de la auditoria de
+    // seguridad F-03: sin esto, un archivo con Content-Type falseado a
+    // "text/html" podia terminar renderizado en el navegador en vez de
+    // descargado.
+    const mimeType = (resource.metadata as { mimeType?: string } | null)?.mimeType;
+    const downloadUrl = await this.storage.getPresignedDownloadUrl(resource.storageUrl, 3600, mimeType);
     return { ...resource, downloadUrl };
   }
 

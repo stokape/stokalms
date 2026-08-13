@@ -13,10 +13,12 @@
 
 import { requireAccessToken, apiFetch, toErrorMessage } from '@/lib/api';
 import { ErrorBanner } from '@/components/ErrorBanner';
+import { SuccessBanner } from '@/components/SuccessBanner';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { ConfirmSubmitButton } from '@/components/ui/ConfirmSubmitButton';
 import { fieldClasses, labelClasses, fileInputClasses } from '@/components/ui/field-styles';
 import { getLocale } from '@/lib/locale';
 import {
@@ -43,6 +45,7 @@ const TEXT = {
     backgroundHelp: (name: string) => `Libre — no tiene que ser la marca de todos los días de ${name}. Es solo para este aviso puntual (ej. una foto de la mudanza, un diseño con su propio mensaje). Si no subes ninguna, el aviso se muestra con el fondo difuminado habitual de la institución.`,
     backgroundAlt: 'Imagen de fondo del aviso de mantenimiento',
     removeImage: 'Quitar imagen',
+    removeImageConfirm: '¿Quitar esta imagen?',
     replace: 'Reemplazar',
     uploadImage: 'Subir imagen',
     preview: 'Vista previa del aviso',
@@ -65,6 +68,7 @@ const TEXT = {
     backgroundHelp: (name: string) => `Free choice — it doesn't have to be ${name}'s everyday branding. It's just for this one-off notice (e.g. a moving-day photo, a design with its own message). If you don't upload one, the notice shows the institution's usual blurred background.`,
     backgroundAlt: 'Maintenance notice background image',
     removeImage: 'Remove image',
+    removeImageConfirm: 'Remove this image?',
     replace: 'Replace',
     uploadImage: 'Upload image',
     preview: 'Notice preview',
@@ -127,7 +131,7 @@ export default async function MantenimientoPage({
         </div>
       )}
       {saved && (
-        <Card className="mb-6 border-success/30 bg-success-bg text-sm text-success">{t.done}</Card>
+        <SuccessBanner>{t.done}</SuccessBanner>
       )}
 
       <Card>
@@ -193,9 +197,12 @@ export default async function MantenimientoPage({
               className="mb-2 h-32 w-full rounded-lg border border-border object-cover"
             />
             <form action={quitarImagenMantenimiento}>
-              <button type="submit" className="text-xs font-medium text-danger hover:underline">
+              <ConfirmSubmitButton
+                className="text-xs font-medium text-danger hover:underline"
+                confirmMessage={t.removeImageConfirm}
+              >
                 {t.removeImage}
-              </button>
+              </ConfirmSubmitButton>
             </form>
           </div>
         )}

@@ -7,6 +7,11 @@ const nextConfig: NextConfig = {
   // monorepo (workspaces hoisteados, decenas de paquetes de apps/api
   // incluidos) para poder correr "next start". Ver apps/web/Dockerfile.
   output: "standalone",
+  // Desde Next.js 16.3, "next dev"/"next build" generan AGENTS.md/CLAUDE.md
+  // solos en la raiz de esta app — este repo ya trae su propia
+  // documentacion para agentes (ver CLAUDE.md/README.md de la raiz del
+  // monorepo), no hace falta un segundo set autogenerado por app.
+  agentRules: false,
   experimental: {
     // El limite por defecto de un Server Action es 1MB — muy poco para
     // subir un video o un PDF como recurso de leccion (ver

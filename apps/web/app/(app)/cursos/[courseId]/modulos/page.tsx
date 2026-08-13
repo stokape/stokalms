@@ -11,6 +11,7 @@ import Link from 'next/link';
 import { requireAccessToken, apiFetch, toErrorMessage, getCoursePermissions, can } from '@/lib/api';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { Button } from '@/components/ui/Button';
+import { ConfirmSubmitButton } from '@/components/ui/ConfirmSubmitButton';
 import { getLocale } from '@/lib/locale';
 import { crearModulo, actualizarModulo, eliminarModulo } from './actions';
 
@@ -20,6 +21,8 @@ const TEXT = {
     empty: 'Este curso todavía no tiene ningún módulo.',
     save: 'Guardar',
     delete: 'Eliminar',
+    deleteConfirm: (title: string) =>
+      `¿Eliminar el módulo "${title}"? Se borran también todas sus lecciones y recursos. No se puede deshacer.`,
     createHeading: 'Crear un módulo nuevo',
     placeholder: 'Ej. "Módulo 1 - Introducción"',
     create: 'Crear',
@@ -29,6 +32,8 @@ const TEXT = {
     empty: "This course doesn't have any modules yet.",
     save: 'Save',
     delete: 'Delete',
+    deleteConfirm: (title: string) =>
+      `Delete the "${title}" module? This also deletes all of its lessons and resources. This can't be undone.`,
     createHeading: 'Create a new module',
     placeholder: 'E.g. "Module 1 - Introduction"',
     create: 'Create',
@@ -123,9 +128,12 @@ export default async function ModulosDelCursoPage({
                 )}
                 {canDelete && (
                   <form action={eliminarModulo.bind(null, courseId, module.id)}>
-                    <button type="submit" className="text-xs text-red-600 underline dark:text-red-400">
+                    <ConfirmSubmitButton
+                      className="text-xs text-red-600 underline dark:text-red-400"
+                      confirmMessage={t.deleteConfirm(module.title)}
+                    >
                       {t.delete}
-                    </button>
+                    </ConfirmSubmitButton>
                   </form>
                 )}
               </div>

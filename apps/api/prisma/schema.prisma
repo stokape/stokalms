@@ -210,6 +210,7 @@ model UserTenant {
   authoredStudentNotes StudentNote[]
   uploadedEnrollmentAttachments EnrollmentAttachment[]
   remindersSent ReminderLog[]
+  notifications Notification[]
 
   // Un mismo usuario no puede tener dos membresias distintas en el mismo tenant.
   @@unique([userId, tenantId])
@@ -908,6 +909,40 @@ model ReportPreset {
 
   @@index([tenantId])
   @@map("report_presets")
+}
+
+// ============================================================================
+// NOTIFICACIONES — avisos cortos dirigidos a UNA persona dentro de un tenant
+// (ej. "se te asignó el rol Docente", "tu certificado de Contabilidad 101 ya
+// está disponible"), que aparecen en la campana del panel (ver
+// notification.service.ts). Deliberadamente simple para el MVP: solo in-app
+// (nada de email/push todavía) y sin preferencias configurables por persona
+// — cada disparador (ver notification.service.ts, metodo "notify") decide
+// por sí mismo cuándo crear una.
+// ============================================================================
+model Notification {
+  id       String @id @default(uuid())
+  // Denormalizado para RLS directa (ver ADR-001-multi-tenancy.md).
+  tenantId String @map("tenant_id")
+  // A quién va dirigida — SIEMPRE una persona puntual, nunca "todo el
+  // tenant" (un aviso institucional amplio ya se resuelve con el mensaje de
+  // Mantenimiento, ver mantenimiento/page.tsx, no con esta tabla).
+  userTenantId String     @map("user_tenant_id")
+  userTenant   UserTenant @relation(fields: [userTenantId], references: [id], onDelete: Cascade)
+  // Que evento la origino (ej. "role_assigned", "certificate_issued") — para
+  // agrupar/filtrar sin tener que interpretar el texto libre.
+  type  String
+  title String
+  body  String?
+  // A donde lleva al hacer click (ej. "/matriculas/xxx/certificados") —
+  // opcional: alguna notificacion puede ser solo informativa, sin destino.
+  link      String?
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([tenantId])
+  @@index([userTenantId, read])
+  @@map("notifications")
 }
 
 // ============================================================================

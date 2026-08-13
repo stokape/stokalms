@@ -22,6 +22,19 @@ import {
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { AppConfig } from '../../config/configuration';
+import { verifyMagicBytes } from './file-validation';
+
+// Mimetypes que es SEGURO dejar que el navegador renderice inline (nunca
+// forzar descarga): imágenes, video, PDF — formatos sin capacidad de
+// ejecutar script al abrirse. Cualquier otro tipo (incluido el comodín
+// "doc" de inferResourceType para lo no reconocido) se descarga siempre,
+// nunca se renderiza inline — ver getPresignedDownloadUrl más abajo, parte
+// de la mitigación de la auditoría de seguridad F-03.
+const SAFE_TO_RENDER_INLINE = [
+  'image/jpeg', 'image/png', 'image/webp', 'image/gif',
+  'video/mp4', 'video/webm',
+  'application/pdf',
+];
 
 @Injectable()
 export class StorageService {
@@ -54,7 +67,15 @@ export class StorageService {
   // despues se puede volver a pedir — NO devuelve una URL: el bucket no es
   // publico, asi que la unica forma valida de descargar algo es pidiendo una
   // URL firmada de corta duracion (ver getPresignedDownloadUrl).
+  //
+  // "verifyMagicBytes" corre SIEMPRE aca, sin importar quien llame a
+  // upload() — es la unica forma de garantizar que NINGUN endpoint futuro
+  // de subida (los 4 actuales u otro que se agregue despues) pueda saltearse
+  // la verificacion de contenido por olvido (ver auditoria de seguridad,
+  // hallazgo F-03/SECURITY-03: antes cada controller confiaba en el
+  // Content-Type que el propio cliente declaraba, sin verificar nada).
   async upload(key: string, body: Buffer, contentType: string): Promise<string> {
+    verifyMagicBytes(body, contentType);
     await this.ensureBucketExists();
     await this.client.send(
       new PutObjectCommand({
@@ -72,8 +93,27 @@ export class StorageService {
   // consulta el endpoint publico de verificacion de certificados
   // (ver verify.service.ts) para que pueda ver/descargar el PDF sin que el
   // bucket entero tenga que ser publico.
-  async getPresignedDownloadUrl(key: string, expiresInSeconds = 3600): Promise<string> {
-    const command = new GetObjectCommand({ Bucket: this.bucket, Key: key });
+  //
+  // "contentType" (opcional): cuando se conoce, decide si la URL fuerza
+  // descarga o permite que el navegador la renderice inline (ver
+  // SAFE_TO_RENDER_INLINE arriba) — un recurso subido como "video/mp4"
+  // puede reproducirse en la pantalla del curso, pero cualquier tipo fuera
+  // de esa lista blanca (incluido el mimetype declarado con datos falsos:
+  // el CONTENIDO ya fue verificado al subir, pero rendirizar inline es una
+  // segunda capa de defensa, no solo una comodidad) siempre se descarga —
+  // asi el navegador nunca interpreta un archivo dudoso como HTML/SVG
+  // ejecutable solo por abrirlo en una pestaña nueva.
+  async getPresignedDownloadUrl(
+    key: string,
+    expiresInSeconds = 3600,
+    contentType?: string,
+  ): Promise<string> {
+    const forceDownload = !contentType || !SAFE_TO_RENDER_INLINE.includes(contentType);
+    const command = new GetObjectCommand({
+      Bucket: this.bucket,
+      Key: key,
+      ...(forceDownload && { ResponseContentDisposition: 'attachment' }),
+    });
     return getSignedUrl(this.client, command, { expiresIn: expiresInSeconds });
   }
 

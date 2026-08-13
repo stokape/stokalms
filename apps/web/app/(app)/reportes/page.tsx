@@ -22,6 +22,8 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { ConfirmSubmitButton } from '@/components/ui/ConfirmSubmitButton';
+import { GroupedColumns } from '@/components/ui/charts/GroupedColumns';
 import { selectClasses } from '@/components/ui/field-styles';
 import { getLocale } from '@/lib/locale';
 import { crearReportePersonalizado, eliminarReportePersonalizado } from './actions';
@@ -30,6 +32,7 @@ const TEXT = {
   es: {
     title: 'Reportes',
     description: 'Resumen de asistencia, notas y avance de matrícula — exportables a CSV.',
+    lastUpdated: (time: string) => `Actualizado recién · ${time}`,
     courseFilterLabel: 'Curso',
     allCourses: 'Todos los cursos',
     apply: 'Filtrar',
@@ -97,11 +100,13 @@ const TEXT = {
     customNoneSaved: 'Todavía no guardaste ningún reporte personalizado.',
     customExport: 'Exportar CSV ↓',
     customDelete: 'Eliminar',
+    customDeleteConfirm: (name: string) => `¿Eliminar el reporte personalizado "${name}"?`,
     customNeedsCourse: '(de notas — necesita el filtro de curso de arriba)',
   },
   en: {
     title: 'Reports',
     description: 'Attendance, grades, and enrollment-progress summaries — exportable to CSV.',
+    lastUpdated: (time: string) => `Updated just now · ${time}`,
     courseFilterLabel: 'Course',
     allCourses: 'All courses',
     apply: 'Filter',
@@ -166,6 +171,7 @@ const TEXT = {
     customNoneSaved: "You haven't saved any custom report yet.",
     customExport: 'Export CSV ↓',
     customDelete: 'Delete',
+    customDeleteConfirm: (name: string) => `Delete the "${name}" custom report?`,
     customNeedsCourse: '(grades — needs the course filter above)',
   },
 };
@@ -299,7 +305,14 @@ export default async function ReportesPage({
 }) {
   const { courseId, error, cohortA, cohortB } = await searchParams;
   const token = await requireAccessToken();
-  const t = TEXT[await getLocale()];
+  const locale = await getLocale();
+  const t = TEXT[locale];
+  // Mismo criterio que panel/page.tsx: sin cache (ver apiFetch, lib/api.ts),
+  // asi que la hora de este render es la hora real de los datos de abajo.
+  const updatedAt = new Date().toLocaleTimeString(locale === 'en' ? 'en-US' : 'es-PE', {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
   const qs = courseId ? `?courseId=${encodeURIComponent(courseId)}` : '';
   const permissions = await getPermissions(token);
   const canSeeCohorts = can(permissions, 'cohort', 'view');
@@ -356,7 +369,11 @@ export default async function ReportesPage({
 
   return (
     <div>
-      <PageHeader title={t.title} description={t.description} />
+      <PageHeader
+        title={t.title}
+        description={t.description}
+        actions={<p className="text-xs text-muted">{t.lastUpdated(updatedAt)}</p>}
+      />
 
       {error && (
         <div className="mb-6">
@@ -471,16 +488,14 @@ export default async function ReportesPage({
           <p className="text-sm text-muted">{t.noTrend}</p>
         ) : (
           <>
-            <ReportTable
-              headers={[t.trendMonth, t.trendEnrolled, t.trendCompleted, t.trendRate]}
-              rows={trend.map((p) => [
-                p.month,
-                p.enrolled,
-                p.completedSoFar,
-                p.completionRate !== null ? `${p.completionRate}%` : '—',
-              ])}
+            <GroupedColumns
+              data={trend.map((p) => ({ key: p.month, category: p.month, values: { enrolled: p.enrolled, completed: p.completedSoFar } }))}
+              series={[
+                { key: 'enrolled', label: t.trendEnrolled, color: 'var(--chart-1)' },
+                { key: 'completed', label: t.trendCompleted, color: 'var(--chart-2)' },
+              ]}
             />
-            <p className="mt-3 text-xs text-muted">{t.trendNote}</p>
+            <p className="mt-4 text-xs text-muted">{t.trendNote}</p>
           </>
         )}
       </Section>
@@ -540,10 +555,24 @@ export default async function ReportesPage({
           {!cohortComparison ? (
             <p className="text-sm text-muted">{t.pickBothCohorts}</p>
           ) : (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <CohortCard summary={cohortComparison.cohortA} t={t} />
-              <CohortCard summary={cohortComparison.cohortB} t={t} />
-            </div>
+            <>
+              <GroupedColumns
+                data={[cohortComparison.cohortA, cohortComparison.cohortB].map((c) => ({
+                  key: c.cohortId,
+                  category: c.cohortName,
+                  values: { enrolled: c.enrolledCount, completed: c.completedCount },
+                }))}
+                series={[
+                  { key: 'enrolled', label: t.cohortEnrolled, color: 'var(--chart-1)' },
+                  { key: 'completed', label: t.cohortCompleted, color: 'var(--chart-2)' },
+                ]}
+                height={120}
+              />
+              <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <CohortCard summary={cohortComparison.cohortA} t={t} />
+                <CohortCard summary={cohortComparison.cohortB} t={t} />
+              </div>
+            </>
           )}
         </Section>
       )}
@@ -622,9 +651,12 @@ export default async function ReportesPage({
                       {t.customExport}
                     </Link>
                     <form action={eliminarReportePersonalizado.bind(null, preset.id)}>
-                      <button type="submit" className="text-xs font-medium text-danger hover:underline">
+                      <ConfirmSubmitButton
+                        className="text-xs font-medium text-danger hover:underline"
+                        confirmMessage={t.customDeleteConfirm(preset.name)}
+                      >
                         {t.customDelete}
-                      </button>
+                      </ConfirmSubmitButton>
                     </form>
                   </div>
                 </li>

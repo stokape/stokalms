@@ -131,12 +131,35 @@ export class AuthService {
     // "user_tenants" SI tiene Row-Level Security: la busqueda/creacion de la
     // membresia debe correr con el tenant activo fijado (ver
     // src/prisma/prisma.service.ts, metodo withTenant).
+    //
+    // SOLO se crea una membresia nueva "de la nada" si esta persona es del
+    // equipo de PLATAFORMA (ver "ensureSuperAdminForPlatformAdmins" mas
+    // abajo, que YA depende de que exista un UserTenant para poder
+    // asignarle Super Admin en cualquier institucion, incluso una que
+    // nunca visito antes — soporte tecnico). Para cualquier otra persona,
+    // NO existir todavia una membresia significa que esta institucion
+    // nunca la matriculo/invito (ver auditoria de seguridad, hallazgo F-04:
+    // antes, CUALQUIER identidad valida de Keycloak — de cualquier otra
+    // institucion de la plataforma — quedaba de alta como miembro "activo"
+    // con solo visitar el subdominio y loguearse, sin ninguna relacion
+    // previa). Enrolar a alguien en un curso (enrollment.service.ts) o
+    // asignarle un rol (user.service.ts) YA crean esta fila de antemano,
+    // asi que ningun flujo legitimo depende de crearla recien aca.
+    const platformAdminEmails = this.configService.get<string[]>('platformAdminEmails') ?? [];
+    const isPlatformAdmin = platformAdminEmails.includes(email.toLowerCase());
+
     const userTenant = await this.prisma.withTenant(tenantId, async (tx) => {
       const existing = await tx.userTenant.findUnique({
         where: { userId_tenantId: { userId: user.id, tenantId } },
       });
       if (existing) {
         return existing;
+      }
+
+      if (!isPlatformAdmin) {
+        throw new UnauthorizedException(
+          'Todavía no tenés ninguna relación con esta institución. Si esperabas poder entrar, pedile a un administrador de la institución que te matricule en un curso o te asigne un rol.',
+        );
       }
 
       return tx.userTenant.create({

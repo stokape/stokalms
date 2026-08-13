@@ -70,6 +70,7 @@ export default async function PeriodosPage({
               name="name"
               type="text"
               required
+              maxLength={120}
               placeholder='Ej. "2026 - Semestre I"'
               className="rounded border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
             />

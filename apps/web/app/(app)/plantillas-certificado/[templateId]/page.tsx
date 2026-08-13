@@ -22,6 +22,7 @@ import { ErrorBanner } from '@/components/ErrorBanner';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { ConfirmSubmitButton } from '@/components/ui/ConfirmSubmitButton';
 import { fieldClasses } from '@/components/ui/field-styles';
 import { getLocale } from '@/lib/locale';
 import { editarPlantilla, eliminarPlantilla } from './actions';
@@ -38,6 +39,7 @@ const TEXT = {
     deleteTemplate: 'Eliminar plantilla',
     deleteHelp: 'Solo se puede eliminar si NINGÚN certificado fue emitido todavía con esta plantilla.',
     deleteThis: 'Eliminar esta plantilla',
+    deleteConfirm: '¿Eliminar esta plantilla? No se puede deshacer.',
   },
   en: {
     back: '← Certificate templates',
@@ -50,6 +52,7 @@ const TEXT = {
     deleteTemplate: 'Delete template',
     deleteHelp: 'This can only be deleted if NO certificate has been issued with this template yet.',
     deleteThis: 'Delete this template',
+    deleteConfirm: "Delete this template? This can't be undone.",
   },
 };
 
@@ -141,9 +144,12 @@ export default async function PlantillaDetallePage({
           <h2 className="mb-2 text-base font-medium">{t.deleteTemplate}</h2>
           <p className="mb-3 text-sm text-muted">{t.deleteHelp}</p>
           <form action={eliminarPlantilla.bind(null, templateId)}>
-            <button type="submit" className="text-sm font-medium text-danger hover:underline">
+            <ConfirmSubmitButton
+              className="text-sm font-medium text-danger hover:underline"
+              confirmMessage={t.deleteConfirm}
+            >
               {t.deleteThis}
-            </button>
+            </ConfirmSubmitButton>
           </form>
         </Card>
       )}

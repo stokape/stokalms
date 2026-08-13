@@ -195,3 +195,11 @@ export const MinusIcon = (p: SVGProps<SVGSVGElement>) => (
     <path d="M5 12h14" />
   </Icon>
 );
+
+// Campana de notificaciones (ver NotificationBell.tsx).
+export const BellIcon = (p: SVGProps<SVGSVGElement>) => (
+  <Icon {...p}>
+    <path d="M6 8a6 6 0 1 1 12 0c0 4 1.5 5.5 2 6H4c.5-.5 2-2 2-6Z" />
+    <path d="M10 20a2 2 0 0 0 4 0" />
+  </Icon>
+);

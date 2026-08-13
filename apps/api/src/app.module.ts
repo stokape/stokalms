@@ -26,6 +26,7 @@ import configuration from './config/configuration';
 import { PrismaModule } from './prisma/prisma.module';
 import { TenantModule } from './common/tenant/tenant.module';
 import { TenantContextMiddleware } from './common/tenant/tenant-context.middleware';
+import { RequestLoggingMiddleware } from './common/logging/request-logging.middleware';
 import { HealthModule } from './modules/health/health.module';
 import { AuthModule } from './auth/auth.module';
 import { RbacModule } from './rbac/rbac.module';
@@ -43,6 +44,7 @@ import { UserManagementModule } from './modules/user-management/user-management.
 import { ProfileModule } from './modules/profile/profile.module';
 import { AttendanceModule } from './modules/attendance/attendance.module';
 import { StudentNotesModule } from './modules/student-notes/student-notes.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
 import { AcademicProgressModule } from './modules/academic-progress/academic-progress.module';
 import { DomainCheckModule } from './modules/domain-check/domain-check.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
@@ -166,6 +168,9 @@ import { AiModule } from './common/ai/ai.module';
     // Anotaciones de desempeño por alumno (ver src/modules/student-notes/).
     StudentNotesModule,
 
+    // Notificaciones in-app (campana del panel, ver src/modules/notifications/).
+    NotificationsModule,
+
     // "Avance" de un alumno: lecciones vistas, evaluaciones rendidas,
     // asistencia y nota parcial (ver src/modules/academic-progress/).
     AcademicProgressModule,
@@ -219,7 +224,11 @@ export class AppModule implements NestModule {
   // armar la aplicacion, pensado exactamente para registrar middlewares.
   configure(consumer: MiddlewareConsumer) {
     consumer
-      .apply(TenantContextMiddleware)
+      // "RequestLoggingMiddleware" primero: mide desde el instante mas
+      // temprano posible del request, y su listener de "finish" ve el
+      // resultado final SIN IMPORTAR en que capa termine (guard, handler,
+      // filtro) — ver la nota extensa en request-logging.middleware.ts.
+      .apply(RequestLoggingMiddleware, TenantContextMiddleware)
       // ".forRoutes('*')" aplica el middleware a TODAS las rutas, sin
       // excepcion: la resolucion de tenant debe pasar siempre primero,
       // incluso para rutas que luego decidan no requerir un tenant (como

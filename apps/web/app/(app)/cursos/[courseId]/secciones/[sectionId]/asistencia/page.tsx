@@ -6,10 +6,10 @@
 // apps/api/.../attendance.service.ts, "mark").
 // ============================================================================
 
-import Link from 'next/link';
 import { requireAccessToken, apiFetch, toErrorMessage } from '@/lib/api';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { Button } from '@/components/ui/Button';
+import { Breadcrumbs } from '@/components/ui/Breadcrumbs';
 import { getLocale, type Locale } from '@/lib/locale';
 import { marcarAsistencia } from './actions';
 
@@ -36,7 +36,8 @@ const STATUS_OPTIONS_BY_LOCALE: Record<Locale, Array<{ value: string; label: str
 
 const TEXT = {
   es: {
-    back: '← Sección',
+    back: 'Sección',
+    coursesBreadcrumb: 'Cursos',
     title: 'Asistencia',
     saved: 'Asistencia guardada.',
     date: 'Fecha',
@@ -47,7 +48,8 @@ const TEXT = {
     submit: 'Guardar asistencia',
   },
   en: {
-    back: '← Section',
+    back: 'Section',
+    coursesBreadcrumb: 'Courses',
     title: 'Attendance',
     saved: 'Attendance saved.',
     date: 'Date',
@@ -88,15 +90,32 @@ export default async function AsistenciaPage({
     return <ErrorBanner message={toErrorMessage(err)} />;
   }
 
+  // Solo para el breadcrumb — best-effort, ver la misma nota en
+  // modulos/[moduleId]/[lessonId]/page.tsx.
+  let courseTitle = '';
+  let sectionName = '';
+  try {
+    const [course, section] = await Promise.all([
+      apiFetch<{ title: string }>(token, `/courses/${courseId}`),
+      apiFetch<{ name: string }>(token, `/courses/${courseId}/sections/${sectionId}`),
+    ]);
+    courseTitle = course.title;
+    sectionName = section.name;
+  } catch {
+    // Intencionalmente silencioso.
+  }
+
   return (
     <div className="mx-auto max-w-3xl">
-      <Link
-        href={`/cursos/${courseId}/secciones/${sectionId}`}
-        className="text-sm text-zinc-500 hover:underline"
-      >
-        {t.back}
-      </Link>
-      <h1 className="mt-2 mb-6 text-2xl font-semibold">{t.title}</h1>
+      <Breadcrumbs
+        items={[
+          { label: t.coursesBreadcrumb, href: '/cursos' },
+          { label: courseTitle || courseId, href: `/cursos/${courseId}` },
+          { label: sectionName || t.back, href: `/cursos/${courseId}/secciones/${sectionId}` },
+          { label: t.title },
+        ]}
+      />
+      <h1 className="mt-1 mb-6 text-2xl font-semibold">{t.title}</h1>
 
       {error && (
         <div className="mb-6">
@@ -133,7 +152,8 @@ export default async function AsistenciaPage({
       ) : (
         <form action={marcarAsistencia.bind(null, courseId, sectionId)}>
           <input type="hidden" name="sessionDate" value={sessionDate} />
-          <table className="mb-6 w-full text-left text-sm">
+          <div className="mb-6 overflow-x-auto">
+          <table className="w-full text-left text-sm">
             <thead>
               <tr className="border-b border-zinc-200 dark:border-zinc-800">
                 <th className="py-2">{t.student}</th>
@@ -165,6 +185,7 @@ export default async function AsistenciaPage({
               ))}
             </tbody>
           </table>
+          </div>
           <Button type="submit">{t.submit}</Button>
         </form>
       )}

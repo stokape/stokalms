@@ -13,6 +13,7 @@ import Link from 'next/link';
 import { requireAccessToken, apiFetch, toErrorMessage, getCoursePermissions, can } from '@/lib/api';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { Button } from '@/components/ui/Button';
+import { ConfirmSubmitButton } from '@/components/ui/ConfirmSubmitButton';
 import { getLocale, type Locale } from '@/lib/locale';
 import { crearCategoria, crearEvaluacion, eliminarEvaluacion } from './actions';
 
@@ -52,6 +53,7 @@ const TEXT = {
     attempt: 'intento',
     attempts: 'intentos',
     delete: 'Eliminar',
+    deleteConfirm: '¿Eliminar esta evaluación? Se pierden también sus preguntas y entregas. No se puede deshacer.',
     firstCreateCategory: 'Primero crea una categoría de notas',
     categoryHelp: 'Toda evaluación pertenece a una categoría (ej. "Exámenes", "Tareas"), que define cuánto pesa en la nota final del curso.',
     categoryNamePlaceholder: 'Ej. "Exámenes"',
@@ -73,6 +75,7 @@ const TEXT = {
     attempt: 'attempt',
     attempts: 'attempts',
     delete: 'Delete',
+    deleteConfirm: "Delete this assessment? Its questions and submissions are lost too. This can't be undone.",
     firstCreateCategory: 'First create a grading category',
     categoryHelp: 'Every assessment belongs to a category (e.g. "Exams", "Assignments"), which defines how much it weighs in the course\'s final grade.',
     categoryNamePlaceholder: 'E.g. "Exams"',
@@ -169,9 +172,12 @@ export default async function EvaluacionesDelCursoPage({
               </Link>
               {canDelete && (
                 <form action={eliminarEvaluacion.bind(null, courseId, a.id)}>
-                  <button type="submit" className="text-xs text-red-600 underline dark:text-red-400">
+                  <ConfirmSubmitButton
+                    className="text-xs text-red-600 underline dark:text-red-400"
+                    confirmMessage={t.deleteConfirm}
+                  >
                     {t.delete}
-                  </button>
+                  </ConfirmSubmitButton>
                 </form>
               )}
             </li>

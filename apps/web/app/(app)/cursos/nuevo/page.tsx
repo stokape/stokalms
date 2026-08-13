@@ -135,6 +135,7 @@ export default async function NuevoCursoPage({
             name="code"
             type="text"
             required
+            maxLength={30}
             placeholder={tr.codePlaceholder}
             className="rounded border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
           />
@@ -142,6 +143,7 @@ export default async function NuevoCursoPage({
             name="title"
             type="text"
             required
+            maxLength={200}
             placeholder={tr.titlePlaceholder}
             className="rounded border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
           />

@@ -14,6 +14,16 @@
 #
 # Como se usa: "npm run docker:up" (equivale a "docker compose up -d").
 # Requiere tener Docker Desktop instalado y corriendo.
+#
+# LIMITES DE RECURSOS: cada servicio abajo trae "deploy.resources.limits"
+# (cpu/memoria) — Docker Compose v2 los aplica tambien FUERA de modo Swarm
+# (via "docker compose up" normal, no hace falta "docker stack deploy"), asi
+# que valen tal cual en desarrollo local. Sin esto, Postgres/Keycloak/MinIO
+# pueden acaparar toda la RAM/CPU disponible de la maquina (Keycloak en
+# particular: la JVM por defecto dimensiona su heap segun la memoria TOTAL
+# del host, no segun lo que este proyecto realmente necesita) — los topes de
+# aqui son generosos para desarrollo pero evitan que 4 contenedores de
+# infraestructura le compitan recursos al editor/IDE y a "npm run dev".
 # ============================================================================
 
 services:
@@ -49,6 +59,11 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
 
   # --------------------------------------------------------------------
   # Redis — cache + broker de colas de trabajos en segundo plano.
@@ -67,6 +82,11 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 128M
 
   # --------------------------------------------------------------------
   # MinIO — almacenamiento de archivos compatible con la API de S3, para
@@ -92,6 +112,11 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
 
   # --------------------------------------------------------------------
   # Keycloak — identidad, login y SSO (ver ADR-003-auth-identity.md).
@@ -108,6 +133,11 @@ services:
       # (para entrar a http://localhost:8080/admin la primera vez).
       KEYCLOAK_ADMIN: admin
       KEYCLOAK_ADMIN_PASSWORD: admin_dev_password
+      # Sin esto, la JVM dimensiona su heap por defecto segun la RAM TOTAL
+      # del host (no segun lo que Keycloak realmente necesita en dev) — es
+      # el mayor consumidor de memoria de los 4 servicios. 512M de heap
+      # alcanza sobrado para un tenant/realm de desarrollo.
+      JAVA_OPTS_APPEND: "-Xms256m -Xmx512m"
     ports:
       - "8080:8080"
     volumes:
@@ -121,6 +151,11 @@ services:
       # modo dev), pero lo agrupamos para que inicio junto al resto.
       postgres:
         condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: "1.5"
+          memory: 768M
 
 # ------------------------------------------------------------------------
 # Volumenes con nombre: Docker los administra y persiste fuera del ciclo

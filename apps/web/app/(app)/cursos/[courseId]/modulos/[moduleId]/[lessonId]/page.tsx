@@ -11,10 +11,11 @@
 // plantillas-certificado/[templateId]/page.tsx).
 // ============================================================================
 
-import Link from 'next/link';
+import { Breadcrumbs } from '@/components/ui/Breadcrumbs';
 import { requireAccessToken, apiFetch, toErrorMessage, getCoursePermissions, can } from '@/lib/api';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { Button } from '@/components/ui/Button';
+import { ConfirmSubmitButton } from '@/components/ui/ConfirmSubmitButton';
 import { getLocale, type Locale } from '@/lib/locale';
 import {
   subirRecurso,
@@ -59,12 +60,15 @@ const TYPE_LABELS_BY_LOCALE: Record<Locale, Record<string, string>> = {
 
 const TEXT = {
   es: {
-    backToModule: '← Módulo',
+    backToModule: 'Módulo',
+    coursesBreadcrumb: 'Cursos',
+    contentBreadcrumb: 'Contenido',
     contentPlaceholder: 'Texto de la lección',
     saveChanges: 'Guardar cambios',
     resources: 'Recursos',
     noResources: 'Esta lección todavía no tiene ningún archivo ni enlace adjunto.',
     delete: 'Eliminar',
+    deleteConfirm: '¿Eliminar este recurso? No se puede deshacer.',
     titlePlaceholder: 'Título',
     descriptionPlaceholder: 'Descripción',
     save: 'Guardar',
@@ -84,12 +88,15 @@ const TEXT = {
     aiCorrect: 'Correcta',
   },
   en: {
-    backToModule: '← Module',
+    backToModule: 'Module',
+    coursesBreadcrumb: 'Courses',
+    contentBreadcrumb: 'Content',
     contentPlaceholder: 'Lesson text',
     saveChanges: 'Save changes',
     resources: 'Resources',
     noResources: "This lesson doesn't have any files or links attached yet.",
     delete: 'Delete',
+    deleteConfirm: "Delete this resource? This can't be undone.",
     titlePlaceholder: 'Title',
     descriptionPlaceholder: 'Description',
     save: 'Save',
@@ -151,6 +158,22 @@ export default async function LeccionDetallePage({
     return <ErrorBanner message={toErrorMessage(err)} />;
   }
 
+  // Solo para el breadcrumb (ver Breadcrumbs.tsx) — best-effort: si esto
+  // falla, el camino se arma con lo que ya tenemos (el título de la
+  // lección) en vez de romper toda la pantalla por un dato secundario.
+  let courseTitle = '';
+  let moduleTitle = '';
+  try {
+    const [course, module] = await Promise.all([
+      apiFetch<{ title: string }>(token, `/courses/${courseId}`),
+      apiFetch<{ title: string }>(token, `/courses/${courseId}/modules/${moduleId}`),
+    ]);
+    courseTitle = course.title;
+    moduleTitle = module.title;
+  } catch {
+    // Intencionalmente silencioso.
+  }
+
   // Registra "avance" (ver academic-progress.service.ts) — best-effort: si
   // falla (ej. quien mira no es alumno matriculado de este curso, o el
   // backend no responde), no debe romper la lección en si, que ya se
@@ -171,13 +194,16 @@ export default async function LeccionDetallePage({
 
   return (
     <div className="mx-auto max-w-3xl">
-      <Link
-        href={`/cursos/${courseId}/modulos/${moduleId}`}
-        className="text-sm text-zinc-500 hover:underline"
-      >
-        {t.backToModule}
-      </Link>
-      <h1 className="mt-2 mb-6 text-2xl font-semibold">{lesson.title}</h1>
+      <Breadcrumbs
+        items={[
+          { label: t.coursesBreadcrumb, href: '/cursos' },
+          { label: courseTitle || courseId, href: `/cursos/${courseId}` },
+          { label: t.contentBreadcrumb, href: `/cursos/${courseId}/modulos` },
+          { label: moduleTitle || t.backToModule, href: `/cursos/${courseId}/modulos/${moduleId}` },
+          { label: lesson.title },
+        ]}
+      />
+      <h1 className="mt-1 mb-6 text-2xl font-semibold">{lesson.title}</h1>
 
       {error && (
         <div className="mb-6">
@@ -276,9 +302,12 @@ export default async function LeccionDetallePage({
                 </a>
                 {canDeleteResource && (
                   <form action={eliminarRecurso.bind(null, courseId, moduleId, lessonId, resource.id)}>
-                    <button type="submit" className="text-xs text-red-600 underline dark:text-red-400">
+                    <ConfirmSubmitButton
+                      className="text-xs text-red-600 underline dark:text-red-400"
+                      confirmMessage={t.deleteConfirm}
+                    >
                       {t.delete}
-                    </button>
+                    </ConfirmSubmitButton>
                   </form>
                 )}
               </div>

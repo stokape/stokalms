@@ -32,6 +32,7 @@ import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { PermissionsGuard } from '../../rbac/permissions.guard';
 import { RequirePermission } from '../../rbac/require-permission.decorator';
 import { AppConfig } from '../../config/configuration';
+import { RESOURCE_MIME_TYPES, mimeAllowlistFilter } from '../../common/storage/file-validation';
 import { ResourceService } from './resource.service';
 import { CreateLinkResourceDto } from './dto/create-link-resource.dto';
 import { UploadResourceDto } from './dto/upload-resource.dto';
@@ -56,6 +57,7 @@ export class ResourceController {
       // aquí (500MB) y el límite configurable de verdad se revisa a mano
       // dentro del método (ver el chequeo de "file.size" más abajo).
       limits: { fileSize: 500 * 1024 * 1024 },
+      fileFilter: mimeAllowlistFilter(RESOURCE_MIME_TYPES),
     }),
   )
   async upload(

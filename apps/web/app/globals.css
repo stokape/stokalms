@@ -41,6 +41,19 @@
   --danger-bg: #fef2f2;
   --info: #0369a1;
   --info-bg: #f0f9ff;
+
+  /* Paleta categórica para gráficos (ver components/ui/charts/, skill de
+     dataviz) — SIEMPRE en este orden fijo, nunca "el próximo color libre":
+     el orden es lo que garantiza que series adyacentes se distingan para
+     daltonismo (validado con scripts/validate_palette.js del skill, ambos
+     modos, PASS en los 5 chequeos). Deliberadamente DISTINTA de
+     --primary/--success/etc.: esos tokens son de INTERFAZ (botones,
+     estados), no de identidad de una serie de datos — mezclarlos haría
+     que un gráfico se confundiera con un botón o un estado de éxito/error.
+     Ver docs/architecture/... si se necesita una tercera serie: agregar
+     el slot 3 (aqua "#1baf7a") del mismo catálogo, nunca un color inventado. */
+  --chart-1: #2a78d6; /* azul */
+  --chart-2: #eb6834; /* naranja */
 }
 
 @theme inline {
@@ -105,12 +118,44 @@
   --danger-bg: #2a1010;
   --info: #38bdf8;
   --info-bg: #071d2a;
+
+  /* Mismos 2 slots categóricos, escalonados para el fondo oscuro (ver la
+     nota extensa en :root de arriba) — validado aparte contra la
+     superficie oscura, no un "aclarado" a ojo. */
+  --chart-1: #3987e5;
+  --chart-2: #d95926;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+}
+
+/* ===== SuccessBanner (ver components/SuccessBanner.tsx) =====
+   Se desvanece y colapsa su alto solo, ~4.5s después de aparecer — la
+   sensación de un "toast" sin JavaScript de cliente: "animation-fill-mode:
+   forwards" deja el estado final (invisible, sin alto) puesto para
+   siempre, sin necesidad de que nada lo saque del DOM. "overflow:hidden" +
+   "max-height" (en vez de "height") es lo que permite animar el colapso
+   sin conocer de antemano cuánto texto tiene adentro. */
+@media (prefers-reduced-motion: no-preference) {
+  .success-banner {
+    overflow: hidden;
+    max-height: 300px;
+    animation: success-banner-collapse 400ms ease-in 4.5s forwards;
+  }
+}
+@keyframes success-banner-collapse {
+  to {
+    opacity: 0;
+    max-height: 0;
+    margin-bottom: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    border-width: 0;
+    visibility: hidden;
+  }
 }
 
 /* ===== InstitutionMosaic (ver app/InstitutionMosaic.tsx) =====

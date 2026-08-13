@@ -41,8 +41,11 @@ export class ProfileService {
 
     const person = await this.prisma.user.findUniqueOrThrow({ where: { id: user.userId } });
 
+    // "image/png" marca "esto es una imagen" para que la URL firmada no
+    // fuerce descarga — el endpoint de subida solo acepta imagenes (ver
+    // profile.controller.ts), no hace falta el mimetype exacto.
     const avatarUrl = person.avatarKey
-      ? await this.storage.getPresignedDownloadUrl(person.avatarKey)
+      ? await this.storage.getPresignedDownloadUrl(person.avatarKey, 3600, 'image/png')
       : null;
 
     return {
@@ -76,6 +79,6 @@ export class ProfileService {
 
     await this.prisma.user.update({ where: { id: user.userId }, data: { avatarKey: key } });
 
-    return { avatarUrl: await this.storage.getPresignedDownloadUrl(key) };
+    return { avatarUrl: await this.storage.getPresignedDownloadUrl(key, 3600, 'image/png') };
   }
 }

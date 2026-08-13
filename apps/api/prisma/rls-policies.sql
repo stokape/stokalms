@@ -292,6 +292,12 @@ ALTER TABLE report_presets FORCE ROW LEVEL SECURITY;
 CREATE POLICY tenant_isolation ON report_presets
   USING (tenant_id = app_current_tenant());
 
+-- notifications: avisos in-app dirigidos a una persona (ver notification.service.ts).
+ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE notifications FORCE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON notifications
+  USING (tenant_id = app_current_tenant());
+
 
 -- ============================================================================
 -- ROL DE APLICACION RESTRINGIDO — esta seccion existe por un detalle de

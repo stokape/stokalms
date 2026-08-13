@@ -31,6 +31,15 @@ export type AnalyticsEventName =
 
 const API_URL = process.env.STOKA_API_URL ?? 'http://localhost:3001/api/v1';
 
+// Mismo secreto que "ANALYTICS_INGEST_SECRET" del lado de la API (ver
+// configuration.ts) — sin esto, la API no puede distinguir un evento
+// real (mandado por este mismo servidor) de uno inventado por cualquiera
+// en internet golpeando el endpoint directo (ver auditoria de seguridad,
+// hallazgo F-06). Vacio en un ambiente que todavia no lo configuro: la API
+// deja pasar igual (ver la nota en analytics.controller.ts), asi que esto
+// nunca rompe el tracking, solo deja de reforzarlo.
+const ANALYTICS_INGEST_SECRET = process.env.ANALYTICS_INGEST_SECRET ?? '';
+
 export async function trackEvent(
   event: AnalyticsEventName,
   options: { host?: string; metadata?: Record<string, unknown> } = {},
@@ -38,7 +47,10 @@ export async function trackEvent(
   try {
     await fetch(`${API_URL}/analytics/events`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(ANALYTICS_INGEST_SECRET && { 'X-Internal-Secret': ANALYTICS_INGEST_SECRET }),
+      },
       body: JSON.stringify({ event, host: options.host, metadata: options.metadata }),
       cache: 'no-store',
     });
