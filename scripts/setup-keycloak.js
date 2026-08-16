@@ -155,6 +155,7 @@ async function main() {
   await ensureRealm(adminToken);
   await ensureBruteForceProtection(adminToken);
   await ensureBranding(adminToken);
+  await ensureLocale(adminToken);
 
   const apiClientUuid = await ensureClient(adminToken, CLIENT_ID, {
     // El backend SI necesita "password grant" (ver mas abajo) para poder
@@ -302,6 +303,16 @@ async function ensureRealm(adminToken) {
       // abajo vuelve a fijar ambos igual en un realm que ya existia de antes.
       loginTheme: 'stoka',
       displayName: 'Stoka LMS',
+      // Sin esto, Keycloak ignora el idioma del navegador y sirve SIEMPRE
+      // sus pantallas (login, registro, "olvide mi contraseña", errores)
+      // en ingles — el tema "stoka" hereda de "parent=keycloak" (ver
+      // theme.properties), que YA trae traducciones al español de fabrica,
+      // pero Keycloak no las usa mientras "internationalizationEnabled"
+      // este apagado (el valor por defecto). "ensureLocale" mas abajo
+      // vuelve a fijar esto mismo en un realm que ya existia de antes.
+      internationalizationEnabled: true,
+      supportedLocales: ['es', 'en'],
+      defaultLocale: 'es',
     }),
   });
 
@@ -337,6 +348,38 @@ async function ensureBranding(adminToken) {
     throw new Error(`No se pudo activar la marca "Stoka LMS" en el realm (HTTP ${update.status}).`);
   }
   console.log('[keycloak-setup] Tema de login "stoka" y nombre "Stoka LMS" activados.');
+}
+
+// ----------------------------------------------------------------------------
+// Fija "internationalizationEnabled/supportedLocales/defaultLocale" SIEMPRE,
+// no solo la primera vez que se crea el realm — mismo motivo/patron que
+// ensureBranding: un realm creado ANTES de que esto existiera (ej. el de
+// cualquier ambiente ya levantado) nunca lo tendria si esto solo corriera
+// dentro de "ensureRealm". Sin esto, las pantallas de Keycloak (login,
+// registro, "olvide mi contraseña", errores) quedan siempre en ingles, sin
+// importar el idioma del navegador de quien entra.
+// ----------------------------------------------------------------------------
+async function ensureLocale(adminToken) {
+  const get = await fetch(`${KEYCLOAK_BASE_URL}/admin/realms/${REALM_NAME}`, {
+    headers: adminHeaders(adminToken),
+  });
+  const realm = await get.json();
+
+  const update = await fetch(`${KEYCLOAK_BASE_URL}/admin/realms/${REALM_NAME}`, {
+    method: 'PUT',
+    headers: adminHeaders(adminToken),
+    body: JSON.stringify({
+      ...realm,
+      internationalizationEnabled: true,
+      supportedLocales: ['es', 'en'],
+      defaultLocale: 'es',
+    }),
+  });
+
+  if (!update.ok) {
+    throw new Error(`No se pudo activar el español en las pantallas de Keycloak (HTTP ${update.status}).`);
+  }
+  console.log('[keycloak-setup] Español activado como idioma por defecto de las pantallas de Keycloak.');
 }
 
 // ----------------------------------------------------------------------------

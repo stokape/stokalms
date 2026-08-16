@@ -11,9 +11,12 @@
 #   - Caddy hace de proxy reverso: TLS automatico (Let's Encrypt) para el
 #     dominio raiz, cada subdominio de institucion y cada dominio propio ya
 #     verificado (ver Caddyfile y domain-check.controller.ts) — nada de
-#     Postgres/Keycloak/MinIO queda expuesto directo a Internet.
+#     Postgres/Keycloak queda expuesto directo a Internet.
 #   - Nada de puertos "de host" salvo 80/443 (Caddy): todo lo demas se habla
 #     por la red interna de Docker entre contenedores.
+#   - Los archivos (logos, PDFs de certificado, SCORM) NO se self-hostean
+#     aca: STORAGE_* apunta a un bucket de Cloudflare R2 (ver
+#     .env.production.example) — un servicio menos en la VM.
 #
 # Uso (ver la guia completa en docs/deploy/produccion.md):
 #   docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
@@ -66,6 +69,13 @@ services:
       # aunque a el le llegue por HTTP).
       KC_PROXY_HEADERS: xforwarded
       KC_HEALTH_ENABLED: "true"
+      # Sin esto, la JVM se dimensiona sola segun la memoria "disponible"
+      # que detecta — en una VM chica (ej. 1GB de RAM, como un e2-micro de
+      # GCP Always Free) eso puede hacer que el arranque quede horas
+      # "trabado" haciendo swap en vez de terminar. Mismo criterio que
+      # docker-compose.yml (desarrollo), pero mas conservador porque aca
+      # Postgres y Redis TAMBIEN compiten por la misma RAM chica.
+      JAVA_OPTS_APPEND: "-Xms128m -Xmx384m"
     volumes:
       # Mismo tema "stoka" que en desarrollo (ver docker-compose.yml y
       # keycloak-themes/stoka/) — el enlace "Volver" en las pantallas de
@@ -75,21 +85,13 @@ services:
       postgres:
         condition: service_healthy
 
-  minio:
-    image: minio/minio:latest
-    container_name: stoka-minio
-    restart: unless-stopped
-    command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER: ${STORAGE_ACCESS_KEY}
-      MINIO_ROOT_PASSWORD: ${STORAGE_SECRET_KEY}
-    volumes:
-      - stoka_minio_data:/data
-    healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
+  # SIN servicio "minio" aca a proposito: STORAGE_* (ver
+  # .env.production.example) apunta a un bucket de Cloudflare R2, no a un
+  # MinIO propio en esta VM — un servicio menos para correr/respaldar/
+  # actualizar, y R2 no cobra por trafico de salida (a diferencia de S3),
+  # que es justo lo que mas se usa aca (ver certificados/PDFs/SCORM). Si
+  # hiciera falta volver a self-hostearlo, el "docker-compose.yml" de
+  # desarrollo tiene el bloque de referencia para copiar.
 
   api:
     build:
@@ -105,12 +107,11 @@ services:
       # apply-rls.js) — lo unico que varia por entorno es su contraseña.
       RUNTIME_DATABASE_URL: postgresql://stoka_app:${RUNTIME_DB_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
       REDIS_URL: redis://redis:6379
-      # PUBLICO (via Caddy -> minio:9000), no "http://minio:9000" interno:
-      # las URLs firmadas que arma el SDK de S3 (ver storage.service.ts,
-      # getPresignedDownloadUrl) llevan este mismo host adentro de la firma
-      # — si fuera el hostname interno de Docker, esas URLs le llegarian al
-      # NAVEGADOR de alguien y serian imposibles de resolver.
-      STORAGE_ENDPOINT: https://storage.${PLATFORM_ROOT_DOMAIN}
+      # STORAGE_ENDPOINT/STORAGE_ACCESS_KEY/STORAGE_SECRET_KEY/STORAGE_BUCKET
+      # NO se fijan aca: ya vienen de ".env.production" via "env_file" de
+      # arriba (apuntando al bucket de Cloudflare R2 — ver
+      # .env.production.example), sin necesitar ningun override especifico
+      # de este compose.
       KEYCLOAK_BASE_URL: https://${AUTH_DOMAIN}
       # Mismo valor que scripts/setup-keycloak.js usa para registrar los
       # clientes de Keycloak — lo necesita keycloak-admin.service.ts para
@@ -119,8 +120,6 @@ services:
       WEB_ORIGIN: https://${PLATFORM_ROOT_DOMAIN}
     depends_on:
       postgres:
-        condition: service_healthy
-      minio:
         condition: service_healthy
       keycloak:
         condition: service_started
@@ -136,7 +135,11 @@ services:
       NODE_ENV: production
       STOKA_API_URL: http://api:3001/api/v1
       AUTH_KEYCLOAK_ISSUER: https://${AUTH_DOMAIN}/realms/${KEYCLOAK_REALM}
-      STORAGE_PUBLIC_ORIGIN: https://storage.${PLATFORM_ROOT_DOMAIN}
+      # Mismo host que STORAGE_ENDPOINT (el bucket de R2, ver
+      # .env.production.example) — es lo que el CSP de esta app (ver
+      # middleware.ts) necesita en "img-src" para poder mostrar logos/
+      # avatares servidos desde ahi.
+      STORAGE_PUBLIC_ORIGIN: ${STORAGE_ENDPOINT}
     depends_on:
       - api
 
@@ -178,11 +181,9 @@ services:
       - api
       - web
       - keycloak
-      - minio
 
 volumes:
   stoka_postgres_data:
   stoka_redis_data:
-  stoka_minio_data:
   stoka_caddy_data:
   stoka_caddy_config:

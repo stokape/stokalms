@@ -1,29 +1,45 @@
-# Despliegue de producción — Oracle Cloud "Always Free"
+# Despliegue de producción — una sola VM Linux
 
-Guía paso a paso para poner Stoka LMS en producción gratis, en una sola VM
-de Oracle Cloud, con HTTPS automático (Let's Encrypt) para el dominio raíz,
-cada subdominio de institución y cada dominio propio que se verifique desde
-`/dominios`. Usa `docker-compose.prod.yml` + `Caddyfile` + `.env.production`
-(ver esos archivos en la raíz del repo — comentados por dentro, esta guía
-es el "orden de los pasos").
+Guía paso a paso para poner Stoka LMS en producción en una sola VM (Oracle
+Cloud "Always Free" si te aprueban la cuenta; si no, cualquier VPS con
+Ubuntu 24.04 y acceso root sirve igual — DigitalOcean/Vultr/Linode aprueban
+la cuenta al instante, sin la revisión manual que a veces traba a Oracle),
+con HTTPS automático (Let's Encrypt) para el dominio raíz, cada subdominio
+de institución y cada dominio propio que se verifique desde `/dominios`.
+Usa `docker-compose.prod.yml` + `Caddyfile` + `.env.production` (ver esos
+archivos en la raíz del repo — comentados por dentro, esta guía es el
+"orden de los pasos").
 
 No requiere Kubernetes ni varios servicios cloud distintos: todo corre en
 la misma VM, con los mismos contenedores que documenta
 [docs/architecture/07-infraestructura.md](../architecture/07-infraestructura.md)
 para la etapa "MVP / pocos tenants" — migrar después a servicios managed
-(RDS, S3 real, etc.) no exige reescribir nada, son los mismos contenedores.
+(RDS, etc.) no exige reescribir nada, son los mismos contenedores. Los
+archivos (logos, PDFs de certificado, SCORM) sí quedan en Cloudflare R2
+desde el principio, no en esta VM — ver la sección 4.
 
 ## 0. Qué vas a necesitar
 
 - **Un dominio propio** (no es gratis — ~US$10-15/año en cualquier
   registrador: Namecheap, Cloudflare Registrar, etc.). Sin esto no hay
   forma de tener HTTPS real ni subdominios por institución.
-- **Una cuenta de Oracle Cloud** (pide tarjeta para verificar identidad;
-  el tier "Always Free" nunca cobra solo, a menos que tú mismo
-  contrates algo pago aparte).
+- **Una VM Linux con Ubuntu 24.04 y acceso root** — Oracle Cloud "Always
+  Free" (gratis, pero la aprobación de cuenta puede tardar o quedar en
+  revisión) o cualquier VPS de pago instantáneo (DigitalOcean/Vultr/Linode,
+  ~US$20-24/mes por 4GB RAM/2vCPU) si no podés esperar a Oracle.
+- **Una cuenta de Cloudflare** (la misma que uses para el DNS del dominio
+  alcanza) con un bucket de **R2** creado — gratis hasta 10GB y sin costo
+  de salida, ver la sección 4.
 - ~45-60 minutos la primera vez.
 
 ## 1. Crear la VM en Oracle Cloud
+
+Si la cuenta de Oracle está trabada en revisión (le pasa a bastante gente
+con la capacidad ARM gratis) o no querés esperar, saltate esta sección:
+creá un droplet/instancia Ubuntu 24.04 en DigitalOcean, Vultr o Linode
+(aprueban la cuenta al instante con tarjeta, ~US$20-24/mes por 4GB RAM/2vCPU)
+y segui directo desde la sección 2 — el resto de la guía es igual, no
+depende de qué proveedor eligas.
 
 1. [cloud.oracle.com](https://cloud.oracle.com) → crear cuenta (elegir la
    región más cercana a tus instituciones — Oracle no permite cambiarla
@@ -31,7 +47,7 @@ para la etapa "MVP / pocos tenants" — migrar después a servicios managed
 2. **Compute → Instances → Create Instance**.
 3. Shape: **VM.Standard.A1.Flex** (Ampere/ARM, "Always Free eligible") —
    asignale los 4 OCPU / 24 GB que da el tier gratis (alcanza de sobra
-   para Postgres + Keycloak + MinIO + api + web + Caddy juntos).
+   para Postgres + Keycloak + api + web + Caddy juntos).
 4. Imagen: **Ubuntu 24.04** (o la LTS más reciente disponible).
 5. En "Add SSH keys", sube tu clave pública (o generá una nueva ahí mismo
    y guarda la privada) — es como vas a entrar por SSH.
@@ -52,8 +68,11 @@ la IP pública de la VM:
 | `tudominio.com` (raíz) | IP de la VM |
 | `auth.tudominio.com` | IP de la VM |
 | `api.tudominio.com` | IP de la VM |
-| `storage.tudominio.com` | IP de la VM |
 | `*.tudominio.com` (wildcard) | IP de la VM |
+
+(Sin `storage.tudominio.com`: los archivos viven en Cloudflare R2, no en
+esta VM — ver la sección 4 y el paso 3 de más abajo. R2 tiene su propio
+endpoint público, no hace falta un registro DNS propio para él.)
 
 El wildcard es lo que hace que **cualquier institución nueva que se
 apruebe** (subdominio nuevo, ver `tenant-domain.service.ts`) funcione sin
@@ -89,19 +108,23 @@ Puntos que NO son obvios:
   del paso 6 (Keycloak todavía no existe en este punto) — dejalos con el
   valor de ejemplo por ahora.
 - `AUTH_SECRET`: generalo ahora con `openssl rand -base64 32`.
-- Las contraseñas de Postgres/MinIO/Keycloak admin: cualquier generador de
+- Las contraseñas de Postgres/Keycloak admin: cualquier generador de
   contraseñas largo alcanza (`openssl rand -base64 24`, por ejemplo).
+- `STORAGE_ENDPOINT`/`STORAGE_ACCESS_KEY`/`STORAGE_SECRET_KEY`: creá el
+  bucket y el API token de Cloudflare R2 ANTES de este paso (ver los
+  comentarios de `.env.production.example`, sección "Archivos") — sin esto
+  completado, ningún upload va a funcionar (logos, certificados, adjuntos).
 
 ## 5. Primer inicio, EN ORDEN (no todo junto)
 
-Postgres/Keycloak/MinIO tienen que estar arriba y sanos antes de correr
+Postgres/Keycloak tienen que estar arriba y sanos antes de correr
 migraciones o crear el realm — por eso esto va en pasos, no un solo
 `docker compose up -d` de entrada.
 
 ```bash
 # 1) Solo la infraestructura de base:
 docker compose -f docker-compose.prod.yml --env-file .env.production \
-  up -d postgres redis minio keycloak
+  up -d postgres redis keycloak
 
 # 2) Esperar ~30s a que Keycloak termine de iniciar (verificar con):
 docker compose -f docker-compose.prod.yml logs -f keycloak

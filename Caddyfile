@@ -40,7 +40,6 @@
 	}
 
 	@auth host {$AUTH_DOMAIN}
-	@storage host storage.{$PLATFORM_ROOT_DOMAIN}
 	@api host api.{$PLATFORM_ROOT_DOMAIN}
 
 	# Keycloak (login/SSO) — ver auth.ts (frontend) y jwt.strategy.ts
@@ -49,13 +48,13 @@
 		reverse_proxy keycloak:8080
 	}
 
-	# MinIO (archivos: logos, PDFs de certificado, SCORM) — publico a
-	# proposito, ver la nota extensa en docker-compose.prod.yml sobre
-	# STORAGE_ENDPOINT: el acceso real lo sigue controlando la URL
-	# firmada (con vencimiento), no el proxy.
-	handle @storage {
-		reverse_proxy minio:9000
-	}
+	# Archivos (logos, PDFs de certificado, SCORM): NO hay bloque aca para
+	# eso — desde que STORAGE_* apunta a Cloudflare R2 (ver
+	# .env.production.example) en vez de un MinIO propio, las URLs firmadas
+	# (ver storage.service.ts, getPresignedDownloadUrl) van directo contra
+	# el endpoint de R2, sin pasar por este Caddy. Si el dia de mañana se
+	# volviera a self-hostear el storage, este es el lugar para agregar de
+	# nuevo un "handle @storage { reverse_proxy minio:9000 }".
 
 	# API directa (ver la nota en el bloque "api." de abajo: el frontend le
 	# habla por la red interna de Docker, esto es solo para acceso externo).

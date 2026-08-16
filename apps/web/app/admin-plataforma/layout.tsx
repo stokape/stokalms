@@ -22,7 +22,8 @@
 // ============================================================================
 
 import Link from 'next/link';
-import { auth, signOut } from '@/auth';
+import { auth } from '@/auth';
+import { cerrarSesionCompleta } from '../(app)/session-actions';
 import { StokaMark } from '@/components/StokaLogo';
 import { LocaleSwitcher } from '@/components/LocaleSwitcher';
 import { NavLink } from '@/components/ui/NavLink';
@@ -86,13 +87,7 @@ export default async function AdminPlataformaLayout({ children }: { children: Re
             )}
             <LocaleSwitcher locale={locale} path="/admin-plataforma" />
             {session && (
-              <form
-                action={async () => {
-                  'use server';
-                  await signOut();
-                }}
-                className="border-l border-border pl-4"
-              >
+              <form action={cerrarSesionCompleta} className="border-l border-border pl-4">
                 <button
                   type="submit"
                   className="text-sm text-muted underline-offset-2 hover:text-foreground hover:underline"

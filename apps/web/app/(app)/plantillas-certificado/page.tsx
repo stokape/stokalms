@@ -160,7 +160,7 @@ export default async function PlantillasCertificadoPage({
         <>
           <h2 className="mb-1 text-lg font-medium">{tr.startFromSample}</h2>
           <p className="mb-4 text-sm text-muted">{tr.sampleHelp}</p>
-          <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2">
             {SAMPLE_TEMPLATES.map((sample) => {
               const isSelected = sample.key === base;
               return (

@@ -22,7 +22,7 @@
 
 import Link from 'next/link';
 import type { Session } from 'next-auth';
-import { signOut } from '@/auth';
+import { cerrarSesionCompleta } from './(app)/session-actions';
 import { LinkButton } from '@/components/ui/LinkButton';
 import { LocaleSwitcher } from '@/components/LocaleSwitcher';
 import { StokaMark, StokaWordmark } from '@/components/StokaLogo';
@@ -105,12 +105,7 @@ function Nav({ session, locale, t }: { session: Session | null; locale: Locale; 
               <LinkButton href="/admin-plataforma/solicitudes" variant="primary" size="sm">
                 {t.nav.enterPlatform}
               </LinkButton>
-              <form
-                action={async () => {
-                  'use server';
-                  await signOut();
-                }}
-              >
+              <form action={cerrarSesionCompleta}>
                 <button
                   type="submit"
                   className="text-sm text-muted underline-offset-2 hover:text-foreground hover:underline"

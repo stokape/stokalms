@@ -9,7 +9,8 @@
 
 import Link from 'next/link';
 import type { Session } from 'next-auth';
-import { signIn, signOut } from '@/auth';
+import { signIn } from '@/auth';
+import { cerrarSesionCompleta } from './(app)/session-actions';
 import { trackEvent } from '@/lib/analytics';
 import { StokaMark } from '@/components/StokaLogo';
 import { StokaBrandingBadge } from '@/components/StokaBrandingBadge';
@@ -154,12 +155,7 @@ export function InstitutionHome({
               error, contacta al equipo de plataforma.
             </p>
             {session && (
-              <form
-                action={async () => {
-                  'use server';
-                  await signOut();
-                }}
-              >
+              <form action={cerrarSesionCompleta}>
                 <button type="submit" className="text-sm text-muted underline hover:text-foreground">
                   Cerrar sesión
                 </button>
@@ -197,12 +193,7 @@ export function InstitutionHome({
                   Tu cuenta no tiene permiso para usar la plataforma mientras dure el
                   mantenimiento.
                 </p>
-                <form
-                  action={async () => {
-                    'use server';
-                    await signOut();
-                  }}
-                >
+                <form action={cerrarSesionCompleta}>
                   <button
                     type="submit"
                     className="text-sm text-muted underline hover:text-foreground"
@@ -253,12 +244,7 @@ export function InstitutionHome({
                 >
                   Entrar a la plataforma
                 </Link>
-                <form
-                  action={async () => {
-                    'use server';
-                    await signOut();
-                  }}
-                >
+                <form action={cerrarSesionCompleta}>
                   <button
                     type="submit"
                     className="text-sm text-muted underline hover:text-foreground"
