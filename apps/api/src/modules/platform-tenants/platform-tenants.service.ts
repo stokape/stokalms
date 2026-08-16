@@ -31,6 +31,7 @@ import { AssignRoleDto } from '../user-management/dto/assign-role.dto';
 import { TenantService } from '../tenant/tenant.service';
 import { UpdateTenantDto } from '../tenant/dto/update-tenant.dto';
 import { SetTenantStatusDto } from './dto/set-tenant-status.dto';
+import { SetTenantPlanDto } from './dto/set-tenant-plan.dto';
 
 const TXT_PREFIX = 'stoka-verify=';
 
@@ -125,6 +126,22 @@ export class PlatformTenantsService {
       data: { active: dto.active },
     });
     return { id: tenant.id, active: tenant.active };
+  }
+
+  // Solo un Administrador de plataforma llega aca (PlatformAdminGuard a
+  // nivel de controller) — ninguna institucion puede autoasignarse un plan
+  // mejor desde tenant.service.ts (ver update-tenant.dto.ts, que a
+  // proposito no tiene "plan"). "plan" hoy es solo informativo (ningun
+  // guard/feature-flag lo lee todavia, ver tenant_features para el
+  // mecanismo real de features por tenant) — fijarlo aca es el primer paso
+  // para que, el dia que se conecte a un gate real, ya haya de donde leerlo.
+  async setPlan(tenantId: string, dto: SetTenantPlanDto) {
+    await this.requireTenant(tenantId);
+    const tenant = await this.prisma.tenant.update({
+      where: { id: tenantId },
+      data: { plan: dto.plan },
+    });
+    return { id: tenant.id, plan: tenant.plan };
   }
 
   // --- Dominios (mismo flujo de verificacion TXT que tenant-domain.service.ts) ---

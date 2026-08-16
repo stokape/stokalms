@@ -26,6 +26,7 @@ import { fieldClasses, labelClasses, fileInputClasses, selectClasses } from '@/c
 import { getLocale } from '@/lib/locale';
 import {
   cambiarEstadoInstitucion,
+  cambiarPlanInstitucion,
   agregarDominio,
   verificarDominio,
   eliminarDominio,
@@ -99,6 +100,13 @@ const TEXT = {
     assignRole: 'Asignar rol',
     deactivateConfirm:
       'Al desactivarla, nadie de esta institución (ni siquiera su Super Admin) va a poder iniciar sesión hasta que se reactive. ¿Continuar?',
+    planTitle: 'Plan',
+    planHelp: 'Solo un Administrador de plataforma puede cambiar el plan de una institución.',
+    planStarter: 'Starter',
+    planBusiness: 'Business',
+    planPro: 'Pro',
+    planEnterprise: 'Enterprise',
+    savePlan: 'Guardar plan',
   },
   en: {
     back: '← Institutions',
@@ -158,6 +166,13 @@ const TEXT = {
     assignRole: 'Assign role',
     deactivateConfirm:
       "Once deactivated, no one at this institution (not even its Super Admin) will be able to log in until it's reactivated. Continue?",
+    planTitle: 'Plan',
+    planHelp: 'Only a Platform Administrator can change an institution\'s plan.',
+    planStarter: 'Starter',
+    planBusiness: 'Business',
+    planPro: 'Pro',
+    planEnterprise: 'Enterprise',
+    savePlan: 'Save plan',
   },
 };
 
@@ -165,6 +180,7 @@ interface TenantSummary {
   id: string;
   name: string;
   active: boolean;
+  plan: string;
 }
 
 interface TenantDomainRow {
@@ -297,6 +313,23 @@ export default async function InstitucionDetallePage({
       {saved && (
         <SuccessBanner>{t.done}</SuccessBanner>
       )}
+
+      {/* --- Plan --- */}
+      <h2 className="mb-1 text-base font-medium">{t.planTitle}</h2>
+      <p className="mb-3 text-xs text-muted">{t.planHelp}</p>
+      <Card className="mb-8">
+        <form action={cambiarPlanInstitucion.bind(null, tenantId)} className="flex flex-wrap items-end gap-3">
+          <select name="plan" defaultValue={tenant.plan} className={selectClasses}>
+            <option value="starter">{t.planStarter}</option>
+            <option value="business">{t.planBusiness}</option>
+            <option value="pro">{t.planPro}</option>
+            <option value="enterprise">{t.planEnterprise}</option>
+          </select>
+          <Button type="submit" variant="primary" size="sm">
+            {t.savePlan}
+          </Button>
+        </form>
+      </Card>
 
       {/* --- Marca --- */}
       <h2 className="mb-3 text-base font-medium">{t.brandTitle}</h2>

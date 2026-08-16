@@ -25,6 +25,7 @@ import { PlatformAdminGuard } from '../../auth/platform-admin.guard';
 import { UpdateTenantDto } from '../tenant/dto/update-tenant.dto';
 import { PlatformTenantsService } from './platform-tenants.service';
 import { SetTenantStatusDto } from './dto/set-tenant-status.dto';
+import { SetTenantPlanDto } from './dto/set-tenant-plan.dto';
 import { CreateTenantDomainDto } from '../tenant-domain/dto/create-tenant-domain.dto';
 import { AssignRoleDto } from '../user-management/dto/assign-role.dto';
 
@@ -91,6 +92,11 @@ export class PlatformTenantsController {
   @Patch(':tenantId/status')
   setStatus(@Param('tenantId') tenantId: string, @Body() dto: SetTenantStatusDto) {
     return this.service.setStatus(tenantId, dto);
+  }
+
+  @Patch(':tenantId/plan')
+  setPlan(@Param('tenantId') tenantId: string, @Body() dto: SetTenantPlanDto) {
+    return this.service.setPlan(tenantId, dto);
   }
 
   @Get(':tenantId/domains')

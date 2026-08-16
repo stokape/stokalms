@@ -41,9 +41,11 @@ datasource db {
 model Tenant {
   id             String   @id @default(uuid())
   name           String
-  // Plan comercial contratado (ej. "basico", "pro", "enterprise"); determina
-  // los feature flags por defecto en TenantFeature.
-  plan           String   @default("basico")
+  // Plan comercial contratado — uno de los 4 IDs de apps/web/lib/pricing.ts
+  // ("starter" | "business" | "pro" | "enterprise", ver la validacion en
+  // set-tenant-plan.dto.ts). Determina los feature flags por defecto en
+  // TenantFeature.
+  plan           String   @default("starter")
   // Configuracion de marca (logo, colores) en JSON: cambia con frecuencia y
   // es especifica de cada tenant, por eso no se modela como columnas fijas
   // (ver docs/architecture/02-modelo-de-datos.md, seccion 2.2). Forma
