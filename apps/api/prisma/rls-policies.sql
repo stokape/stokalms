@@ -257,10 +257,12 @@ RETURNS text AS $$
   SELECT tenant_id FROM certificates WHERE verification_code = p_verification_code;
 $$ LANGUAGE sql SECURITY DEFINER STABLE SET search_path = public;
 
--- Sin este GRANT, "stoka_app" (el rol restringido con el que corre el
--- backend, ver mas abajo) no tendria permiso ni para EJECUTAR esta funcion,
--- aunque la funcion en si corra con privilegios de "stoka".
-GRANT EXECUTE ON FUNCTION find_certificate_tenant(text) TO stoka_app;
+-- El GRANT de EXECUTE para "stoka_app" sobre esta funcion esta mas abajo,
+-- junto con el resto de sus permisos (DESPUES de crear el rol) -- ponerlo
+-- aca arriba rompe el script contra una base COMPLETAMENTE nueva ("role
+-- stoka_app does not exist", el rol todavia no existe en este punto del
+-- archivo). Se detecto en el primer despliegue real (en desarrollo nunca
+-- se vio porque el rol ya quedaba creado de una corrida anterior).
 
 -- tenant_features: interruptores de funciones activas por tenant (feature flags).
 ALTER TABLE tenant_features ENABLE ROW LEVEL SECURITY;
@@ -338,6 +340,11 @@ $$;
 -- Permiso para "entrar" al esquema public (sin esto, ni siquiera puede ver
 -- que las tablas existen).
 GRANT USAGE ON SCHEMA public TO stoka_app;
+
+-- Sin este GRANT, "stoka_app" no tendria permiso ni para EJECUTAR
+-- find_certificate_tenant() (ver mas arriba), aunque la funcion en si
+-- corra con privilegios de "stoka" (SECURITY DEFINER).
+GRANT EXECUTE ON FUNCTION find_certificate_tenant(text) TO stoka_app;
 
 -- Permiso de lectura/escritura de FILAS (no de estructura) sobre todas las
 -- tablas que existen HOY en el esquema.
