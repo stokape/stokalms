@@ -148,10 +148,19 @@ docker compose -f docker-compose.prod.yml --env-file .env.production \
 # apuntando ahi; podes borrar esa fila de "tenants" mas adelante si te
 # molesta verla).
 
-# 5) Crear el realm de Keycloak + los clientes stoka-api/stoka-web (ESTA
-#    vez con el dominio real, no localhost):
+# 5) Crear el realm de Keycloak + los clientes stoka-api/stoka-web. OJO:
+#    KEYCLOAK_BASE_URL usa la direccion INTERNA de Docker
+#    ("http://keycloak:8080"), NO el dominio publico — Caddy (el que
+#    atiende https://auth.tudominio.com) todavia no esta levantado en
+#    este punto (recien se levanta en el paso 6). KEYCLOAK_BASE_URL solo
+#    se usa para hablar con la API de administracion, nunca queda grabado
+#    en la config publica del realm (eso lo define KC_HOSTNAME, ya fijado
+#    en docker-compose.prod.yml) — asi que usar la direccion interna aca
+#    es seguro. WEB_ORIGIN si tiene que ser el dominio real (se graba en
+#    los clientes: redirect URIs, etc.):
 docker compose -f docker-compose.prod.yml --env-file .env.production \
-  run --rm -e KEYCLOAK_BASE_URL=https://auth.tudominio.com \
+  run --rm -v $(pwd)/scripts:/repo/scripts \
+  -e KEYCLOAK_BASE_URL=http://keycloak:8080 \
   -e WEB_ORIGIN=https://tudominio.com -e KEYCLOAK_SEED_TEST_USERS=false \
   api node scripts/setup-keycloak.js
 ```
