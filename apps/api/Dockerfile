@@ -53,6 +53,11 @@ COPY --from=build /repo/node_modules ./node_modules
 COPY --from=build /repo/apps/api/dist ./apps/api/dist
 COPY --from=build /repo/apps/api/prisma ./apps/api/prisma
 COPY apps/api/package.json ./apps/api/package.json
+# scripts/setup-keycloak.js y scripts/backup-postgres.sh se corren via
+# "docker compose run --rm api node scripts/..." (ver docs/deploy/
+# produccion.md) — sin copiar esta carpeta, ese comando falla con
+# "Cannot find module" (se detecto haciendo el primer despliegue real).
+COPY scripts ./scripts
 
 # Instala Chromium + las librerias de sistema que necesita (fuentes,
 # libnss3, etc.) — "--with-deps" corre apt-get por su cuenta. "playwright"
