@@ -115,9 +115,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // (ver tenant-context.middleware.ts) — cualquier otra pantalla de esta
   // app ya habria fallado antes de llegar aca.
   let tenantInfo: {
+    name?: string;
     active?: boolean;
     maintenanceMode?: boolean;
-    branding?: { hideStokaBranding?: boolean };
+    branding?: { hideStokaBranding?: boolean; logoUrl?: string };
   } | null = null;
   try {
     tenantInfo = await apiFetchPublic('/tenant/public');
@@ -150,8 +151,19 @@ export default async function AppLayout({ children }: { children: React.ReactNod
                    peer-checked:translate-x-0 lg:translate-x-0"
       >
         <div className="flex items-center justify-between gap-2 border-b border-border px-5 py-4">
-          <Link href="/cursos">
-            <StokaWordmark markClassName="h-8 w-8" />
+          <Link href="/cursos" className="flex min-w-0 items-center gap-2">
+            {tenantInfo?.branding?.logoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element -- logo de
+              // la institucion, viene de una URL firmada de storage.service.ts,
+              // no de un asset local que "next/image" pueda optimizar.
+              <img
+                src={tenantInfo.branding.logoUrl}
+                alt={tenantInfo.name ?? 'Logo'}
+                className="h-8 max-w-[9rem] object-contain"
+              />
+            ) : (
+              <StokaWordmark markClassName="h-8 w-8" />
+            )}
           </Link>
           <div className="flex items-center gap-2">
             <NotificationBell count={unreadNotifications} label={t.nav.notifications} />
@@ -276,8 +288,19 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           >
             <MenuIcon className="h-5 w-5" />
           </label>
-          <StokaMark className="h-6 w-6" />
-          <span className="text-sm font-semibold">Stoka LMS</span>
+          {tenantInfo?.branding?.logoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={tenantInfo.branding.logoUrl}
+              alt={tenantInfo.name ?? 'Logo'}
+              className="h-6 max-w-[8rem] object-contain"
+            />
+          ) : (
+            <>
+              <StokaMark className="h-6 w-6" />
+              <span className="text-sm font-semibold">Stoka LMS</span>
+            </>
+          )}
           <span className="ml-auto flex items-center gap-2">
             <NotificationBell count={unreadNotifications} label={t.nav.notifications} />
             <LocaleSwitcher locale={locale} path="/cursos" />
