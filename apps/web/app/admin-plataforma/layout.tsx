@@ -22,6 +22,8 @@
 // ============================================================================
 
 import Link from 'next/link';
+import { headers } from 'next/headers';
+import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
 import { cerrarSesionCompleta } from '../(app)/session-actions';
 import { StokaMark } from '@/components/StokaLogo';
@@ -48,6 +50,25 @@ const TEXT = {
 };
 
 export default async function AdminPlataformaLayout({ children }: { children: React.ReactNode }) {
+  // "/admin-plataforma" es exclusivo del dominio RAIZ de la plataforma
+  // (ej. "lms.stoka.pe") — ninguna institucion (ni siquiera con su propio
+  // dominio) deberia poder llegar aca desde SU subdominio. Antes de este
+  // chequeo, la ruta era tecnicamente alcanzable desde cualquier Host (el
+  // backend igual la protege con PlatformAdminGuard, asi que ningun dato
+  // quedaba expuesto), pero confundia: quedaba un link "de plataforma"
+  // colgando dentro del sitio de una institucion cualquiera. Se compara
+  // sin puerto, mismo criterio que entrar/page.tsx.
+  const hostHeader = (await headers()).get('host') ?? '';
+  const [hostname] = hostHeader.split(':');
+  // "?? 'localhost'": en desarrollo local esta variable no esta declarada
+  // (ver apps/web/.env.example) — sin este respaldo, cualquier hostname
+  // real nunca es igual a "undefined" y el redirect de arriba se
+  // dispararia SIEMPRE, bloqueando /admin-plataforma tambien en local.
+  const platformRootDomain = process.env.PLATFORM_ROOT_DOMAIN ?? 'localhost';
+  if (hostname !== platformRootDomain) {
+    redirect('/');
+  }
+
   const rawSession = await auth();
   // "session.error" = refresh_token vencido/invalidado (ver la nota
   // extensa en app/page.tsx) — sin este filtro, esta barra mostraria el
