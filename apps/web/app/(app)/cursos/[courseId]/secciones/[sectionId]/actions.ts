@@ -18,7 +18,6 @@
 'use server';
 
 import { redirect } from 'next/navigation';
-import { revalidatePath } from 'next/cache';
 import { requireAccessToken, apiFetch, apiFetchUpload, toErrorMessage } from '@/lib/api';
 
 export async function matricular(courseId: string, sectionId: string, formData: FormData) {
@@ -37,7 +36,6 @@ export async function matricular(courseId: string, sectionId: string, formData: 
     redirect(`${path}?error=${encodeURIComponent(toErrorMessage(err))}`);
   }
 
-  revalidatePath(path);
   redirect(path);
 }
 
@@ -91,7 +89,6 @@ export async function matricularCSV(courseId: string, sectionId: string, formDat
   const okCount = results.filter((r) => r.status === 'matriculado').length;
   const errors = results.filter((r) => r.status === 'error').slice(0, 20);
 
-  revalidatePath(path);
   redirect(
     `${path}?bulkOk=${okCount}&bulkErrors=${encodeURIComponent(JSON.stringify(errors))}`,
   );
@@ -156,7 +153,6 @@ export async function importarMatriculaHistoricaCSV(courseId: string, sectionId:
   const okCount = results.filter((r) => r.status === 'importado').length;
   const errors = results.filter((r) => r.status === 'error').slice(0, 20);
 
-  revalidatePath(path);
   redirect(`${path}?importOk=${okCount}&importErrors=${encodeURIComponent(JSON.stringify(errors))}`);
 }
 
@@ -178,7 +174,6 @@ export async function cambiarEstadoMatricula(
     redirect(`${path}?error=${encodeURIComponent(toErrorMessage(err))}`);
   }
 
-  revalidatePath(path);
   redirect(path);
 }
 
@@ -224,6 +219,5 @@ export async function retirarConSustento(
     redirect(`${path}?error=${encodeURIComponent(toErrorMessage(err))}`);
   }
 
-  revalidatePath(path);
   redirect(path);
 }

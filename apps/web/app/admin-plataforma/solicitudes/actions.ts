@@ -1,7 +1,6 @@
 'use server';
 
 import { redirect } from 'next/navigation';
-import { revalidatePath } from 'next/cache';
 import { requireAccessToken, apiFetch, toErrorMessage } from '@/lib/api';
 import { setTempCredentialsCookie } from '../temp-credentials';
 
@@ -33,7 +32,6 @@ export async function aprobarSolicitud(id: string) {
     keycloakWarning: result.keycloakWarning,
   });
 
-  revalidatePath(PATH);
   redirect(PATH);
 }
 
@@ -50,6 +48,5 @@ export async function rechazarSolicitud(id: string, formData: FormData) {
     redirect(`${PATH}?error=${encodeURIComponent(toErrorMessage(err))}`);
   }
 
-  revalidatePath(PATH);
   redirect(PATH);
 }

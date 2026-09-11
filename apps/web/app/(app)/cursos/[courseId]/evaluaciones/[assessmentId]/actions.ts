@@ -1,7 +1,6 @@
 'use server';
 
 import { redirect } from 'next/navigation';
-import { revalidatePath } from 'next/cache';
 import { requireAccessToken, apiFetch, toErrorMessage } from '@/lib/api';
 
 function path(courseId: string, assessmentId: string) {
@@ -78,7 +77,6 @@ export async function crearPregunta(courseId: string, assessmentId: string, form
     redirect(`${path(courseId, assessmentId)}?error=${encodeURIComponent(toErrorMessage(err))}`);
   }
 
-  revalidatePath(path(courseId, assessmentId));
   redirect(path(courseId, assessmentId));
 }
 
@@ -99,7 +97,6 @@ export async function eliminarPregunta(
     redirect(`${path(courseId, assessmentId)}?error=${encodeURIComponent(toErrorMessage(err))}`);
   }
 
-  revalidatePath(path(courseId, assessmentId));
   redirect(path(courseId, assessmentId));
 }
 
@@ -124,6 +121,5 @@ export async function calificarRespuesta(
     redirect(`${path(courseId, assessmentId)}?error=${encodeURIComponent(toErrorMessage(err))}`);
   }
 
-  revalidatePath(path(courseId, assessmentId));
   redirect(path(courseId, assessmentId));
 }

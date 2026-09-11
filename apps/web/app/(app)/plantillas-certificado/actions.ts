@@ -1,7 +1,6 @@
 'use server';
 
 import { redirect } from 'next/navigation';
-import { revalidatePath } from 'next/cache';
 import { requireAccessToken, apiFetch, toErrorMessage } from '@/lib/api';
 
 const PATH = '/plantillas-certificado';
@@ -21,6 +20,5 @@ export async function crearPlantilla(formData: FormData) {
     redirect(`${PATH}?error=${encodeURIComponent(toErrorMessage(err))}`);
   }
 
-  revalidatePath(PATH);
   redirect(PATH);
 }

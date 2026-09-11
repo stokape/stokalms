@@ -1,7 +1,6 @@
 'use server';
 
 import { redirect } from 'next/navigation';
-import { revalidatePath } from 'next/cache';
 import { requireAccessToken, apiFetch, toErrorMessage } from '@/lib/api';
 
 // Sin "templateId": se emite con la plantilla FIJA del curso (ver la nota
@@ -19,7 +18,6 @@ export async function emitirCertificado(enrollmentId: string, _formData: FormDat
     redirect(`${path}?error=${encodeURIComponent(toErrorMessage(err))}`);
   }
 
-  revalidatePath(path);
   redirect(path);
 }
 
@@ -33,6 +31,5 @@ export async function revocarCertificado(enrollmentId: string, certificateId: st
     redirect(`${path}?error=${encodeURIComponent(toErrorMessage(err))}`);
   }
 
-  revalidatePath(path);
   redirect(path);
 }

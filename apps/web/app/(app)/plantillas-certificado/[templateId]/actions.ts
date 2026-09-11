@@ -1,7 +1,6 @@
 'use server';
 
 import { redirect } from 'next/navigation';
-import { revalidatePath } from 'next/cache';
 import { requireAccessToken, apiFetch, toErrorMessage } from '@/lib/api';
 
 export async function editarPlantilla(templateId: string, formData: FormData) {
@@ -20,7 +19,6 @@ export async function editarPlantilla(templateId: string, formData: FormData) {
     redirect(`${path}?error=${encodeURIComponent(toErrorMessage(err))}`);
   }
 
-  revalidatePath(path);
   redirect(`${path}?saved=1`);
 }
 
@@ -33,6 +31,5 @@ export async function eliminarPlantilla(templateId: string) {
     redirect(`/plantillas-certificado/${templateId}?error=${encodeURIComponent(toErrorMessage(err))}`);
   }
 
-  revalidatePath('/plantillas-certificado');
   redirect('/plantillas-certificado');
 }

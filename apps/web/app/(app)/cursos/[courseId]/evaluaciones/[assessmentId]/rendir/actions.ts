@@ -1,7 +1,6 @@
 'use server';
 
 import { redirect } from 'next/navigation';
-import { revalidatePath } from 'next/cache';
 import { requireAccessToken, apiFetch, toErrorMessage } from '@/lib/api';
 
 interface Question {
@@ -68,6 +67,5 @@ export async function entregarExamen(
     redirect(`${listPath}/rendir?error=${encodeURIComponent(toErrorMessage(err))}`);
   }
 
-  revalidatePath(listPath);
   redirect(listPath);
 }

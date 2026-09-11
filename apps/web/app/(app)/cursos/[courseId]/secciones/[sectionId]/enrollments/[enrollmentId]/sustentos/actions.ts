@@ -1,7 +1,6 @@
 'use server';
 
 import { redirect } from 'next/navigation';
-import { revalidatePath } from 'next/cache';
 import { requireAccessToken, apiFetchUpload, toErrorMessage } from '@/lib/api';
 
 export async function subirSustento(
@@ -33,6 +32,5 @@ export async function subirSustento(
     redirect(`${path}?error=${encodeURIComponent(toErrorMessage(err))}`);
   }
 
-  revalidatePath(path);
   redirect(path);
 }

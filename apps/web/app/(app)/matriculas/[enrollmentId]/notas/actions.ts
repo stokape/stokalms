@@ -1,7 +1,6 @@
 'use server';
 
 import { redirect } from 'next/navigation';
-import { revalidatePath } from 'next/cache';
 import { requireAccessToken, apiFetch, toErrorMessage } from '@/lib/api';
 
 export async function crearAnotacion(enrollmentId: string, formData: FormData) {
@@ -18,7 +17,6 @@ export async function crearAnotacion(enrollmentId: string, formData: FormData) {
     redirect(`${path}?error=${encodeURIComponent(toErrorMessage(err))}`);
   }
 
-  revalidatePath(path);
   redirect(path);
 }
 
@@ -32,6 +30,5 @@ export async function eliminarAnotacion(enrollmentId: string, noteId: string) {
     redirect(`${path}?error=${encodeURIComponent(toErrorMessage(err))}`);
   }
 
-  revalidatePath(path);
   redirect(path);
 }

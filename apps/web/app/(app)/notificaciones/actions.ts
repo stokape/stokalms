@@ -1,7 +1,6 @@
 'use server';
 
 import { redirect } from 'next/navigation';
-import { revalidatePath } from 'next/cache';
 import { requireAccessToken, apiFetch, toErrorMessage } from '@/lib/api';
 
 const PATH = '/notificaciones';
@@ -20,7 +19,6 @@ export async function marcarLeidaYIr(id: string, link: string | null, _formData:
     redirect(`${PATH}?error=${encodeURIComponent(toErrorMessage(err))}`);
   }
 
-  revalidatePath(PATH);
   redirect(link || PATH);
 }
 
@@ -33,6 +31,5 @@ export async function marcarTodasLeidas() {
     redirect(`${PATH}?error=${encodeURIComponent(toErrorMessage(err))}`);
   }
 
-  revalidatePath(PATH);
   redirect(PATH);
 }

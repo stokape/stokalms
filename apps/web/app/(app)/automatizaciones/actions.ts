@@ -6,7 +6,6 @@
 // ============================================================================
 
 import { redirect } from 'next/navigation';
-import { revalidatePath } from 'next/cache';
 import { requireAccessToken, apiFetch, toErrorMessage } from '@/lib/api';
 
 const PATH = '/automatizaciones';
@@ -27,6 +26,5 @@ export async function guardarAutomatizaciones(formData: FormData) {
     redirect(`${PATH}?error=${encodeURIComponent(toErrorMessage(err))}`);
   }
 
-  revalidatePath(PATH);
   redirect(`${PATH}?saved=1`);
 }

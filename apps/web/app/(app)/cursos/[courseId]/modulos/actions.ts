@@ -1,7 +1,6 @@
 'use server';
 
 import { redirect } from 'next/navigation';
-import { revalidatePath } from 'next/cache';
 import { requireAccessToken, apiFetch, toErrorMessage } from '@/lib/api';
 
 export async function crearModulo(courseId: string, formData: FormData) {
@@ -18,7 +17,6 @@ export async function crearModulo(courseId: string, formData: FormData) {
     redirect(`${path}?error=${encodeURIComponent(toErrorMessage(err))}`);
   }
 
-  revalidatePath(path);
   redirect(path);
 }
 
@@ -36,7 +34,6 @@ export async function actualizarModulo(courseId: string, moduleId: string, formD
     redirect(`${path}?error=${encodeURIComponent(toErrorMessage(err))}`);
   }
 
-  revalidatePath(path);
   redirect(path);
 }
 
@@ -50,6 +47,5 @@ export async function eliminarModulo(courseId: string, moduleId: string) {
     redirect(`${path}?error=${encodeURIComponent(toErrorMessage(err))}`);
   }
 
-  revalidatePath(path);
   redirect(path);
 }

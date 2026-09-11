@@ -1,7 +1,6 @@
 'use server';
 
 import { redirect } from 'next/navigation';
-import { revalidatePath } from 'next/cache';
 import { requireAccessToken, apiFetch, toErrorMessage } from '@/lib/api';
 
 export async function actualizarPerfilDeAlumno(userTenantId: string, formData: FormData) {
@@ -24,6 +23,5 @@ export async function actualizarPerfilDeAlumno(userTenantId: string, formData: F
     redirect(`${path}?error=${encodeURIComponent(toErrorMessage(err))}`);
   }
 
-  revalidatePath(path);
   redirect(`${path}?ok=1`);
 }

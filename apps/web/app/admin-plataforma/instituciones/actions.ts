@@ -9,7 +9,6 @@
 // ============================================================================
 
 import { redirect } from 'next/navigation';
-import { revalidatePath } from 'next/cache';
 import { requireAccessToken, apiFetch, toErrorMessage } from '@/lib/api';
 
 const PATH = '/admin-plataforma/instituciones';
@@ -26,6 +25,5 @@ export async function cambiarEstadoInstitucion(tenantId: string, active: boolean
     redirect(`${PATH}?error=${encodeURIComponent(toErrorMessage(err))}`);
   }
 
-  revalidatePath(PATH);
   redirect(PATH);
 }

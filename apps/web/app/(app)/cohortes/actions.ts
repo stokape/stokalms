@@ -6,7 +6,6 @@
 // ============================================================================
 
 import { redirect } from 'next/navigation';
-import { revalidatePath } from 'next/cache';
 import { requireAccessToken, apiFetch, toErrorMessage } from '@/lib/api';
 
 const PATH = '/cohortes';
@@ -25,7 +24,6 @@ export async function crearCohorte(formData: FormData) {
     redirect(`${PATH}?error=${encodeURIComponent(toErrorMessage(err))}`);
   }
 
-  revalidatePath(PATH);
   redirect(PATH);
 }
 
@@ -38,7 +36,6 @@ export async function eliminarCohorte(cohortId: string) {
     redirect(`${PATH}?error=${encodeURIComponent(toErrorMessage(err))}`);
   }
 
-  revalidatePath(PATH);
   redirect(PATH);
 }
 
@@ -56,7 +53,6 @@ export async function agregarMiembro(cohortId: string, formData: FormData) {
     redirect(`${path}?error=${encodeURIComponent(toErrorMessage(err))}`);
   }
 
-  revalidatePath(path);
   redirect(path);
 }
 
@@ -70,6 +66,5 @@ export async function quitarMiembro(cohortId: string, userTenantId: string) {
     redirect(`${path}?error=${encodeURIComponent(toErrorMessage(err))}`);
   }
 
-  revalidatePath(path);
   redirect(path);
 }

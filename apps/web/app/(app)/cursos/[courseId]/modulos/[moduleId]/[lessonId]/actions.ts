@@ -1,7 +1,6 @@
 'use server';
 
 import { redirect } from 'next/navigation';
-import { revalidatePath } from 'next/cache';
 import { requireAccessToken, apiFetch, apiFetchUpload, toErrorMessage } from '@/lib/api';
 
 function lessonPath(courseId: string, moduleId: string, lessonId: string) {
@@ -28,7 +27,6 @@ export async function actualizarLeccion(
     redirect(`${path}?error=${encodeURIComponent(toErrorMessage(err))}`);
   }
 
-  revalidatePath(path);
   redirect(path);
 }
 
@@ -62,7 +60,6 @@ export async function actualizarRecurso(
     redirect(`${path}?error=${encodeURIComponent(toErrorMessage(err))}`);
   }
 
-  revalidatePath(path);
   redirect(path);
 }
 
@@ -99,7 +96,6 @@ export async function subirRecurso(
     redirect(`${path}?error=${encodeURIComponent(toErrorMessage(err))}`);
   }
 
-  revalidatePath(path);
   redirect(path);
 }
 
@@ -125,7 +121,6 @@ export async function crearRecursoEnlace(
     redirect(`${path}?error=${encodeURIComponent(toErrorMessage(err))}`);
   }
 
-  revalidatePath(path);
   redirect(path);
 }
 
@@ -185,6 +180,5 @@ export async function eliminarRecurso(
     redirect(`${path}?error=${encodeURIComponent(toErrorMessage(err))}`);
   }
 
-  revalidatePath(path);
   redirect(path);
 }

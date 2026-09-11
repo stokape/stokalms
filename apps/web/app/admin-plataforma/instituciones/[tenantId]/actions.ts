@@ -10,7 +10,6 @@
 // ============================================================================
 
 import { redirect } from 'next/navigation';
-import { revalidatePath } from 'next/cache';
 import { requireAccessToken, apiFetch, apiFetchUpload, toErrorMessage } from '@/lib/api';
 
 const path = (tenantId: string) => `/admin-plataforma/instituciones/${tenantId}`;
@@ -27,7 +26,6 @@ export async function cambiarEstadoInstitucion(tenantId: string, active: boolean
     redirect(`${path(tenantId)}?error=${encodeURIComponent(toErrorMessage(err))}`);
   }
 
-  revalidatePath(path(tenantId));
   redirect(path(tenantId));
 }
 
@@ -44,8 +42,6 @@ export async function cambiarPlanInstitucion(tenantId: string, formData: FormDat
     redirect(`${path(tenantId)}?error=${encodeURIComponent(toErrorMessage(err))}`);
   }
 
-  revalidatePath(path(tenantId));
-  revalidatePath('/admin-plataforma/instituciones');
   redirect(`${path(tenantId)}?saved=1`);
 }
 
@@ -62,7 +58,6 @@ export async function agregarDominio(tenantId: string, formData: FormData) {
     redirect(`${path(tenantId)}?error=${encodeURIComponent(toErrorMessage(err))}`);
   }
 
-  revalidatePath(path(tenantId));
   redirect(`${path(tenantId)}?saved=1`);
 }
 
@@ -75,7 +70,6 @@ export async function verificarDominio(tenantId: string, domainId: string) {
     redirect(`${path(tenantId)}?error=${encodeURIComponent(toErrorMessage(err))}`);
   }
 
-  revalidatePath(path(tenantId));
   redirect(`${path(tenantId)}?saved=1`);
 }
 
@@ -88,7 +82,6 @@ export async function eliminarDominio(tenantId: string, domainId: string) {
     redirect(`${path(tenantId)}?error=${encodeURIComponent(toErrorMessage(err))}`);
   }
 
-  revalidatePath(path(tenantId));
   redirect(`${path(tenantId)}?saved=1`);
 }
 
@@ -106,7 +99,6 @@ export async function asignarRol(tenantId: string, userTenantId: string, formDat
     redirect(`${path(tenantId)}?error=${encodeURIComponent(toErrorMessage(err))}`);
   }
 
-  revalidatePath(path(tenantId));
   redirect(path(tenantId));
 }
 
@@ -123,7 +115,6 @@ export async function quitarRol(tenantId: string, userTenantId: string, userRole
     redirect(`${path(tenantId)}?error=${encodeURIComponent(toErrorMessage(err))}`);
   }
 
-  revalidatePath(path(tenantId));
   redirect(path(tenantId));
 }
 
@@ -155,8 +146,6 @@ export async function actualizarMarcaInstitucion(tenantId: string, formData: For
     redirect(`${path(tenantId)}?error=${encodeURIComponent(toErrorMessage(err))}`);
   }
 
-  revalidatePath(path(tenantId));
-  revalidatePath('/admin-plataforma/instituciones');
   redirect(`${path(tenantId)}?saved=1`);
 }
 
@@ -177,7 +166,6 @@ async function subirImagenInstitucion(tenantId: string, endpoint: string, formDa
     redirect(`${path(tenantId)}?error=${encodeURIComponent(toErrorMessage(err))}`);
   }
 
-  revalidatePath(path(tenantId));
   redirect(`${path(tenantId)}?saved=1`);
 }
 
@@ -214,8 +202,6 @@ export async function guardarMantenimientoInstitucion(tenantId: string, formData
     redirect(`${path(tenantId)}?error=${encodeURIComponent(toErrorMessage(err))}`);
   }
 
-  revalidatePath(path(tenantId));
-  revalidatePath('/admin-plataforma/instituciones');
   redirect(`${path(tenantId)}?saved=1`);
 }
 
@@ -237,6 +223,5 @@ export async function quitarImagenMantenimientoInstitucion(tenantId: string) {
     redirect(`${path(tenantId)}?error=${encodeURIComponent(toErrorMessage(err))}`);
   }
 
-  revalidatePath(path(tenantId));
   redirect(`${path(tenantId)}?saved=1`);
 }

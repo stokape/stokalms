@@ -1,7 +1,6 @@
 'use server';
 
 import { redirect } from 'next/navigation';
-import { revalidatePath } from 'next/cache';
 import { requireAccessToken, apiFetch, toErrorMessage } from '@/lib/api';
 
 const PATH = '/dominios';
@@ -19,7 +18,6 @@ export async function agregarDominio(formData: FormData) {
     redirect(`${PATH}?error=${encodeURIComponent(toErrorMessage(err))}`);
   }
 
-  revalidatePath(PATH);
   redirect(`${PATH}?saved=1`);
 }
 
@@ -32,7 +30,6 @@ export async function verificarDominio(domainId: string) {
     redirect(`${PATH}?error=${encodeURIComponent(toErrorMessage(err))}`);
   }
 
-  revalidatePath(PATH);
   redirect(`${PATH}?saved=1`);
 }
 
@@ -45,6 +42,5 @@ export async function eliminarDominio(domainId: string) {
     redirect(`${PATH}?error=${encodeURIComponent(toErrorMessage(err))}`);
   }
 
-  revalidatePath(PATH);
   redirect(`${PATH}?saved=1`);
 }

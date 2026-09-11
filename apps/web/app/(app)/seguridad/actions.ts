@@ -5,7 +5,6 @@
 // ============================================================================
 
 import { redirect } from 'next/navigation';
-import { revalidatePath } from 'next/cache';
 import { requireAccessToken, apiFetch, toErrorMessage } from '@/lib/api';
 
 const PATH = '/seguridad';
@@ -24,7 +23,6 @@ export async function guardarSeguridad(formData: FormData) {
     redirect(`${PATH}?error=${encodeURIComponent(toErrorMessage(err))}`);
   }
 
-  revalidatePath(PATH);
   const extra =
     require2FA && result.appliedTo !== undefined
       ? `&appliedTo=${result.appliedTo}&pending=${result.pending ?? 0}`

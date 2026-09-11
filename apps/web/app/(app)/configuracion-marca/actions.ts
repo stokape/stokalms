@@ -1,7 +1,6 @@
 'use server';
 
 import { redirect } from 'next/navigation';
-import { revalidatePath } from 'next/cache';
 import { requireAccessToken, apiFetch, apiFetchUpload, toErrorMessage } from '@/lib/api';
 
 const PATH = '/configuracion-marca';
@@ -38,8 +37,6 @@ export async function actualizarMarca(formData: FormData) {
     redirect(`${PATH}?error=${encodeURIComponent(toErrorMessage(err))}`);
   }
 
-  revalidatePath(PATH);
-  revalidatePath('/');
   redirect(`${PATH}?saved=1`);
 }
 
@@ -60,8 +57,6 @@ export async function actualizarLogo(formData: FormData) {
     redirect(`${PATH}?error=${encodeURIComponent(toErrorMessage(err))}`);
   }
 
-  revalidatePath(PATH);
-  revalidatePath('/');
   redirect(`${PATH}?saved=1`);
 }
 
@@ -82,8 +77,6 @@ export async function actualizarFondo(formData: FormData) {
     redirect(`${PATH}?error=${encodeURIComponent(toErrorMessage(err))}`);
   }
 
-  revalidatePath(PATH);
-  revalidatePath('/');
   redirect(`${PATH}?saved=1`);
 }
 
@@ -106,7 +99,5 @@ export async function actualizarFavicon(formData: FormData) {
     redirect(`${PATH}?error=${encodeURIComponent(toErrorMessage(err))}`);
   }
 
-  revalidatePath(PATH);
-  revalidatePath('/');
   redirect(`${PATH}?saved=1`);
 }

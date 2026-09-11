@@ -1,7 +1,6 @@
 'use server';
 
 import { redirect } from 'next/navigation';
-import { revalidatePath } from 'next/cache';
 import { requireAccessToken, apiFetch, apiFetchUpload, toErrorMessage } from '@/lib/api';
 
 const PATH = '/mantenimiento';
@@ -34,8 +33,6 @@ export async function guardarMantenimiento(formData: FormData) {
   // El home publico y el resto de la app (ver app/page.tsx y
   // (app)/layout.tsx) leen "maintenanceMode" en cada visita: hay que
   // invalidar tambien esas rutas, no solo esta pantalla.
-  revalidatePath(PATH);
-  revalidatePath('/');
   redirect(`${PATH}?saved=1`);
 }
 
@@ -61,8 +58,6 @@ export async function subirImagenMantenimiento(formData: FormData) {
     redirect(`${PATH}?error=${encodeURIComponent(toErrorMessage(err))}`);
   }
 
-  revalidatePath(PATH);
-  revalidatePath('/');
   redirect(`${PATH}?saved=1`);
 }
 
@@ -75,7 +70,5 @@ export async function quitarImagenMantenimiento() {
     redirect(`${PATH}?error=${encodeURIComponent(toErrorMessage(err))}`);
   }
 
-  revalidatePath(PATH);
-  revalidatePath('/');
   redirect(`${PATH}?saved=1`);
 }

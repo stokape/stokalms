@@ -1,7 +1,6 @@
 'use server';
 
 import { redirect } from 'next/navigation';
-import { revalidatePath } from 'next/cache';
 import { requireAccessToken, apiFetch, toErrorMessage } from '@/lib/api';
 
 function path(courseId: string) {
@@ -23,7 +22,6 @@ export async function crearCategoria(courseId: string, formData: FormData) {
     redirect(`${path(courseId)}?error=${encodeURIComponent(toErrorMessage(err))}`);
   }
 
-  revalidatePath(path(courseId));
   redirect(path(courseId));
 }
 
@@ -53,7 +51,6 @@ export async function crearEvaluacion(courseId: string, formData: FormData) {
     redirect(`${path(courseId)}?error=${encodeURIComponent(toErrorMessage(err))}`);
   }
 
-  revalidatePath(path(courseId));
   redirect(path(courseId));
 }
 
@@ -68,6 +65,5 @@ export async function eliminarEvaluacion(courseId: string, assessmentId: string)
     redirect(`${path(courseId)}?error=${encodeURIComponent(toErrorMessage(err))}`);
   }
 
-  revalidatePath(path(courseId));
   redirect(path(courseId));
 }

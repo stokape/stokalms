@@ -9,7 +9,6 @@
 // ============================================================================
 
 import { redirect } from 'next/navigation';
-import { revalidatePath } from 'next/cache';
 import { requireAccessToken, apiFetch, toErrorMessage } from '@/lib/api';
 
 const PATH = '/reportes';
@@ -33,7 +32,6 @@ export async function crearReportePersonalizado(formData: FormData) {
     redirect(`${PATH}?error=${encodeURIComponent(toErrorMessage(err))}`);
   }
 
-  revalidatePath(PATH);
   redirect(PATH);
 }
 
@@ -44,6 +42,5 @@ export async function eliminarReportePersonalizado(presetId: string) {
   } catch (err) {
     redirect(`${PATH}?error=${encodeURIComponent(toErrorMessage(err))}`);
   }
-  revalidatePath(PATH);
   redirect(PATH);
 }

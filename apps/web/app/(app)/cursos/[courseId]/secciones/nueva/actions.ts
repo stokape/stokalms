@@ -1,7 +1,6 @@
 'use server';
 
 import { redirect } from 'next/navigation';
-import { revalidatePath } from 'next/cache';
 import { requireAccessToken, apiFetch, toErrorMessage } from '@/lib/api';
 
 export async function crearSeccion(courseId: string, formData: FormData) {
@@ -21,6 +20,5 @@ export async function crearSeccion(courseId: string, formData: FormData) {
     );
   }
 
-  revalidatePath(`/cursos/${courseId}`);
   redirect(`/cursos/${courseId}/secciones/${created.id}`);
 }

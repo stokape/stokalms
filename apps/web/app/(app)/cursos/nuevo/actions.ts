@@ -1,7 +1,6 @@
 'use server';
 
 import { redirect } from 'next/navigation';
-import { revalidatePath } from 'next/cache';
 import { requireAccessToken, apiFetch, toErrorMessage } from '@/lib/api';
 
 export async function crearCurso(formData: FormData) {
@@ -33,7 +32,6 @@ export async function crearCurso(formData: FormData) {
     redirect(`/cursos/nuevo?error=${encodeURIComponent(toErrorMessage(err))}`);
   }
 
-  revalidatePath('/cursos');
   redirect(`/cursos/${created.id}`);
 }
 
@@ -58,6 +56,5 @@ export async function crearPeriodoDesdeCurso(formData: FormData) {
     redirect(`/cursos/nuevo?error=${encodeURIComponent(toErrorMessage(err))}`);
   }
 
-  revalidatePath('/cursos/nuevo');
   redirect(`/cursos/nuevo?termCreado=${created.id}`);
 }

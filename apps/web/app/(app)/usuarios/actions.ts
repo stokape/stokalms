@@ -1,7 +1,6 @@
 'use server';
 
 import { redirect } from 'next/navigation';
-import { revalidatePath } from 'next/cache';
 import { requireAccessToken, apiFetch, toErrorMessage } from '@/lib/api';
 
 const PATH = '/usuarios';
@@ -20,7 +19,6 @@ export async function asignarRol(userTenantId: string, formData: FormData) {
     redirect(`${PATH}?error=${encodeURIComponent(toErrorMessage(err))}`);
   }
 
-  revalidatePath(PATH);
   redirect(PATH);
 }
 
@@ -33,7 +31,6 @@ export async function quitarRol(userTenantId: string, userRoleId: string) {
     redirect(`${PATH}?error=${encodeURIComponent(toErrorMessage(err))}`);
   }
 
-  revalidatePath(PATH);
   redirect(PATH);
 }
 
@@ -70,7 +67,6 @@ export async function asignarRolMasivo(formData: FormData) {
   const okCount = results.filter((r) => r.status === 'asignado' || r.status === 'ya_tenia').length;
   const errors = results.filter((r) => r.status === 'error').slice(0, 20);
 
-  revalidatePath(PATH);
   redirect(`${PATH}?bulkOk=${okCount}&bulkErrors=${encodeURIComponent(JSON.stringify(errors))}`);
 }
 
@@ -136,6 +132,5 @@ export async function asignarRolesCSV(formData: FormData) {
   const okCount = results.filter((r) => r.status === 'asignado' || r.status === 'ya_tenia').length;
   const errors = results.filter((r) => r.status === 'error').slice(0, 20);
 
-  revalidatePath(PATH);
   redirect(`${PATH}?bulkOk=${okCount}&bulkErrors=${encodeURIComponent(JSON.stringify(errors))}`);
 }
