@@ -125,6 +125,28 @@ export function middleware(request: NextRequest) {
     );
   }
 
+  // Guarda el Host REAL de este request en una cookie -- lib/api.ts la
+  // prefiere sobre "headers().get('host')" para armar "X-Tenant-Host" (ver
+  // la nota extensa ahi). Se detecto que, especificamente en el
+  // re-renderizado que hace Next.js DESPUES de un redirect() dentro de una
+  // Server Action (ej. crear/borrar un periodo academico), "headers()"
+  // deja de reflejar el Host real y devuelve la direccion INTERNA del
+  // propio contenedor "web" ("localhost:3000") -- eso hacia que el backend
+  // rechazara el request con "el dominio no corresponde a ninguna
+  // institucion", aunque el Host real de quien lo pidio fuera perfectamente
+  // valido. Una cookie, en cambio, viaja en el request tal cual la dejo la
+  // visita de pagina anterior (una carga GET normal, donde "headers()" SI
+  // es confiable), sin importar que rarezas tenga el re-renderizado interno
+  // que sigue a un redirect(). No es httpOnly a proposito: no es un dato
+  // sensible (es literalmente el mismo Host que ya esta en la barra de
+  // direcciones), y asi tampoco bloquea que se lea si alguna pantalla
+  // necesitara hacerlo desde el cliente en el futuro.
+  response.cookies.set('stoka-tenant-host', request.headers.get('host') ?? '', {
+    sameSite: 'lax',
+    secure: IS_PRODUCTION,
+    path: '/',
+  });
+
   return response;
 }
 

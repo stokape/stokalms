@@ -16,7 +16,7 @@
 // ============================================================================
 
 import { NextResponse, type NextRequest } from 'next/server';
-import { headers } from 'next/headers';
+import { headers, cookies } from 'next/headers';
 import { auth } from '@/auth';
 
 const API_URL = process.env.STOKA_API_URL ?? 'http://localhost:3001/api/v1';
@@ -46,8 +46,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const qs = request.nextUrl.search;
   // Mismo header "X-Tenant-Host" que apiFetch (ver lib/api.ts) — sin el, el
   // backend no sabria a que institucion pertenece este request (ver la
-  // nota extensa en tenant-context.middleware.ts).
-  const host = (await headers()).get('host') ?? '';
+  // nota extensa en tenant-context.middleware.ts). Cookie primero,
+  // "headers()" de respaldo -- mismo criterio que lib/api.ts.
+  const host = (await cookies()).get('stoka-tenant-host')?.value || (await headers()).get('host') || '';
 
   const response = await fetch(`${API_URL}/reports/${backendPath}${qs}`, {
     headers: { Authorization: `Bearer ${session.accessToken}`, 'X-Tenant-Host': host },

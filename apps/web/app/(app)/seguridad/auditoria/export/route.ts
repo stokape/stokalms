@@ -7,7 +7,7 @@
 // ============================================================================
 
 import { NextResponse } from 'next/server';
-import { headers } from 'next/headers';
+import { headers, cookies } from 'next/headers';
 import { auth } from '@/auth';
 
 const API_URL = process.env.STOKA_API_URL ?? 'http://localhost:3001/api/v1';
@@ -18,7 +18,10 @@ export async function GET() {
     return NextResponse.json({ message: 'Sesión inválida.' }, { status: 401 });
   }
 
-  const host = (await headers()).get('host') ?? '';
+  // Cookie primero, "headers()" de respaldo -- ver la nota extensa en
+  // lib/api.ts sobre por que "headers().get('host')" no es confiable en
+  // TODOS los casos.
+  const host = (await cookies()).get('stoka-tenant-host')?.value || (await headers()).get('host') || '';
   const response = await fetch(`${API_URL}/security/audit-logs/export`, {
     headers: { Authorization: `Bearer ${session.accessToken}`, 'X-Tenant-Host': host },
     cache: 'no-store',

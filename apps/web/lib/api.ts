@@ -13,7 +13,7 @@
 // ============================================================================
 
 import { redirect } from 'next/navigation';
-import { headers } from 'next/headers';
+import { headers, cookies } from 'next/headers';
 import { auth } from '@/auth';
 
 const API_URL = process.env.STOKA_API_URL ?? 'http://localhost:3001/api/v1';
@@ -28,12 +28,27 @@ const API_URL = process.env.STOKA_API_URL ?? 'http://localhost:3001/api/v1';
 // del home, etc.) veria siempre el mismo tenant.
 //
 // La solucion: leer el Host que SI vio Next.js al recibir el request
-// original del navegador (headers() de next/headers, disponible tanto en
-// Server Components como en Server Actions) y reenviarlo en un header
-// aparte, "X-Tenant-Host", que el backend prioriza sobre su propio "Host"
-// (ver la nota extensa en tenant-context.middleware.ts).
+// original del navegador y reenviarlo en un header aparte, "X-Tenant-Host",
+// que el backend prioriza sobre su propio "Host" (ver la nota extensa en
+// tenant-context.middleware.ts).
+//
+// POR QUE UNA COOKIE ("stoka-tenant-host", ver middleware.ts) Y NO
+// "headers().get('host')" A SECAS: se detecto que, especificamente en el
+// re-renderizado que hace Next.js DESPUES de un redirect() dentro de una
+// Server Action (ej. periodos/actions.ts, crearPeriodo/eliminarPeriodo),
+// "headers()" deja de reflejar el Host real del navegador y devuelve la
+// direccion INTERNA del propio contenedor "web" ("localhost:3000") — eso
+// hacia que el backend rechazara el request con "el dominio no corresponde
+// a ninguna institucion", pese a que la persona seguia perfectamente en su
+// propio subdominio. La cookie, en cambio, la dejo la carga de pagina
+// NORMAL anterior (un GET comun, donde "headers()" si es confiable) y
+// viaja en el request tal cual, sin que le afecte esa rareza del
+// redirect(). "headers()" queda como respaldo solo para el primerisimo
+// request de una sesion, antes de que el middleware haya tenido chance de
+// dejar la cookie.
 async function getTenantHostHeader(): Promise<Record<string, string>> {
-  const incomingHost = (await headers()).get('host');
+  const cookieHost = (await cookies()).get('stoka-tenant-host')?.value;
+  const incomingHost = cookieHost || (await headers()).get('host');
   return incomingHost ? { 'X-Tenant-Host': incomingHost } : {};
 }
 
