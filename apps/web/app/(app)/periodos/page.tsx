@@ -5,18 +5,20 @@
 // bloqueaba a cualquier institución nueva sin ninguno todavía creado. Hoy
 // solo Coordinador académico/Administrador tienen "term:create" (ver
 // prisma/seed.js).
+//
+// Crear/eliminar viven en PeriodosForms.tsx (Client Components) A PROPOSITO
+// -- ver la nota extensa en actions.ts: esas Server Actions ya NO llaman a
+// redirect(), necesitan "useActionState" (solo disponible del lado del
+// cliente) para poder mostrarle el error a la persona.
 // ============================================================================
 
 import { requireAccessToken, apiFetch, toErrorMessage, getPermissions, can } from '@/lib/api';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Card } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
-import { ConfirmSubmitButton } from '@/components/ui/ConfirmSubmitButton';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { CalendarIcon } from '@/components/ui/icons';
-import { fieldClasses, labelClasses } from '@/components/ui/field-styles';
-import { crearPeriodo, eliminarPeriodo } from './actions';
+import { EliminarPeriodoButton, CrearPeriodoForm } from './PeriodosForms';
 
 interface Term {
   id: string;
@@ -25,12 +27,7 @@ interface Term {
   endDate: string;
 }
 
-export default async function PeriodosPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ error?: string }>;
-}) {
-  const { error } = await searchParams;
+export default async function PeriodosPage() {
   const token = await requireAccessToken();
 
   let terms: Term[];
@@ -51,12 +48,6 @@ export default async function PeriodosPage({
         description="Agrupan cursos por ciclo/semestre. Son opcionales: un curso se puede crear sin periodo y asignarle uno después."
       />
 
-      {error && (
-        <div className="mb-6">
-          <ErrorBanner message={decodeURIComponent(error)} />
-        </div>
-      )}
-
       <Card className="mb-8">
         {terms.length === 0 ? (
           <EmptyState
@@ -75,49 +66,14 @@ export default async function PeriodosPage({
                     {new Date(term.endDate).toLocaleDateString('es-PE')})
                   </span>
                 </div>
-                {canDelete && (
-                  <form action={eliminarPeriodo.bind(null, term.id)}>
-                    <ConfirmSubmitButton
-                      variant="danger"
-                      size="sm"
-                      confirmMessage={`¿Eliminar el periodo "${term.name}"? Esto solo funciona si ningún curso lo usa todavía.`}
-                    >
-                      Eliminar
-                    </ConfirmSubmitButton>
-                  </form>
-                )}
+                {canDelete && <EliminarPeriodoButton termId={term.id} termName={term.name} />}
               </li>
             ))}
           </ul>
         )}
       </Card>
 
-      {canCreate && (
-        <Card>
-          <h2 className="mb-3 text-base font-medium">Crear un periodo nuevo</h2>
-          <form action={crearPeriodo} className="flex max-w-sm flex-col gap-3">
-            <input
-              name="name"
-              type="text"
-              required
-              maxLength={120}
-              placeholder='Ej. "2026 - Semestre I"'
-              className={fieldClasses}
-            />
-            <label className={labelClasses} htmlFor="term-start">
-              Fecha de inicio
-              <input id="term-start" name="startDate" type="date" required className={`mt-1 ${fieldClasses}`} />
-            </label>
-            <label className={labelClasses} htmlFor="term-end">
-              Fecha de fin
-              <input id="term-end" name="endDate" type="date" required className={`mt-1 ${fieldClasses}`} />
-            </label>
-            <Button type="submit" className="self-start">
-              Crear periodo
-            </Button>
-          </form>
-        </Card>
-      )}
+      {canCreate && <CrearPeriodoForm />}
     </div>
   );
 }
