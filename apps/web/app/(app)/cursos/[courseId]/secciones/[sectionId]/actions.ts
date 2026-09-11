@@ -3,27 +3,29 @@
 // las dispare un formulario del navegador) para matricular estudiantes y
 // cambiar el estado de una matricula existente en esta seccion.
 //
-// PATRON DE ERRORES usado en TODA la app (ver tambien las otras
-// actions.ts): como los formularios de estas pantallas son Server
-// Components normales (sin "use client"), una Server Action no tiene forma
-// de devolverle un mensaje de error directo al formulario que la llamo —
-// por eso, ante un error, se redirige a la MISMA pagina con
-// "?error=mensaje" en la URL, y la pagina (ver page.tsx) lee ese parametro
-// y lo muestra con <ErrorBanner>. Si el formulario necesitara mostrar el
-// error SIN recargar la pagina, la alternativa seria convertirlo en un
-// Client Component con el hook "useActionState" — no hace falta esa
-// complejidad para el alcance actual.
+// NINGUNA llama a redirect(): se detecto en produccion que redirect() dentro
+// de una Server Action dispara un re-renderizado interno de Next.js donde
+// headers()/cookies() dejan de reflejar el request real (ver la nota
+// extensa en periodos/actions.ts) — "El dominio no corresponde a ninguna
+// institucion" aparecia justo despues de matricular/retirar/importar desde
+// aca. En su lugar, cada accion devuelve un estado (ver EnrollmentForms.tsx,
+// que las consume con useActionState) y revalidatePath() alcanza para que
+// la tabla de matriculados se actualice sin navegar a ningun lado.
 // ============================================================================
 
 'use server';
 
-import { redirect } from 'next/navigation';
+import { revalidatePath } from 'next/cache';
 import { requireAccessToken, apiFetch, apiFetchUpload, toErrorMessage } from '@/lib/api';
+import type { ActionState } from '@/lib/action-state';
 
-export async function matricular(courseId: string, sectionId: string, formData: FormData) {
+export async function matricular(
+  courseId: string,
+  sectionId: string,
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
   const token = await requireAccessToken();
-  const path = `/cursos/${courseId}/secciones/${sectionId}`;
-
   const email = String(formData.get('email') ?? '').trim();
   const fullNameRaw = String(formData.get('fullName') ?? '').trim();
 
@@ -33,11 +35,19 @@ export async function matricular(courseId: string, sectionId: string, formData: 
       body: JSON.stringify({ email, ...(fullNameRaw && { fullName: fullNameRaw }) }),
     });
   } catch (err) {
-    redirect(`${path}?error=${encodeURIComponent(toErrorMessage(err))}`);
+    return { error: toErrorMessage(err) };
   }
 
-  redirect(path);
+  revalidatePath(`/cursos/${courseId}/secciones/${sectionId}`);
+  return { error: null };
 }
+
+export type BulkResult = {
+  okCount: number;
+  errors: Array<{ email: string; message?: string }>;
+};
+
+export type BulkActionState = { error: string | null; result?: BulkResult };
 
 // Matricula MASIVA desde un archivo CSV: dos columnas, "email,nombre
 // completo" (el nombre solo hace falta si la persona todavia no tiene
@@ -45,16 +55,20 @@ export async function matricular(courseId: string, sectionId: string, formData: 
 // pasa por el frontend a proposito: al backend le llega ya un arreglo de
 // filas (ver bulk-enroll.dto.ts) porque parsear un archivo es un detalle
 // de presentacion, no una regla de negocio.
-export async function matricularCSV(courseId: string, sectionId: string, formData: FormData) {
+export async function matricularCSV(
+  courseId: string,
+  sectionId: string,
+  _prevState: BulkActionState,
+  formData: FormData,
+): Promise<BulkActionState> {
   const token = await requireAccessToken();
-  const path = `/cursos/${courseId}/secciones/${sectionId}`;
   const file = formData.get('file');
 
   if (!(file instanceof File) || file.size === 0) {
-    redirect(`${path}?error=${encodeURIComponent('Elige un archivo CSV para subir.')}`);
+    return { error: 'Elige un archivo CSV para subir.' };
   }
 
-  const text = await (file as File).text();
+  const text = await file.text();
   const lines = text
     .split(/\r?\n/)
     .map((line) => line.trim())
@@ -71,7 +85,7 @@ export async function matricularCSV(courseId: string, sectionId: string, formDat
   });
 
   if (rows.length === 0) {
-    redirect(`${path}?error=${encodeURIComponent('El archivo no tiene ninguna fila con datos.')}`);
+    return { error: 'El archivo no tiene ninguna fila con datos.' };
   }
 
   let results: Array<{ email: string; status: 'matriculado' | 'error'; message?: string }>;
@@ -83,15 +97,17 @@ export async function matricularCSV(courseId: string, sectionId: string, formDat
     );
     results = response.results;
   } catch (err) {
-    redirect(`${path}?error=${encodeURIComponent(toErrorMessage(err))}`);
+    return { error: toErrorMessage(err) };
   }
 
-  const okCount = results.filter((r) => r.status === 'matriculado').length;
-  const errors = results.filter((r) => r.status === 'error').slice(0, 20);
-
-  redirect(
-    `${path}?bulkOk=${okCount}&bulkErrors=${encodeURIComponent(JSON.stringify(errors))}`,
-  );
+  revalidatePath(`/cursos/${courseId}/secciones/${sectionId}`);
+  return {
+    error: null,
+    result: {
+      okCount: results.filter((r) => r.status === 'matriculado').length,
+      errors: results.filter((r) => r.status === 'error').slice(0, 20),
+    },
+  };
 }
 
 // "Migración de información" (plan Enterprise, ver lib/pricing.ts): traer
@@ -102,16 +118,20 @@ export async function matricularCSV(courseId: string, sectionId: string, formDat
 // import-historical-enrollments.dto.ts en el backend. Mismo criterio de
 // "el parseo es un detalle de presentación": el backend recibe filas ya
 // estructuradas, nunca el archivo en sí.
-export async function importarMatriculaHistoricaCSV(courseId: string, sectionId: string, formData: FormData) {
+export async function importarMatriculaHistoricaCSV(
+  courseId: string,
+  sectionId: string,
+  _prevState: BulkActionState,
+  formData: FormData,
+): Promise<BulkActionState> {
   const token = await requireAccessToken();
-  const path = `/cursos/${courseId}/secciones/${sectionId}`;
   const file = formData.get('file');
 
   if (!(file instanceof File) || file.size === 0) {
-    redirect(`${path}?error=${encodeURIComponent('Elige un archivo CSV para subir.')}`);
+    return { error: 'Elige un archivo CSV para subir.' };
   }
 
-  const text = await (file as File).text();
+  const text = await file.text();
   const lines = text
     .split(/\r?\n/)
     .map((line) => line.trim())
@@ -135,7 +155,7 @@ export async function importarMatriculaHistoricaCSV(courseId: string, sectionId:
   });
 
   if (rows.length === 0) {
-    redirect(`${path}?error=${encodeURIComponent('El archivo no tiene ninguna fila con datos.')}`);
+    return { error: 'El archivo no tiene ninguna fila con datos.' };
   }
 
   let results: Array<{ email: string; status: 'importado' | 'error'; message?: string }>;
@@ -147,13 +167,17 @@ export async function importarMatriculaHistoricaCSV(courseId: string, sectionId:
     );
     results = response.results;
   } catch (err) {
-    redirect(`${path}?error=${encodeURIComponent(toErrorMessage(err))}`);
+    return { error: toErrorMessage(err) };
   }
 
-  const okCount = results.filter((r) => r.status === 'importado').length;
-  const errors = results.filter((r) => r.status === 'error').slice(0, 20);
-
-  redirect(`${path}?importOk=${okCount}&importErrors=${encodeURIComponent(JSON.stringify(errors))}`);
+  revalidatePath(`/cursos/${courseId}/secciones/${sectionId}`);
+  return {
+    error: null,
+    result: {
+      okCount: results.filter((r) => r.status === 'importado').length,
+      errors: results.filter((r) => r.status === 'error').slice(0, 20),
+    },
+  };
 }
 
 export async function cambiarEstadoMatricula(
@@ -161,9 +185,9 @@ export async function cambiarEstadoMatricula(
   sectionId: string,
   enrollmentId: string,
   status: 'active' | 'dropped' | 'completed',
-) {
+  _prevState: ActionState,
+): Promise<ActionState> {
   const token = await requireAccessToken();
-  const path = `/cursos/${courseId}/secciones/${sectionId}`;
 
   try {
     await apiFetch(token, `/courses/${courseId}/sections/${sectionId}/enrollments/${enrollmentId}`, {
@@ -171,10 +195,11 @@ export async function cambiarEstadoMatricula(
       body: JSON.stringify({ status }),
     });
   } catch (err) {
-    redirect(`${path}?error=${encodeURIComponent(toErrorMessage(err))}`);
+    return { error: toErrorMessage(err) };
   }
 
-  redirect(path);
+  revalidatePath(`/cursos/${courseId}/secciones/${sectionId}`);
+  return { error: null };
 }
 
 // Retirar a un alumno ADJUNTANDO un sustento (archivo de respaldo, ej. carta
@@ -187,10 +212,10 @@ export async function retirarConSustento(
   courseId: string,
   sectionId: string,
   enrollmentId: string,
+  _prevState: ActionState,
   formData: FormData,
-) {
+): Promise<ActionState> {
   const token = await requireAccessToken();
-  const path = `/cursos/${courseId}/secciones/${sectionId}`;
   const file = formData.get('file');
   const description = String(formData.get('description') ?? '').trim();
 
@@ -206,7 +231,7 @@ export async function retirarConSustento(
         uploadForm,
       );
     } catch (err) {
-      redirect(`${path}?error=${encodeURIComponent(toErrorMessage(err))}`);
+      return { error: toErrorMessage(err) };
     }
   }
 
@@ -216,8 +241,9 @@ export async function retirarConSustento(
       body: JSON.stringify({ status: 'dropped' }),
     });
   } catch (err) {
-    redirect(`${path}?error=${encodeURIComponent(toErrorMessage(err))}`);
+    return { error: toErrorMessage(err) };
   }
 
-  redirect(path);
+  revalidatePath(`/cursos/${courseId}/secciones/${sectionId}`);
+  return { error: null };
 }

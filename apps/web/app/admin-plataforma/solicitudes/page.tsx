@@ -20,14 +20,11 @@ import { ErrorBanner } from '@/components/ErrorBanner';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
-import { Button } from '@/components/ui/Button';
-import { ConfirmSubmitButton } from '@/components/ui/ConfirmSubmitButton';
 import { LinkButton } from '@/components/ui/LinkButton';
-import { fieldClasses } from '@/components/ui/field-styles';
 import { readTempCredentialsCookie } from '../temp-credentials';
 import { TempCredentialsBanner } from '../TempCredentialsBanner';
 import { getLocale } from '@/lib/locale';
-import { aprobarSolicitud, rechazarSolicitud } from './actions';
+import { AprobarSolicitudForm, RechazarSolicitudForm } from './SolicitudForms';
 
 const TEXT = {
   es: {
@@ -76,13 +73,8 @@ interface TenantRegistrationRequest {
   rejectionReason: string | null;
 }
 
-export default async function SolicitudesPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ error?: string }>;
-}) {
-  const [{ error }, tempCredentials, hostHeader] = await Promise.all([
-    searchParams,
+export default async function SolicitudesPage() {
+  const [tempCredentials, hostHeader] = await Promise.all([
     readTempCredentialsCookie(),
     headers().then((h) => h.get('host') ?? ''),
   ]);
@@ -127,12 +119,6 @@ export default async function SolicitudesPage({
         </div>
       )}
 
-      {error && (
-        <div className="mb-6">
-          <ErrorBanner message={decodeURIComponent(error)} />
-        </div>
-      )}
-
       <h2 className="mb-3 text-base font-medium">{t.pending}</h2>
       {pending.length === 0 ? (
         <p className="mb-8 text-sm text-muted">{t.noPending}</p>
@@ -150,28 +136,13 @@ export default async function SolicitudesPage({
               {r.message && <p className="mt-1 text-sm italic text-muted">&quot;{r.message}&quot;</p>}
 
               <div className="mt-3 flex flex-wrap items-center gap-3">
-                <form action={aprobarSolicitud.bind(null, r.id)}>
-                  <Button type="submit" size="sm">
-                    {t.approve}
-                  </Button>
-                </form>
-                <form
-                  action={rechazarSolicitud.bind(null, r.id)}
-                  className="flex items-center gap-2"
-                >
-                  <input
-                    name="reason"
-                    type="text"
-                    placeholder={t.reasonPlaceholder}
-                    className={`${fieldClasses} py-1.5 text-sm`}
-                  />
-                  <ConfirmSubmitButton
-                    className="text-sm font-medium text-danger hover:underline"
-                    confirmMessage={t.rejectConfirm}
-                  >
-                    {t.reject}
-                  </ConfirmSubmitButton>
-                </form>
+                <AprobarSolicitudForm requestId={r.id} label={t.approve} />
+                <RechazarSolicitudForm
+                  requestId={r.id}
+                  reasonPlaceholder={t.reasonPlaceholder}
+                  confirmMessage={t.rejectConfirm}
+                  label={t.reject}
+                />
               </div>
             </Card>
           ))}

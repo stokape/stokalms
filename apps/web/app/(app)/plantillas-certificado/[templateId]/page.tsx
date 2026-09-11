@@ -21,11 +21,8 @@ import { requireAccessToken, apiFetch, toErrorMessage, getPermissions, can } fro
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Card } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
-import { ConfirmSubmitButton } from '@/components/ui/ConfirmSubmitButton';
-import { fieldClasses } from '@/components/ui/field-styles';
 import { getLocale } from '@/lib/locale';
-import { editarPlantilla, eliminarPlantilla } from './actions';
+import { EditarPlantillaForm, EliminarPlantillaButton } from './PlantillaForms';
 
 const TEXT = {
   es: {
@@ -36,6 +33,7 @@ const TEXT = {
     previewTitle: (name: string) => `Vista previa de ${name}`,
     edit: 'Editar',
     saveChanges: 'Guardar cambios',
+    savingChanges: 'Guardando…',
     deleteTemplate: 'Eliminar plantilla',
     deleteHelp: 'Solo se puede eliminar si NINGÚN certificado fue emitido todavía con esta plantilla.',
     deleteThis: 'Eliminar esta plantilla',
@@ -49,6 +47,7 @@ const TEXT = {
     previewTitle: (name: string) => `Preview of ${name}`,
     edit: 'Edit',
     saveChanges: 'Save changes',
+    savingChanges: 'Saving…',
     deleteTemplate: 'Delete template',
     deleteHelp: 'This can only be deleted if NO certificate has been issued with this template yet.',
     deleteThis: 'Delete this template',
@@ -64,13 +63,10 @@ interface CertificateTemplate {
 
 export default async function PlantillaDetallePage({
   params,
-  searchParams,
 }: {
   params: Promise<{ templateId: string }>;
-  searchParams: Promise<{ error?: string; saved?: string }>;
 }) {
   const { templateId } = await params;
-  const { error, saved } = await searchParams;
   const token = await requireAccessToken();
   const t = TEXT[await getLocale()];
 
@@ -92,17 +88,6 @@ export default async function PlantillaDetallePage({
       </Link>
       <PageHeader title={template.name} />
 
-      {error && (
-        <div className="mb-6">
-          <ErrorBanner message={decodeURIComponent(error)} />
-        </div>
-      )}
-      {saved && (
-        <div className="mb-6 rounded-lg bg-success-bg px-4 py-3 text-sm text-success">
-          {t.saved}
-        </div>
-      )}
-
       <Card className="mb-8">
         <h2 className="mb-1 text-base font-medium">{t.preview}</h2>
         <p className="mb-3 text-sm text-muted">{t.previewHelp}</p>
@@ -117,25 +102,14 @@ export default async function PlantillaDetallePage({
       {canEdit && (
         <Card className="mb-8">
           <h2 className="mb-3 text-base font-medium">{t.edit}</h2>
-          <form action={editarPlantilla.bind(null, templateId)} className="flex flex-col gap-3">
-            <input
-              name="name"
-              type="text"
-              required
-              defaultValue={template.name}
-              className={fieldClasses}
-            />
-            <textarea
-              name="htmlTemplate"
-              required
-              rows={12}
-              defaultValue={template.htmlTemplate}
-              className={`${fieldClasses} font-mono text-xs`}
-            />
-            <Button type="submit" className="self-start">
-              {t.saveChanges}
-            </Button>
-          </form>
+          <EditarPlantillaForm
+            templateId={templateId}
+            name={template.name}
+            htmlTemplate={template.htmlTemplate}
+            submitLabel={t.saveChanges}
+            submittingLabel={t.savingChanges}
+            savedLabel={t.saved}
+          />
         </Card>
       )}
 
@@ -143,14 +117,7 @@ export default async function PlantillaDetallePage({
         <Card>
           <h2 className="mb-2 text-base font-medium">{t.deleteTemplate}</h2>
           <p className="mb-3 text-sm text-muted">{t.deleteHelp}</p>
-          <form action={eliminarPlantilla.bind(null, templateId)}>
-            <ConfirmSubmitButton
-              className="text-sm font-medium text-danger hover:underline"
-              confirmMessage={t.deleteConfirm}
-            >
-              {t.deleteThis}
-            </ConfirmSubmitButton>
-          </form>
+          <EliminarPlantillaButton templateId={templateId} confirmMessage={t.deleteConfirm} label={t.deleteThis} />
         </Card>
       )}
     </div>

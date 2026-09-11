@@ -1,9 +1,29 @@
 'use server';
 
-import { redirect } from 'next/navigation';
-import { requireAccessToken, apiFetch, toErrorMessage } from '@/lib/api';
+// ============================================================================
+// cursos/nuevo/actions.ts — Crear un curso, y crear un periodo SIN salir de
+// esta pantalla (popup, ver CursoForms.tsx).
+//
+// NINGUNA de las dos llama a redirect(): se detecto en produccion que
+// redirect() dentro de una Server Action dispara un re-renderizado interno
+// de Next.js donde headers()/cookies() dejan de reflejar el request real
+// (ver la nota extensa en periodos/actions.ts) -- "El dominio no corresponde
+// a ninguna institucion" aparecia justo despues de crear un curso o un
+// periodo desde aca. En su lugar, ambas devuelven un ActionState (ver
+// lib/action-state.ts) que CursoForms.tsx consume con useActionState: la
+// navegacion a /cursos/<id> la hace el CLIENTE (useActionRedirect, un
+// router.push real) y la creacion del periodo simplemente devuelve el
+// periodo creado para que el formulario lo agregue a su <select> sin recargar
+// nada.
+// ============================================================================
 
-export async function crearCurso(formData: FormData) {
+import { requireAccessToken, apiFetch, toErrorMessage } from '@/lib/api';
+import type { ActionState } from '@/lib/action-state';
+
+export async function crearCurso(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
   const token = await requireAccessToken();
   // "|| undefined", no "" a secas: el DTO (ver create-course.dto.ts) marca
   // termId @IsOptional(), pero class-validator SOLO se salta la validacion
@@ -29,18 +49,21 @@ export async function crearCurso(formData: FormData) {
       }),
     });
   } catch (err) {
-    redirect(`/cursos/nuevo?error=${encodeURIComponent(toErrorMessage(err))}`);
+    return { error: toErrorMessage(err) };
   }
 
-  redirect(`/cursos/${created.id}`);
+  return { error: null, redirectTo: `/cursos/${created.id}` };
 }
 
-// Crear un periodo SIN salir de "crear curso" (popup, ver page.tsx) --
-// a diferencia de periodos/actions.ts#crearPeriodo (que vuelve a
-// /periodos), esta version vuelve a ESTA pantalla con el periodo recien
-// creado ya preseleccionado (?termCreado=<id>), para no perder el resto
-// de lo que la persona ya habia completado del formulario de curso.
-export async function crearPeriodoDesdeCurso(formData: FormData) {
+export type CrearPeriodoDesdeCursoState = {
+  error: string | null;
+  term?: { id: string; name: string };
+};
+
+export async function crearPeriodoDesdeCurso(
+  _prevState: CrearPeriodoDesdeCursoState,
+  formData: FormData,
+): Promise<CrearPeriodoDesdeCursoState> {
   const token = await requireAccessToken();
   const name = String(formData.get('name') ?? '').trim();
   const startDate = String(formData.get('startDate') ?? '');
@@ -53,8 +76,8 @@ export async function crearPeriodoDesdeCurso(formData: FormData) {
       body: JSON.stringify({ name, startDate, endDate }),
     });
   } catch (err) {
-    redirect(`/cursos/nuevo?error=${encodeURIComponent(toErrorMessage(err))}`);
+    return { error: toErrorMessage(err) };
   }
 
-  redirect(`/cursos/nuevo?termCreado=${created.id}`);
+  return { error: null, term: { id: created.id, name } };
 }

@@ -1,7 +1,16 @@
 'use server';
 
-import { redirect } from 'next/navigation';
+// ============================================================================
+// configuracion-marca/actions.ts — Guardar nombre/colores, subir logo/fondo/
+// favicon. NINGUNA llama a redirect() (ver la nota extensa en
+// periodos/actions.ts): devuelven un ActionState que BrandingStudio.tsx
+// (ya es Client Component) consume directo con useActionState,
+// revalidatePath alcanza para reflejar el cambio sin navegar a ningun lado.
+// ============================================================================
+
+import { revalidatePath } from 'next/cache';
 import { requireAccessToken, apiFetch, apiFetchUpload, toErrorMessage } from '@/lib/api';
+import type { ActionState } from '@/lib/action-state';
 
 const PATH = '/configuracion-marca';
 
@@ -9,7 +18,7 @@ const PATH = '/configuracion-marca';
 // TODA la app, ver apps/web/app/layout.tsx) — el logo, la imagen de fondo
 // y el favicon se suben aparte, como archivo real (ver
 // actualizarLogo/actualizarFondo/actualizarFavicon más abajo), no aquí.
-export async function actualizarMarca(formData: FormData) {
+export async function actualizarMarca(_prevState: ActionState, formData: FormData): Promise<ActionState> {
   const token = await requireAccessToken();
 
   const name = String(formData.get('name') ?? '').trim();
@@ -34,18 +43,19 @@ export async function actualizarMarca(formData: FormData) {
       }),
     });
   } catch (err) {
-    redirect(`${PATH}?error=${encodeURIComponent(toErrorMessage(err))}`);
+    return { error: toErrorMessage(err) };
   }
 
-  redirect(`${PATH}?saved=1`);
+  revalidatePath(PATH);
+  return { error: null };
 }
 
-export async function actualizarLogo(formData: FormData) {
+export async function actualizarLogo(_prevState: ActionState, formData: FormData): Promise<ActionState> {
   const token = await requireAccessToken();
   const file = formData.get('file');
 
   if (!(file instanceof File) || file.size === 0) {
-    redirect(`${PATH}?error=${encodeURIComponent('Elige una imagen para el logo.')}`);
+    return { error: 'Elige una imagen para el logo.' };
   }
 
   const uploadForm = new FormData();
@@ -54,18 +64,19 @@ export async function actualizarLogo(formData: FormData) {
   try {
     await apiFetchUpload(token, '/tenant/logo', uploadForm);
   } catch (err) {
-    redirect(`${PATH}?error=${encodeURIComponent(toErrorMessage(err))}`);
+    return { error: toErrorMessage(err) };
   }
 
-  redirect(`${PATH}?saved=1`);
+  revalidatePath(PATH);
+  return { error: null };
 }
 
-export async function actualizarFondo(formData: FormData) {
+export async function actualizarFondo(_prevState: ActionState, formData: FormData): Promise<ActionState> {
   const token = await requireAccessToken();
   const file = formData.get('file');
 
   if (!(file instanceof File) || file.size === 0) {
-    redirect(`${PATH}?error=${encodeURIComponent('Elige una imagen para el fondo.')}`);
+    return { error: 'Elige una imagen para el fondo.' };
   }
 
   const uploadForm = new FormData();
@@ -74,20 +85,21 @@ export async function actualizarFondo(formData: FormData) {
   try {
     await apiFetchUpload(token, '/tenant/background-image', uploadForm);
   } catch (err) {
-    redirect(`${PATH}?error=${encodeURIComponent(toErrorMessage(err))}`);
+    return { error: toErrorMessage(err) };
   }
 
-  redirect(`${PATH}?saved=1`);
+  revalidatePath(PATH);
+  return { error: null };
 }
 
 // Favicon propio de la institucion — cae al de Stoka si no se subio
 // ninguno (ver apps/web/app/layout.tsx, "generateMetadata").
-export async function actualizarFavicon(formData: FormData) {
+export async function actualizarFavicon(_prevState: ActionState, formData: FormData): Promise<ActionState> {
   const token = await requireAccessToken();
   const file = formData.get('file');
 
   if (!(file instanceof File) || file.size === 0) {
-    redirect(`${PATH}?error=${encodeURIComponent('Elige una imagen para el favicon.')}`);
+    return { error: 'Elige una imagen para el favicon.' };
   }
 
   const uploadForm = new FormData();
@@ -96,8 +108,9 @@ export async function actualizarFavicon(formData: FormData) {
   try {
     await apiFetchUpload(token, '/tenant/favicon', uploadForm);
   } catch (err) {
-    redirect(`${PATH}?error=${encodeURIComponent(toErrorMessage(err))}`);
+    return { error: toErrorMessage(err) };
   }
 
-  redirect(`${PATH}?saved=1`);
+  revalidatePath(PATH);
+  return { error: null };
 }

@@ -21,12 +21,10 @@ import { ErrorBanner } from '@/components/ErrorBanner';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
-import { Button } from '@/components/ui/Button';
-import { ConfirmSubmitButton } from '@/components/ui/ConfirmSubmitButton';
 import { GroupedColumns } from '@/components/ui/charts/GroupedColumns';
 import { selectClasses } from '@/components/ui/field-styles';
 import { getLocale } from '@/lib/locale';
-import { crearReportePersonalizado, eliminarReportePersonalizado } from './actions';
+import { CrearPresetForm, EliminarPresetButton } from './ReporteForms';
 
 const TEXT = {
   es: {
@@ -72,17 +70,17 @@ const TEXT = {
     atRiskTitle: 'Alumnos en riesgo (14+ días sin actividad)',
     atRiskDays: (n: number) => `${n} días`,
     noAtRisk: 'Nadie en riesgo por ahora — todos con actividad reciente.',
-    cohortCompareTitle: 'Comparar cohortes',
-    cohortA: 'Cohorte A',
-    cohortB: 'Cohorte B',
-    pickCohort: 'Elige una cohorte',
+    cohortCompareTitle: 'Comparar grupos',
+    cohortA: 'Grupo A',
+    cohortB: 'Grupo B',
+    pickCohort: 'Elige un grupo',
     compare: 'Comparar',
     cohortMembers: 'Miembros',
     cohortEnrolled: 'Matriculados',
     cohortCompleted: 'Completados',
     cohortRate: '% Finalización',
     cohortAvgGrade: 'Nota promedio',
-    pickBothCohorts: 'Elige dos cohortes arriba para compararlas.',
+    pickBothCohorts: 'Elige dos grupos arriba para compararlos.',
     // --- Exportación avanzada / BI (plan Enterprise) ---
     biTitle: 'Exportación avanzada (datos crudos para BI)',
     biDescription: 'Una fila por evento (no resumido) — pensado para conectar a tu propio Power BI/Tableau.',
@@ -96,6 +94,7 @@ const TEXT = {
     customNamePlaceholder: 'Ej. "Notas para dirección"',
     customColumns: 'Columnas',
     customSave: 'Guardar',
+    customSaving: 'Guardando…',
     customSaved: 'Guardados',
     customNoneSaved: 'Todavía no guardaste ningún reporte personalizado.',
     customExport: 'Exportar CSV ↓',
@@ -145,17 +144,17 @@ const TEXT = {
     atRiskTitle: 'At-risk students (14+ days without activity)',
     atRiskDays: (n: number) => `${n} days`,
     noAtRisk: 'No one at risk right now — everyone has recent activity.',
-    cohortCompareTitle: 'Compare cohorts',
-    cohortA: 'Cohort A',
-    cohortB: 'Cohort B',
-    pickCohort: 'Pick a cohort',
+    cohortCompareTitle: 'Compare groups',
+    cohortA: 'Group A',
+    cohortB: 'Group B',
+    pickCohort: 'Pick a group',
     compare: 'Compare',
     cohortMembers: 'Members',
     cohortEnrolled: 'Enrolled',
     cohortCompleted: 'Completed',
     cohortRate: '% Completion',
     cohortAvgGrade: 'Average grade',
-    pickBothCohorts: 'Pick two cohorts above to compare them.',
+    pickBothCohorts: 'Pick two groups above to compare them.',
     biTitle: 'Advanced export (raw data for BI)',
     biDescription: "One row per event (not summarized) — meant to plug into your own Power BI/Tableau.",
     biEnrollments: 'Enrollments ↓',
@@ -167,6 +166,7 @@ const TEXT = {
     customNamePlaceholder: 'E.g. "Grades for leadership"',
     customColumns: 'Columns',
     customSave: 'Save',
+    customSaving: 'Saving…',
     customSaved: 'Saved',
     customNoneSaved: "You haven't saved any custom report yet.",
     customExport: 'Export CSV ↓',
@@ -301,9 +301,9 @@ const PRESET_TYPE_LABEL: Record<ReportPreset['reportType'], string> = {
 export default async function ReportesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ courseId?: string; error?: string; cohortA?: string; cohortB?: string }>;
+  searchParams: Promise<{ courseId?: string; cohortA?: string; cohortB?: string }>;
 }) {
-  const { courseId, error, cohortA, cohortB } = await searchParams;
+  const { courseId, cohortA, cohortB } = await searchParams;
   const token = await requireAccessToken();
   const locale = await getLocale();
   const t = TEXT[locale];
@@ -374,12 +374,6 @@ export default async function ReportesPage({
         description={t.description}
         actions={<p className="text-xs text-muted">{t.lastUpdated(updatedAt)}</p>}
       />
-
-      {error && (
-        <div className="mb-6">
-          <ErrorBanner message={decodeURIComponent(error)} />
-        </div>
-      )}
 
       <Card className="mb-8">
         <form className="flex flex-wrap items-end gap-3">
@@ -600,31 +594,17 @@ export default async function ReportesPage({
 
         <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
           {(Object.keys(PRESET_COLUMNS) as Array<ReportPreset['reportType']>).map((reportType) => (
-            <Card key={reportType}>
-              <h3 className="mb-1 text-sm font-semibold">{PRESET_TYPE_LABEL[reportType]}</h3>
-              {reportType === 'grades' && <p className="mb-2 text-xs text-muted">{t.customNeedsCourse}</p>}
-              <form action={crearReportePersonalizado} className="flex flex-col gap-3">
-                <input type="hidden" name="reportType" value={reportType} />
-                <input
-                  name="name"
-                  placeholder={t.customNamePlaceholder}
-                  required
-                  className="rounded-lg border border-border bg-transparent px-3 py-1.5 text-sm outline-none focus:border-primary"
-                />
-                <fieldset className="flex flex-col gap-1.5">
-                  <legend className="mb-1 text-xs font-medium text-muted">{t.customColumns}</legend>
-                  {PRESET_COLUMNS[reportType].map((col) => (
-                    <label key={col.key} className="flex items-center gap-2 text-xs">
-                      <input type="checkbox" name="columns" value={col.key} className="h-3.5 w-3.5" />
-                      {col.label}
-                    </label>
-                  ))}
-                </fieldset>
-                <Button type="submit" variant="secondary" size="sm" className="self-start">
-                  {t.customSave}
-                </Button>
-              </form>
-            </Card>
+            <CrearPresetForm
+              key={reportType}
+              reportType={reportType}
+              title={PRESET_TYPE_LABEL[reportType]}
+              needsCourseNote={reportType === 'grades' ? t.customNeedsCourse : null}
+              columns={PRESET_COLUMNS[reportType]}
+              columnsLabel={t.customColumns}
+              namePlaceholder={t.customNamePlaceholder}
+              submitLabel={t.customSave}
+              submittingLabel={t.customSaving}
+            />
           ))}
         </div>
 
@@ -650,14 +630,11 @@ export default async function ReportesPage({
                     <Link href={`/reportes/export/custom${exportQs}`} className="text-xs font-medium text-primary hover:underline">
                       {t.customExport}
                     </Link>
-                    <form action={eliminarReportePersonalizado.bind(null, preset.id)}>
-                      <ConfirmSubmitButton
-                        className="text-xs font-medium text-danger hover:underline"
-                        confirmMessage={t.customDeleteConfirm(preset.name)}
-                      >
-                        {t.customDelete}
-                      </ConfirmSubmitButton>
-                    </form>
+                    <EliminarPresetButton
+                      presetId={preset.id}
+                      confirmMessage={t.customDeleteConfirm(preset.name)}
+                      label={t.customDelete}
+                    />
                   </div>
                 </li>
               );

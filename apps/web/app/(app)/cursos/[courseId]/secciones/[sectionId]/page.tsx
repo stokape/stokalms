@@ -14,22 +14,18 @@
 import Link from 'next/link';
 import { requireAccessToken, apiFetch, toErrorMessage, getCoursePermissions, can } from '@/lib/api';
 import { ErrorBanner } from '@/components/ErrorBanner';
-import { SuccessBanner } from '@/components/SuccessBanner';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
-import { Button } from '@/components/ui/Button';
-import { ConfirmSubmitButton } from '@/components/ui/ConfirmSubmitButton';
 import { LinkButton } from '@/components/ui/LinkButton';
-import { fieldClasses, fileInputClasses } from '@/components/ui/field-styles';
 import { getLocale, type Locale } from '@/lib/locale';
 import {
-  matricular,
-  matricularCSV,
-  importarMatriculaHistoricaCSV,
-  cambiarEstadoMatricula,
-  retirarConSustento,
-} from './actions';
+  MarkCompletedButton,
+  WithdrawForm,
+  EnrollForm,
+  BulkEnrollForm,
+  ImportHistoricalForm,
+} from './EnrollmentForms';
 
 interface Section {
   id: string;
@@ -86,14 +82,17 @@ const TEXT = {
     emailPlaceholder: 'Email del estudiante',
     fullNamePlaceholder: 'Nombre completo (solo si es una persona nueva)',
     enroll: 'Matricular',
+    enrolling: 'Matriculando…',
     bulkEnroll: 'Matricular varios a la vez (CSV)',
     bulkHelp: (code: string) => `Un archivo con dos columnas separadas por coma: ${code}, una fila por estudiante. Si alguna fila falla, el resto se matricula igual — al final se muestra qué filas fallaron y por qué.`,
     uploadCsv: 'Subir CSV',
+    uploading: 'Subiendo…',
     importTitle: 'Importar matrícula histórica (CSV)',
     importHelp: 'Para traer un roster de otro sistema, con su propio estado y fecha — no matricula "hoy", registra lo que ya pasó. Columnas: email, nombre completo (opcional), estado (active/completed/dropped), fecha de matrícula AAAA-MM-DD (opcional).',
     importOk: (count: number, errorNote: string) => `Se importaron ${count} matrículas históricas${errorNote}.`,
     withErrorsImport: (count: number, word: string) => ` (${count} ${word} con error)`,
     importSubmit: 'Importar',
+    importing: 'Importando…',
   },
   en: {
     course: '← Course',
@@ -126,38 +125,26 @@ const TEXT = {
     emailPlaceholder: "Student's email",
     fullNamePlaceholder: 'Full name (only if it\'s a new person)',
     enroll: 'Enroll',
+    enrolling: 'Enrolling…',
     bulkEnroll: 'Enroll several at once (CSV)',
     bulkHelp: (code: string) => `A file with two comma-separated columns: ${code}, one row per student. If a row fails, the rest are still enrolled — at the end it shows which rows failed and why.`,
     uploadCsv: 'Upload CSV',
+    uploading: 'Uploading…',
     importTitle: 'Import historical enrollments (CSV)',
     importHelp: "To bring in a roster from another system, each with its own status and date — this doesn't enroll people \"today\", it records what already happened. Columns: email, full name (optional), status (active/completed/dropped), enrollment date YYYY-MM-DD (optional).",
     importOk: (count: number, errorNote: string) => `${count} historical enrollments were imported${errorNote}.`,
     withErrorsImport: (count: number, word: string) => ` (${count} ${word} with an error)`,
     importSubmit: 'Import',
+    importing: 'Importing…',
   },
 };
 
 export default async function SectionDetailPage({
   params,
-  searchParams,
 }: {
   params: Promise<{ courseId: string; sectionId: string }>;
-  searchParams: Promise<{
-    error?: string;
-    bulkOk?: string;
-    bulkErrors?: string;
-    importOk?: string;
-    importErrors?: string;
-  }>;
 }) {
   const { courseId, sectionId } = await params;
-  const { error, bulkOk, bulkErrors, importOk, importErrors } = await searchParams;
-  const parsedBulkErrors: Array<{ email: string; message?: string }> = bulkErrors
-    ? JSON.parse(bulkErrors)
-    : [];
-  const parsedImportErrors: Array<{ email: string; message?: string }> = importErrors
-    ? JSON.parse(importErrors)
-    : [];
   const token = await requireAccessToken();
   const locale = await getLocale();
   const t = TEXT[locale];
@@ -199,56 +186,6 @@ export default async function SectionDetailPage({
           )
         }
       />
-
-      {error && (
-        <div className="mb-6">
-          <ErrorBanner message={decodeURIComponent(error)} />
-        </div>
-      )}
-
-      {bulkOk !== undefined && (
-        <SuccessBanner>
-          <p>
-            {t.bulkOk(
-              Number(bulkOk),
-              parsedBulkErrors.length > 0
-                ? t.withErrors(parsedBulkErrors.length, parsedBulkErrors.length === 1 ? t.row : t.rows)
-                : '',
-            )}
-          </p>
-          {parsedBulkErrors.length > 0 && (
-            <ul className="mt-2 list-disc pl-5 text-danger">
-              {parsedBulkErrors.map((e, i) => (
-                <li key={i}>
-                  {e.email}: {e.message}
-                </li>
-              ))}
-            </ul>
-          )}
-        </SuccessBanner>
-      )}
-
-      {importOk !== undefined && (
-        <SuccessBanner>
-          <p>
-            {t.importOk(
-              Number(importOk),
-              parsedImportErrors.length > 0
-                ? t.withErrorsImport(parsedImportErrors.length, parsedImportErrors.length === 1 ? t.row : t.rows)
-                : '',
-            )}
-          </p>
-          {parsedImportErrors.length > 0 && (
-            <ul className="mt-2 list-disc pl-5 text-danger">
-              {parsedImportErrors.map((e, i) => (
-                <li key={i}>
-                  {e.email}: {e.message}
-                </li>
-              ))}
-            </ul>
-          )}
-        </SuccessBanner>
-      )}
 
       <h2 className="mb-3 text-lg font-medium">{t.enrolledStudents}</h2>
       {enrollments.length === 0 ? (
@@ -318,30 +255,22 @@ export default async function SectionDetailPage({
                           {t.viewSupport}
                         </Link>
                         {e.status !== 'completed' && (
-                          <form action={cambiarEstadoMatricula.bind(null, courseId, sectionId, e.id, 'completed')}>
-                            <button type="submit" className="text-xs font-medium text-success hover:underline">
-                              {t.markCompleted}
-                            </button>
-                          </form>
+                          <MarkCompletedButton
+                            courseId={courseId}
+                            sectionId={sectionId}
+                            enrollmentId={e.id}
+                            label={t.markCompleted}
+                          />
                         )}
                         {e.status === 'active' && (
-                          <form
-                            action={retirarConSustento.bind(null, courseId, sectionId, e.id)}
-                            className="flex flex-col gap-1"
-                          >
-                            <input
-                              name="file"
-                              type="file"
-                              title={t.supportTitle}
-                              className={'w-40 ' + fileInputClasses}
-                            />
-                            <ConfirmSubmitButton
-                              className="text-xs font-medium text-danger hover:underline"
-                              confirmMessage={t.withdrawConfirm(e.student.fullName)}
-                            >
-                              {t.withdraw}
-                            </ConfirmSubmitButton>
-                          </form>
+                          <WithdrawForm
+                            courseId={courseId}
+                            sectionId={sectionId}
+                            enrollmentId={e.id}
+                            supportTitle={t.supportTitle}
+                            confirmMessage={t.withdrawConfirm(e.student.fullName)}
+                            label={t.withdraw}
+                          />
                         )}
                       </div>
                     </td>
@@ -358,54 +287,45 @@ export default async function SectionDetailPage({
           <Card>
             <h2 className="mb-1 text-base font-medium">{t.enrollStudent}</h2>
             <p className="mb-4 text-sm text-muted">{t.enrollHelp}</p>
-            <form action={matricular.bind(null, courseId, sectionId)} className="flex flex-col gap-3">
-              <input
-                name="email"
-                type="email"
-                required
-                placeholder={t.emailPlaceholder}
-                className={fieldClasses}
-              />
-              <input
-                name="fullName"
-                type="text"
-                maxLength={200}
-                placeholder={t.fullNamePlaceholder}
-                className={fieldClasses}
-              />
-              <Button type="submit" className="self-start">
-                {t.enroll}
-              </Button>
-            </form>
+            <EnrollForm
+              courseId={courseId}
+              sectionId={sectionId}
+              emailPlaceholder={t.emailPlaceholder}
+              fullNamePlaceholder={t.fullNamePlaceholder}
+              submitLabel={t.enroll}
+              submittingLabel={t.enrolling}
+            />
           </Card>
 
           <Card>
             <h2 className="mb-1 text-base font-medium">{t.bulkEnroll}</h2>
             <p className="mb-4 text-sm text-muted">{t.bulkHelp('email,nombre completo')}</p>
-            <form
-              action={matricularCSV.bind(null, courseId, sectionId)}
-              className="flex flex-col gap-3"
-            >
-              <input name="file" type="file" accept=".csv,text/csv" required className={fileInputClasses} />
-              <Button type="submit" variant="secondary" className="self-start">
-                {t.uploadCsv}
-              </Button>
-            </form>
+            <BulkEnrollForm
+              courseId={courseId}
+              sectionId={sectionId}
+              uploadLabel={t.uploadCsv}
+              uploadingLabel={t.uploading}
+              bulkOk={t.bulkOk}
+              withErrors={t.withErrors}
+              rowWord={t.row}
+              rowsWord={t.rows}
+            />
           </Card>
 
           {canImportHistorical && (
             <Card className="lg:col-span-2">
               <h2 className="mb-1 text-base font-medium">{t.importTitle}</h2>
               <p className="mb-4 text-sm text-muted">{t.importHelp}</p>
-              <form
-                action={importarMatriculaHistoricaCSV.bind(null, courseId, sectionId)}
-                className="flex flex-col gap-3"
-              >
-                <input name="file" type="file" accept=".csv,text/csv" required className={fileInputClasses} />
-                <Button type="submit" variant="secondary" className="self-start">
-                  {t.importSubmit}
-                </Button>
-              </form>
+              <ImportHistoricalForm
+                courseId={courseId}
+                sectionId={sectionId}
+                submitLabel={t.importSubmit}
+                submittingLabel={t.importing}
+                importOk={t.importOk}
+                withErrorsImport={t.withErrorsImport}
+                rowWord={t.row}
+                rowsWord={t.rows}
+              />
             </Card>
           )}
         </div>

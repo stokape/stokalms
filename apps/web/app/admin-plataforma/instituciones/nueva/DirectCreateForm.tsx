@@ -5,12 +5,21 @@
 // de auto-sugerencia de subdominio que RegistrationForm.tsx (formulario
 // público de /registro-institucion) — ver lib/slugify.ts, compartido entre
 // los dos.
+//
+// crearInstitucionDirecta ya NO llama a redirect() (ver la nota extensa en
+// actions.ts): useActionState muestra el error y useActionRedirect navega a
+// /solicitudes tras el alta, sin el problema de redirect() dentro de la
+// Server Action.
 // ============================================================================
 
-import { useState, type ChangeEvent } from 'react';
+import { useActionState, useState, type ChangeEvent } from 'react';
 import { Button } from '@/components/ui/Button';
+import { ErrorBanner } from '@/components/ErrorBanner';
 import { fieldClasses, labelClasses } from '@/components/ui/field-styles';
 import { slugify } from '@/lib/slugify';
+import { useActionRedirect } from '@/components/ui/useActionRedirect';
+import { INITIAL_ACTION_STATE } from '@/lib/action-state';
+import { crearInstitucionDirecta } from './actions';
 import type { Locale } from '@/lib/locale';
 
 const TEXT = {
@@ -27,6 +36,7 @@ const TEXT = {
     contactEmailHelp: 'Ahí se crea su cuenta de acceso — la contraseña temporal se muestra una sola vez apenas se cree.',
     notes: 'Notas (opcional)',
     submit: 'Crear institución',
+    submitting: 'Creando…',
   },
   en: {
     institutionName: 'Institution name',
@@ -41,19 +51,20 @@ const TEXT = {
     contactEmailHelp: "Their access account is created there — the temporary password is shown only once, right after creation.",
     notes: 'Notes (optional)',
     submit: 'Create institution',
+    submitting: 'Creating…',
   },
 };
 
 export function DirectCreateForm({
-  action,
   rootHostname,
   locale,
 }: {
-  action: (formData: FormData) => void;
   rootHostname: string;
   locale: Locale;
 }) {
   const t = TEXT[locale];
+  const [state, formAction, pending] = useActionState(crearInstitucionDirecta, INITIAL_ACTION_STATE);
+  useActionRedirect(state);
   const [subdomain, setSubdomain] = useState('');
   const [subdomainTouched, setSubdomainTouched] = useState(false);
 
@@ -69,7 +80,8 @@ export function DirectCreateForm({
   }
 
   return (
-    <form action={action} className="flex flex-col gap-4">
+    <form action={formAction} className="flex flex-col gap-4">
+      {state.error && <ErrorBanner message={state.error} />}
       <label className="flex flex-col gap-1.5 text-sm">
         <span className={labelClasses}>{t.institutionName}</span>
         <input
@@ -130,8 +142,8 @@ export function DirectCreateForm({
         <textarea name="message" rows={2} className={fieldClasses} />
       </label>
 
-      <Button type="submit" className="mt-2 w-full" size="lg">
-        {t.submit}
+      <Button type="submit" className="mt-2 w-full" size="lg" disabled={pending}>
+        {pending ? t.submitting : t.submit}
       </Button>
     </form>
   );

@@ -1,10 +1,19 @@
 'use server';
 
-import { redirect } from 'next/navigation';
+// ============================================================================
+// admin-plataforma/instituciones/nueva/actions.ts — Alta directa de una
+// institución. No llama a redirect() (ver la nota extensa en
+// periodos/actions.ts): esta pantalla y /solicitudes leen headers() directo
+// (para armar el subdominio/links) — el re-render post-redirect() de
+// Next.js les devolvia el host INTERNO del contenedor. Ahora devuelve un
+// ActionState y el CLIENTE navega a /solicitudes con router.push() (ver
+// DirectCreateForm.tsx / useActionRedirect.ts).
+// ============================================================================
+
 import { requireAccessToken, apiFetch, toErrorMessage } from '@/lib/api';
 import { setTempCredentialsCookie } from '../../temp-credentials';
+import type { ActionState } from '@/lib/action-state';
 
-const FORM_PATH = '/admin-plataforma/instituciones/nueva';
 const SOLICITUDES_PATH = '/admin-plataforma/solicitudes';
 
 interface ProvisionedTenant {
@@ -14,7 +23,10 @@ interface ProvisionedTenant {
   keycloakWarning: string | null;
 }
 
-export async function crearInstitucionDirecta(formData: FormData) {
+export async function crearInstitucionDirecta(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
   const token = await requireAccessToken();
   const dto = {
     institutionName: String(formData.get('institutionName') ?? '').trim(),
@@ -31,7 +43,7 @@ export async function crearInstitucionDirecta(formData: FormData) {
       body: JSON.stringify(dto),
     });
   } catch (err) {
-    redirect(`${FORM_PATH}?error=${encodeURIComponent(toErrorMessage(err))}`);
+    return { error: toErrorMessage(err) };
   }
 
   // Ver temp-credentials.ts: la contraseña temporal NUNCA va en la URL.
@@ -46,5 +58,5 @@ export async function crearInstitucionDirecta(formData: FormData) {
   // revisadas" (ver tenant-registration.service.ts, "createDirect"),
   // queda como el unico lugar que muestra el resultado de CUALQUIER alta,
   // directa o por solicitud.
-  redirect(SOLICITUDES_PATH);
+  return { error: null, redirectTo: SOLICITUDES_PATH };
 }

@@ -12,10 +12,8 @@
 import Link from 'next/link';
 import { requireAccessToken, apiFetch, toErrorMessage, getCoursePermissions, can } from '@/lib/api';
 import { ErrorBanner } from '@/components/ErrorBanner';
-import { Button } from '@/components/ui/Button';
-import { ConfirmSubmitButton } from '@/components/ui/ConfirmSubmitButton';
 import { getLocale, type Locale } from '@/lib/locale';
-import { crearCategoria, crearEvaluacion, eliminarEvaluacion } from './actions';
+import { EliminarEvaluacionButton, CrearCategoriaForm, CrearEvaluacionForm } from './EvaluacionForms';
 
 interface Course {
   id: string;
@@ -60,6 +58,7 @@ const TEXT = {
     weightPlaceholder: 'Peso % (ej. 40)',
     dropLowestTitle: 'Cuántas notas bajas se descartan al promediar',
     createCategory: 'Crear categoría',
+    creatingCategory: 'Creando…',
     createAssessmentHeading: 'Crear una evaluación nueva',
     assessmentTitlePlaceholder: 'Título (opcional, ej. "Examen parcial 1")',
     noModule: 'Sin módulo (queda a nivel del curso)',
@@ -67,6 +66,7 @@ const TEXT = {
     maxAttemptsTitle: 'Intentos permitidos',
     autoPublish: 'Publicar la nota apenas se corrige (sin esperar a "publicar notas" del curso)',
     createAssessment: 'Crear evaluación',
+    creatingAssessment: 'Creando…',
   },
   en: {
     title: 'Assessments',
@@ -82,6 +82,7 @@ const TEXT = {
     weightPlaceholder: 'Weight % (e.g. 40)',
     dropLowestTitle: 'How many low grades are dropped when averaging',
     createCategory: 'Create category',
+    creatingCategory: 'Creating…',
     createAssessmentHeading: 'Create a new assessment',
     assessmentTitlePlaceholder: 'Title (optional, e.g. "Midterm exam")',
     noModule: "No module (stays at the course level)",
@@ -89,6 +90,7 @@ const TEXT = {
     maxAttemptsTitle: 'Allowed attempts',
     autoPublish: 'Publish the grade as soon as it\'s graded (without waiting for the course to "publish grades")',
     createAssessment: 'Create assessment',
+    creatingAssessment: 'Creating…',
   },
 };
 
@@ -97,10 +99,10 @@ export default async function EvaluacionesDelCursoPage({
   searchParams,
 }: {
   params: Promise<{ courseId: string }>;
-  searchParams: Promise<{ error?: string; moduleId?: string }>;
+  searchParams: Promise<{ moduleId?: string }>;
 }) {
   const { courseId } = await params;
-  const { error, moduleId: preselectedModuleId } = await searchParams;
+  const { moduleId: preselectedModuleId } = await searchParams;
   const token = await requireAccessToken();
   const locale = await getLocale();
   const t = TEXT[locale];
@@ -151,12 +153,6 @@ export default async function EvaluacionesDelCursoPage({
       </Link>
       <h1 className="mt-2 mb-6 text-2xl font-semibold">{t.title}</h1>
 
-      {error && (
-        <div className="mb-6">
-          <ErrorBanner message={decodeURIComponent(error)} />
-        </div>
-      )}
-
       {assessments.length === 0 ? (
         <p className="mb-8 text-zinc-500">{t.empty}</p>
       ) : (
@@ -171,14 +167,12 @@ export default async function EvaluacionesDelCursoPage({
                 </span>
               </Link>
               {canDelete && (
-                <form action={eliminarEvaluacion.bind(null, courseId, a.id)}>
-                  <ConfirmSubmitButton
-                    className="text-xs text-red-600 underline dark:text-red-400"
-                    confirmMessage={t.deleteConfirm}
-                  >
-                    {t.delete}
-                  </ConfirmSubmitButton>
-                </form>
+                <EliminarEvaluacionButton
+                  courseId={courseId}
+                  assessmentId={a.id}
+                  confirmMessage={t.deleteConfirm}
+                  label={t.delete}
+                />
               )}
             </li>
           ))}
@@ -189,110 +183,34 @@ export default async function EvaluacionesDelCursoPage({
         <>
           <h2 className="mb-3 text-lg font-medium">{t.firstCreateCategory}</h2>
           <p className="mb-3 text-sm text-zinc-500">{t.categoryHelp}</p>
-          <form action={crearCategoria.bind(null, courseId)} className="mb-8 flex max-w-xl flex-wrap gap-2">
-            <input
-              name="name"
-              type="text"
-              required
-              placeholder={t.categoryNamePlaceholder}
-              className="flex-1 rounded border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
-            />
-            <input
-              name="weightPct"
-              type="number"
-              min={0}
-              max={100}
-              required
-              placeholder={t.weightPlaceholder}
-              className="w-32 rounded border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
-            />
-            <input
-              name="dropLowest"
-              type="number"
-              min={0}
-              defaultValue={0}
-              title={t.dropLowestTitle}
-              className="w-24 rounded border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
-            />
-            <Button type="submit">{t.createCategory}</Button>
-          </form>
+          <CrearCategoriaForm
+            courseId={courseId}
+            namePlaceholder={t.categoryNamePlaceholder}
+            weightPlaceholder={t.weightPlaceholder}
+            dropLowestTitle={t.dropLowestTitle}
+            submitLabel={t.createCategory}
+            submittingLabel={t.creatingCategory}
+          />
         </>
       )}
 
       {canCreate && categories && categories.length > 0 && (
         <>
           <h2 className="mb-3 text-lg font-medium">{t.createAssessmentHeading}</h2>
-          <form action={crearEvaluacion.bind(null, courseId)} className="flex max-w-xl flex-col gap-3">
-            <input
-              name="title"
-              type="text"
-              placeholder={t.assessmentTitlePlaceholder}
-              className="rounded border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
-            />
-            <div className="flex gap-2">
-              <select
-                name="type"
-                required
-                className="flex-1 rounded border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
-              >
-                <option value="exam">{TYPE_LABELS.exam}</option>
-                <option value="assignment">{TYPE_LABELS.assignment}</option>
-                <option value="forum">{TYPE_LABELS.forum}</option>
-                <option value="rubric">{TYPE_LABELS.rubric}</option>
-              </select>
-              <select
-                name="gradebookCategoryId"
-                required
-                className="flex-1 rounded border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
-              >
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            {modules && modules.length > 0 && (
-              <select
-                name="moduleId"
-                defaultValue={preselectedModuleId ?? ''}
-                className="rounded border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
-              >
-                <option value="">{t.noModule}</option>
-                {modules.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.title}
-                  </option>
-                ))}
-              </select>
-            )}
-            <div className="flex gap-2">
-              <input
-                name="maxPoints"
-                type="number"
-                min={0}
-                step="0.01"
-                required
-                placeholder={t.maxPointsPlaceholder}
-                className="flex-1 rounded border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
-              />
-              <input
-                name="maxAttempts"
-                type="number"
-                min={1}
-                defaultValue={1}
-                title={t.maxAttemptsTitle}
-                className="w-32 rounded border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
-              />
-            </div>
-            <label className="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400">
-              <input type="checkbox" name="autoPublish" />
-              {t.autoPublish}
-            </label>
-            <Button type="submit" className="self-start">
-              {t.createAssessment}
-            </Button>
-          </form>
+          <CrearEvaluacionForm
+            courseId={courseId}
+            typeLabels={TYPE_LABELS}
+            categories={categories}
+            modules={modules}
+            preselectedModuleId={preselectedModuleId}
+            titlePlaceholder={t.assessmentTitlePlaceholder}
+            noModuleLabel={t.noModule}
+            maxPointsPlaceholder={t.maxPointsPlaceholder}
+            maxAttemptsTitle={t.maxAttemptsTitle}
+            autoPublishLabel={t.autoPublish}
+            submitLabel={t.createAssessment}
+            submittingLabel={t.creatingAssessment}
+          />
         </>
       )}
     </div>

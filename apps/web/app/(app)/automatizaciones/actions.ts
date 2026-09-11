@@ -3,14 +3,24 @@
 // ============================================================================
 // automatizaciones/actions.ts — Prender/apagar las automatizaciones del
 // tenant. Ver apps/api/src/modules/automations/.
+//
+// No llama a redirect() (ver la nota extensa en periodos/actions.ts):
+// devuelve un estado que AutomatizacionesForm.tsx consume con
+// useActionState, revalidatePath alcanza para reflejar el cambio sin
+// navegar a ningun lado.
 // ============================================================================
 
-import { redirect } from 'next/navigation';
+import { revalidatePath } from 'next/cache';
 import { requireAccessToken, apiFetch, toErrorMessage } from '@/lib/api';
 
 const PATH = '/automatizaciones';
 
-export async function guardarAutomatizaciones(formData: FormData) {
+export type AutomatizacionesActionState = { error: string | null; saved?: boolean };
+
+export async function guardarAutomatizaciones(
+  _prevState: AutomatizacionesActionState,
+  formData: FormData,
+): Promise<AutomatizacionesActionState> {
   const token = await requireAccessToken();
   const autoIssueCertificate = formData.get('autoIssueCertificate') === 'on';
   const dueDateReminders = formData.get('dueDateReminders') === 'on';
@@ -23,8 +33,9 @@ export async function guardarAutomatizaciones(formData: FormData) {
       body: JSON.stringify({ autoIssueCertificate, dueDateReminders, inactivityAlerts, atRiskWeeklyDigest }),
     });
   } catch (err) {
-    redirect(`${PATH}?error=${encodeURIComponent(toErrorMessage(err))}`);
+    return { error: toErrorMessage(err) };
   }
 
-  redirect(`${PATH}?saved=1`);
+  revalidatePath(PATH);
+  return { error: null, saved: true };
 }

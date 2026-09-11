@@ -9,12 +9,10 @@
 
 import { requireAccessToken, apiFetch, getPermissions, can } from '@/lib/api';
 import { ErrorBanner } from '@/components/ErrorBanner';
-import { SuccessBanner } from '@/components/SuccessBanner';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Card } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
 import { getLocale } from '@/lib/locale';
-import { guardarSeguridad } from './actions';
+import { SeguridadForm } from './SeguridadForm';
 
 const TEXT = {
   es: {
@@ -27,6 +25,7 @@ const TEXT = {
     require2FAHelp:
       'La próxima vez que cada persona inicie sesión, Keycloak le va a pedir configurar una app de autenticación (Google Authenticator, Authy, etc.) antes de dejarla entrar. Se aplica a quienes YA son miembros hoy — alguien que se una después no lo tiene automáticamente todavía.',
     save: 'Guardar',
+    saving: 'Guardando…',
     limitationNote:
       'No incluye políticas de contraseña o de expiración de sesión personalizadas por institución: hoy todas las instituciones comparten el mismo servidor de identidad (Keycloak) — eso requeriría un cambio de arquitectura más grande (un "realm" separado por institución), no solo un interruptor más.',
     auditTitle: 'Registro de auditoría',
@@ -50,6 +49,7 @@ const TEXT = {
     require2FAHelp:
       "Next time each person signs in, Keycloak will ask them to set up an authenticator app (Google Authenticator, Authy, etc.) before letting them in. Applies to today's members — someone who joins later doesn't get it automatically yet.",
     save: 'Save',
+    saving: 'Saving…',
     limitationNote:
       "Doesn't include per-institution password or session-expiration policies: today every institution shares the same identity server (Keycloak) — that would need a bigger architecture change (a separate \"realm\" per institution), not just another switch.",
     auditTitle: 'Audit log',
@@ -78,12 +78,7 @@ interface AuditLogRow {
   userFullName: string | null;
 }
 
-export default async function SeguridadPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ error?: string; saved?: string; appliedTo?: string; pending?: string }>;
-}) {
-  const { error, saved, appliedTo, pending } = await searchParams;
+export default async function SeguridadPage() {
   const token = await requireAccessToken();
   const t = TEXT[await getLocale()];
   const permissions = await getPermissions(token);
@@ -122,40 +117,7 @@ export default async function SeguridadPage({
     <div className="mx-auto max-w-3xl">
       <PageHeader title={t.title} description={t.description} />
 
-      {error && (
-        <div className="mb-6">
-          <ErrorBanner message={decodeURIComponent(error)} />
-        </div>
-      )}
-      {saved && (
-        <SuccessBanner>
-          <p>{t.done}</p>
-          {appliedTo !== undefined && <p className="mt-1">{t.appliedTo(Number(appliedTo), Number(pending ?? 0))}</p>}
-        </SuccessBanner>
-      )}
-
-      {canEditSettings && settings && (
-        <Card className="mb-8">
-          <form action={guardarSeguridad} className="flex flex-col gap-4">
-            <label className="flex items-start gap-3">
-              <input
-                type="checkbox"
-                name="require2FA"
-                defaultChecked={settings.require2FA}
-                className="mt-0.5 h-4 w-4 rounded border-border text-primary focus:ring-primary/30"
-              />
-              <span className="text-sm">
-                <span className="font-medium">{t.require2FATitle}</span>
-                <span className="block text-xs text-muted">{t.require2FAHelp}</span>
-              </span>
-            </label>
-            <p className="rounded-lg bg-black/[.02] p-3 text-xs text-muted dark:bg-white/[.04]">{t.limitationNote}</p>
-            <div className="flex justify-end">
-              <Button type="submit">{t.save}</Button>
-            </div>
-          </form>
-        </Card>
-      )}
+      {canEditSettings && settings && <SeguridadForm require2FA={settings.require2FA} t={t} />}
 
       {canViewAudit && (
         <div>

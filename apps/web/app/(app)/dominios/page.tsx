@@ -10,15 +10,11 @@
 
 import { requireAccessToken, apiFetch, toErrorMessage } from '@/lib/api';
 import { ErrorBanner } from '@/components/ErrorBanner';
-import { SuccessBanner } from '@/components/SuccessBanner';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
-import { Button } from '@/components/ui/Button';
-import { ConfirmSubmitButton } from '@/components/ui/ConfirmSubmitButton';
-import { fieldClasses } from '@/components/ui/field-styles';
 import { getLocale } from '@/lib/locale';
-import { agregarDominio, verificarDominio, eliminarDominio } from './actions';
+import { VerificarDominioButton, EliminarDominioButton, AgregarDominioForm } from './DominioForms';
 
 const TEXT = {
   es: {
@@ -44,6 +40,7 @@ const TEXT = {
     placeholder: 'campus.institutosanmartin.edu.pe',
     patternHint: 'Escribe solo el dominio, sin "http://" ni rutas (ej. campus.institutosanmartin.edu.pe).',
     addDomain: 'Agregar dominio',
+    addingDomain: 'Agregando…',
   },
   en: {
     title: 'Domains',
@@ -68,6 +65,7 @@ const TEXT = {
     placeholder: 'campus.institutosanmartin.edu.pe',
     patternHint: 'Enter just the domain, without "http://" or a path (e.g. campus.institutosanmartin.edu.pe).',
     addDomain: 'Add domain',
+    addingDomain: 'Adding…',
   },
 };
 
@@ -79,12 +77,7 @@ interface TenantDomainRow {
   verificationToken: string | null;
 }
 
-export default async function DominiosPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ error?: string; saved?: string }>;
-}) {
-  const { error, saved } = await searchParams;
+export default async function DominiosPage() {
   const token = await requireAccessToken();
   const t = TEXT[await getLocale()];
 
@@ -98,15 +91,6 @@ export default async function DominiosPage({
   return (
     <div className="mx-auto max-w-2xl">
       <PageHeader title={t.title} description={t.description} />
-
-      {error && (
-        <div className="mb-6">
-          <ErrorBanner message={decodeURIComponent(error)} />
-        </div>
-      )}
-      {saved && (
-        <SuccessBanner>{t.done}</SuccessBanner>
-      )}
 
       <Card>
         {domains.length > 0 && (
@@ -142,25 +126,13 @@ export default async function DominiosPage({
                   )}
 
                   <div className="mt-2 flex gap-4">
-                    {!d.verified && (
-                      <form action={verificarDominio.bind(null, d.id)}>
-                        <button
-                          type="submit"
-                          className="text-xs font-medium text-primary hover:underline"
-                        >
-                          {t.verifyNow}
-                        </button>
-                      </form>
-                    )}
+                    {!d.verified && <VerificarDominioButton domainId={d.id} label={t.verifyNow} />}
                     {!d.isPrimary && (
-                      <form action={eliminarDominio.bind(null, d.id)}>
-                        <ConfirmSubmitButton
-                          className="text-xs font-medium text-danger hover:underline"
-                          confirmMessage={t.deleteConfirm(d.domain)}
-                        >
-                          {t.delete}
-                        </ConfirmSubmitButton>
-                      </form>
+                      <EliminarDominioButton
+                        domainId={d.id}
+                        confirmMessage={t.deleteConfirm(d.domain)}
+                        label={t.delete}
+                      />
                     )}
                   </div>
                 </li>
@@ -169,20 +141,13 @@ export default async function DominiosPage({
           </ul>
         )}
 
-        <form action={agregarDominio} className="flex flex-wrap items-center gap-2">
-          <input
-            name="domain"
-            type="text"
-            required
-            pattern="^([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,63}$"
-            title={t.patternHint}
-            placeholder={t.placeholder}
-            className={`max-w-xs ${fieldClasses}`}
-          />
-          <Button type="submit" variant="secondary" size="sm">
-            {t.addDomain}
-          </Button>
-        </form>
+        <AgregarDominioForm
+          patternHint={t.patternHint}
+          placeholder={t.placeholder}
+          submitLabel={t.addDomain}
+          submittingLabel={t.addingDomain}
+          doneLabel={t.done}
+        />
       </Card>
     </div>
   );

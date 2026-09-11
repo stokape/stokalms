@@ -11,10 +11,8 @@
 import Link from 'next/link';
 import { headers } from 'next/headers';
 import { PageHeader } from '@/components/ui/PageHeader';
-import { ErrorBanner } from '@/components/ErrorBanner';
 import { requireAccessToken } from '@/lib/api';
 import { getLocale } from '@/lib/locale';
-import { crearInstitucionDirecta } from './actions';
 import { DirectCreateForm } from './DirectCreateForm';
 
 const TEXT = {
@@ -30,14 +28,9 @@ const TEXT = {
   },
 };
 
-export default async function NuevaInstitucionPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ error?: string }>;
-}) {
+export default async function NuevaInstitucionPage() {
   await requireAccessToken();
-  const [{ error }, hostHeader, locale] = await Promise.all([
-    searchParams,
+  const [hostHeader, locale] = await Promise.all([
     headers().then((h) => h.get('host') ?? ''),
     getLocale(),
   ]);
@@ -58,13 +51,7 @@ export default async function NuevaInstitucionPage({
         }
       />
 
-      {error && (
-        <div className="mb-6">
-          <ErrorBanner message={decodeURIComponent(error)} />
-        </div>
-      )}
-
-      <DirectCreateForm action={crearInstitucionDirecta} rootHostname={rootHostname} locale={locale} />
+      <DirectCreateForm rootHostname={rootHostname} locale={locale} />
     </div>
   );
 }

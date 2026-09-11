@@ -9,11 +9,11 @@
 import { requireAccessToken, apiFetch, toErrorMessage } from '@/lib/api';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { PageHeader } from '@/components/ui/PageHeader';
-import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { BellIcon } from '@/components/ui/icons';
 import { getLocale } from '@/lib/locale';
 import { marcarLeidaYIr, marcarTodasLeidas } from './actions';
+import { MarcarTodasLeidasButton, NotificationRow } from './NotificacionForms';
 
 const TEXT = {
   es: {
@@ -44,12 +44,7 @@ interface Notification {
   createdAt: string;
 }
 
-export default async function NotificacionesPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ error?: string }>;
-}) {
-  const { error } = await searchParams;
+export default async function NotificacionesPage() {
   const token = await requireAccessToken();
   const locale = await getLocale();
   const t = TEXT[locale];
@@ -72,22 +67,8 @@ export default async function NotificacionesPage({
       <PageHeader
         title={t.title}
         description={t.description}
-        actions={
-          hasUnread && (
-            <form action={marcarTodasLeidas}>
-              <Button type="submit" variant="secondary" size="sm">
-                {t.markAllRead}
-              </Button>
-            </form>
-          )
-        }
+        actions={hasUnread && <MarcarTodasLeidasButton action={marcarTodasLeidas} label={t.markAllRead} />}
       />
-
-      {error && (
-        <div className="mb-6">
-          <ErrorBanner message={decodeURIComponent(error)} />
-        </div>
-      )}
 
       {notifications.length === 0 ? (
         <EmptyState icon={BellIcon} title={t.empty} description={t.emptyDescription} />
@@ -99,30 +80,28 @@ export default async function NotificacionesPage({
                 key={n.id}
                 className={n.read ? 'px-4 py-3.5' : 'bg-primary/[.04] px-4 py-3.5'}
               >
-                <form action={marcarLeidaYIr.bind(null, n.id, n.link)}>
-                  <button type="submit" className="block w-full text-left">
-                    <div className="flex items-start gap-2">
-                      {!n.read && (
-                        <span
-                          className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-primary"
-                          aria-label={t.unread}
-                        />
-                      )}
-                      <div className="min-w-0 flex-1">
-                        <p className={n.read ? 'text-sm text-foreground' : 'text-sm font-semibold text-foreground'}>
-                          {n.title}
-                        </p>
-                        {n.body && <p className="mt-0.5 text-sm text-muted">{n.body}</p>}
-                        <p className="mt-1 text-xs text-muted">
-                          {new Date(n.createdAt).toLocaleString(locale === 'en' ? 'en-US' : 'es-PE', {
-                            dateStyle: 'long',
-                            timeStyle: 'short',
-                          })}
-                        </p>
-                      </div>
+                <NotificationRow action={marcarLeidaYIr.bind(null, n.id, n.link)}>
+                  <div className="flex items-start gap-2">
+                    {!n.read && (
+                      <span
+                        className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-primary"
+                        aria-label={t.unread}
+                      />
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <p className={n.read ? 'text-sm text-foreground' : 'text-sm font-semibold text-foreground'}>
+                        {n.title}
+                      </p>
+                      {n.body && <p className="mt-0.5 text-sm text-muted">{n.body}</p>}
+                      <p className="mt-1 text-xs text-muted">
+                        {new Date(n.createdAt).toLocaleString(locale === 'en' ? 'en-US' : 'es-PE', {
+                          dateStyle: 'long',
+                          timeStyle: 'short',
+                        })}
+                      </p>
                     </div>
-                  </button>
-                </form>
+                  </div>
+                </NotificationRow>
               </li>
             ))}
           </ul>

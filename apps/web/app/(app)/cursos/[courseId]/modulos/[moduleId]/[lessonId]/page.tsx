@@ -14,23 +14,15 @@
 import { Breadcrumbs } from '@/components/ui/Breadcrumbs';
 import { requireAccessToken, apiFetch, toErrorMessage, getCoursePermissions, can } from '@/lib/api';
 import { ErrorBanner } from '@/components/ErrorBanner';
-import { Button } from '@/components/ui/Button';
-import { ConfirmSubmitButton } from '@/components/ui/ConfirmSubmitButton';
 import { getLocale, type Locale } from '@/lib/locale';
 import {
-  subirRecurso,
-  crearRecursoEnlace,
-  actualizarLeccion,
-  actualizarRecurso,
-  eliminarRecurso,
-  generarPreguntasIA,
-} from './actions';
-
-interface GeneratedQuestion {
-  prompt: string;
-  options: string[];
-  correctIndex: number;
-}
+  ActualizarLeccionForm,
+  GenerarPreguntasIA,
+  EliminarRecursoButton,
+  ActualizarRecursoForm,
+  SubirRecursoForm,
+  CrearRecursoEnlaceForm,
+} from './LessonForms';
 
 interface Lesson {
   id: string;
@@ -65,6 +57,7 @@ const TEXT = {
     contentBreadcrumb: 'Contenido',
     contentPlaceholder: 'Texto de la lección',
     saveChanges: 'Guardar cambios',
+    savingChanges: 'Guardando…',
     resources: 'Recursos',
     noResources: 'Esta lección todavía no tiene ningún archivo ni enlace adjunto.',
     delete: 'Eliminar',
@@ -72,16 +65,20 @@ const TEXT = {
     titlePlaceholder: 'Título',
     descriptionPlaceholder: 'Descripción',
     save: 'Guardar',
+    saving: 'Guardando…',
     uploadFile: 'Subir un archivo',
     uploadFileHelp: 'PDF, Word, Excel, PowerPoint, imágenes (JPG/PNG), videos, o un paquete SCORM comprimido en .zip — se detecta el tipo automáticamente.',
     displayNamePlaceholder: 'Nombre para mostrar (opcional)',
     uploadFileSubmit: 'Subir archivo',
+    uploadingFile: 'Subiendo…',
     addLink: 'Agregar un enlace',
     addLinkHelp: 'Ej. una clase en vivo por Zoom/Meet, o un video de YouTube.',
     linkTitlePlaceholder: 'Ej. "Clase en vivo del jueves"',
     descriptionOptionalPlaceholder: 'Descripción (opcional)',
     addLinkSubmit: 'Agregar enlace',
+    addingLink: 'Agregando…',
     aiGenerate: 'Generar preguntas con IA (beta)',
+    aiGenerating: 'Generando…',
     aiNotConfigured: 'Esta institución todavía no tiene configurado un proveedor de IA — hablalo con tu equipo técnico.',
     aiResultTitle: 'Preguntas generadas (borrador)',
     aiResultHelp: 'Son un borrador para revisar — cárgalas a mano en una evaluación si te sirven, ninguna se guardó sola.',
@@ -93,6 +90,7 @@ const TEXT = {
     contentBreadcrumb: 'Content',
     contentPlaceholder: 'Lesson text',
     saveChanges: 'Save changes',
+    savingChanges: 'Saving…',
     resources: 'Resources',
     noResources: "This lesson doesn't have any files or links attached yet.",
     delete: 'Delete',
@@ -100,16 +98,20 @@ const TEXT = {
     titlePlaceholder: 'Title',
     descriptionPlaceholder: 'Description',
     save: 'Save',
+    saving: 'Saving…',
     uploadFile: 'Upload a file',
     uploadFileHelp: 'PDF, Word, Excel, PowerPoint, images (JPG/PNG), videos, or a zipped SCORM package — the type is detected automatically.',
     displayNamePlaceholder: 'Display name (optional)',
     uploadFileSubmit: 'Upload file',
+    uploadingFile: 'Uploading…',
     addLink: 'Add a link',
     addLinkHelp: 'E.g. a live class on Zoom/Meet, or a YouTube video.',
     linkTitlePlaceholder: 'E.g. "Thursday live class"',
     descriptionOptionalPlaceholder: 'Description (optional)',
     addLinkSubmit: 'Add link',
+    addingLink: 'Adding…',
     aiGenerate: 'Generate questions with AI (beta)',
+    aiGenerating: 'Generating…',
     aiNotConfigured: "This institution hasn't configured an AI provider yet — talk to your technical team.",
     aiResultTitle: 'Generated questions (draft)',
     aiResultHelp: "They're a draft to review — add them by hand to an assessment if they're useful, none were saved on their own.",
@@ -119,30 +121,14 @@ const TEXT = {
 
 export default async function LeccionDetallePage({
   params,
-  searchParams,
 }: {
   params: Promise<{ courseId: string; moduleId: string; lessonId: string }>;
-  searchParams: Promise<{ error?: string; aiQuestions?: string; aiNotConfigured?: string }>;
 }) {
   const { courseId, moduleId, lessonId } = await params;
-  const { error, aiQuestions: aiQuestionsParam, aiNotConfigured } = await searchParams;
   const token = await requireAccessToken();
   const locale = await getLocale();
   const t = TEXT[locale];
   const TYPE_LABELS = TYPE_LABELS_BY_LOCALE[locale];
-
-  // Ver actions.ts, "generarPreguntasIA": el resultado viaja codificado en
-  // la URL del redirect (no hay estado de cliente en esta pantalla) — si
-  // decodificarlo falla por lo que sea, se trata como "sin resultado" en
-  // vez de romper toda la pagina.
-  let aiQuestions: GeneratedQuestion[] | null = null;
-  if (aiQuestionsParam) {
-    try {
-      aiQuestions = JSON.parse(Buffer.from(aiQuestionsParam, 'base64url').toString('utf-8'));
-    } catch {
-      aiQuestions = null;
-    }
-  }
 
   let lesson: Lesson;
   let resources: Resource[];
@@ -205,43 +191,17 @@ export default async function LeccionDetallePage({
       />
       <h1 className="mt-1 mb-6 text-2xl font-semibold">{lesson.title}</h1>
 
-      {error && (
-        <div className="mb-6">
-          <ErrorBanner message={decodeURIComponent(error)} />
-        </div>
-      )}
-      {aiNotConfigured && (
-        <div className="mb-6 rounded-lg border border-warning/30 bg-warning-bg p-4 text-sm text-warning">
-          {t.aiNotConfigured}
-        </div>
-      )}
-
       {canEditLesson ? (
-        <form
-          action={actualizarLeccion.bind(null, courseId, moduleId, lessonId)}
-          className="mb-8 flex flex-col gap-3"
-        >
-          <input
-            name="title"
-            type="text"
-            defaultValue={lesson.title}
-            required
-            className="rounded border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-          />
-          <textarea
-            name="content"
-            rows={8}
-            defaultValue={lesson.content}
-            placeholder={t.contentPlaceholder}
-            className="rounded border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-          />
-          <button
-            type="submit"
-            className="self-start rounded-full border border-zinc-300 px-4 py-2 text-sm hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
-          >
-            {t.saveChanges}
-          </button>
-        </form>
+        <ActualizarLeccionForm
+          courseId={courseId}
+          moduleId={moduleId}
+          lessonId={lessonId}
+          title={lesson.title}
+          content={lesson.content}
+          contentPlaceholder={t.contentPlaceholder}
+          submitLabel={t.saveChanges}
+          submittingLabel={t.savingChanges}
+        />
       ) : (
         lesson.content && (
           <p className="mb-8 whitespace-pre-wrap rounded-lg border border-zinc-200 p-4 text-sm dark:border-zinc-800">
@@ -251,37 +211,17 @@ export default async function LeccionDetallePage({
       )}
 
       {canEditLesson && (
-        <div className="mb-8">
-          <form action={generarPreguntasIA.bind(null, courseId, moduleId, lessonId)}>
-            <Button type="submit" variant="secondary" size="sm">
-              {t.aiGenerate}
-            </Button>
-          </form>
-
-          {aiQuestions && aiQuestions.length > 0 && (
-            <div className="mt-4 rounded-lg border border-border bg-black/[.015] p-4 dark:bg-white/[.02]">
-              <h3 className="mb-1 text-sm font-semibold">{t.aiResultTitle}</h3>
-              <p className="mb-3 text-xs text-muted">{t.aiResultHelp}</p>
-              <ol className="flex flex-col gap-4 text-sm">
-                {aiQuestions.map((q, i) => (
-                  <li key={i}>
-                    <p className="font-medium">
-                      {i + 1}. {q.prompt}
-                    </p>
-                    <ul className="mt-1.5 flex flex-col gap-1 pl-4">
-                      {q.options.map((opt, j) => (
-                        <li key={j} className={j === q.correctIndex ? 'font-medium text-success' : 'text-muted'}>
-                          {opt}
-                          {j === q.correctIndex && ` — ${t.aiCorrect}`}
-                        </li>
-                      ))}
-                    </ul>
-                  </li>
-                ))}
-              </ol>
-            </div>
-          )}
-        </div>
+        <GenerarPreguntasIA
+          courseId={courseId}
+          moduleId={moduleId}
+          lessonId={lessonId}
+          generateLabel={t.aiGenerate}
+          generatingLabel={t.aiGenerating}
+          notConfiguredLabel={t.aiNotConfigured}
+          resultTitle={t.aiResultTitle}
+          resultHelp={t.aiResultHelp}
+          correctLabel={t.aiCorrect}
+        />
       )}
 
       <h2 className="mb-3 text-lg font-medium">{t.resources}</h2>
@@ -301,14 +241,14 @@ export default async function LeccionDetallePage({
                   {resource.metadata.title ?? resource.metadata.originalName ?? resource.downloadUrl}
                 </a>
                 {canDeleteResource && (
-                  <form action={eliminarRecurso.bind(null, courseId, moduleId, lessonId, resource.id)}>
-                    <ConfirmSubmitButton
-                      className="text-xs text-red-600 underline dark:text-red-400"
-                      confirmMessage={t.deleteConfirm}
-                    >
-                      {t.delete}
-                    </ConfirmSubmitButton>
-                  </form>
+                  <EliminarRecursoButton
+                    courseId={courseId}
+                    moduleId={moduleId}
+                    lessonId={lessonId}
+                    resourceId={resource.id}
+                    confirmMessage={t.deleteConfirm}
+                    label={t.delete}
+                  />
                 )}
               </div>
               <p className="text-sm text-zinc-500">
@@ -317,37 +257,20 @@ export default async function LeccionDetallePage({
                   ` · ${(resource.metadata.size / 1024 / 1024).toFixed(1)} MB`}
               </p>
               {canEditResource && (
-                <form
-                  action={actualizarRecurso.bind(null, courseId, moduleId, lessonId, resource.id)}
-                  className="flex flex-wrap items-center gap-2"
-                >
-                  <input
-                    name="title"
-                    type="text"
-                    defaultValue={resource.metadata.title ?? ''}
-                    placeholder={t.titlePlaceholder}
-                    className="w-48 rounded border border-zinc-300 px-2 py-1 text-xs dark:border-zinc-700 dark:bg-zinc-900"
-                  />
-                  <input
-                    name="description"
-                    type="text"
-                    defaultValue={resource.metadata.description ?? ''}
-                    placeholder={t.descriptionPlaceholder}
-                    className="w-48 rounded border border-zinc-300 px-2 py-1 text-xs dark:border-zinc-700 dark:bg-zinc-900"
-                  />
-                  {resource.type === 'link' && (
-                    <input
-                      name="url"
-                      type="url"
-                      defaultValue={resource.downloadUrl}
-                      placeholder="https://..."
-                      className="w-48 rounded border border-zinc-300 px-2 py-1 text-xs dark:border-zinc-700 dark:bg-zinc-900"
-                    />
-                  )}
-                  <button type="submit" className="text-xs underline">
-                    {t.save}
-                  </button>
-                </form>
+                <ActualizarRecursoForm
+                  courseId={courseId}
+                  moduleId={moduleId}
+                  lessonId={lessonId}
+                  resourceId={resource.id}
+                  title={resource.metadata.title ?? ''}
+                  description={resource.metadata.description ?? ''}
+                  url={resource.downloadUrl}
+                  isLink={resource.type === 'link'}
+                  titlePlaceholder={t.titlePlaceholder}
+                  descriptionPlaceholder={t.descriptionPlaceholder}
+                  saveLabel={t.save}
+                  savingLabel={t.saving}
+                />
               )}
             </li>
           ))}
@@ -359,60 +282,28 @@ export default async function LeccionDetallePage({
           <div>
             <h2 className="mb-3 text-lg font-medium">{t.uploadFile}</h2>
             <p className="mb-3 text-sm text-zinc-500">{t.uploadFileHelp}</p>
-            <form
-              action={subirRecurso.bind(null, courseId, moduleId, lessonId)}
-              className="flex flex-col gap-3"
-            >
-              <input
-                name="title"
-                type="text"
-                placeholder={t.displayNamePlaceholder}
-                className="rounded border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
-              />
-              <input
-                name="file"
-                type="file"
-                required
-                accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,image/*,video/*,.zip"
-                className="text-sm"
-              />
-              <Button type="submit" className="self-start">
-                {t.uploadFileSubmit}
-              </Button>
-            </form>
+            <SubirRecursoForm
+              courseId={courseId}
+              moduleId={moduleId}
+              lessonId={lessonId}
+              displayNamePlaceholder={t.displayNamePlaceholder}
+              submitLabel={t.uploadFileSubmit}
+              submittingLabel={t.uploadingFile}
+            />
           </div>
 
           <div>
             <h2 className="mb-3 text-lg font-medium">{t.addLink}</h2>
             <p className="mb-3 text-sm text-zinc-500">{t.addLinkHelp}</p>
-            <form
-              action={crearRecursoEnlace.bind(null, courseId, moduleId, lessonId)}
-              className="flex flex-col gap-3"
-            >
-              <input
-                name="title"
-                type="text"
-                required
-                placeholder={t.linkTitlePlaceholder}
-                className="rounded border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
-              />
-              <input
-                name="url"
-                type="url"
-                required
-                placeholder="https://..."
-                className="rounded border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
-              />
-              <input
-                name="description"
-                type="text"
-                placeholder={t.descriptionOptionalPlaceholder}
-                className="rounded border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
-              />
-              <Button type="submit" className="self-start">
-                {t.addLinkSubmit}
-              </Button>
-            </form>
+            <CrearRecursoEnlaceForm
+              courseId={courseId}
+              moduleId={moduleId}
+              lessonId={lessonId}
+              linkTitlePlaceholder={t.linkTitlePlaceholder}
+              descriptionPlaceholder={t.descriptionOptionalPlaceholder}
+              submitLabel={t.addLinkSubmit}
+              submittingLabel={t.addingLink}
+            />
           </div>
         </div>
       )}

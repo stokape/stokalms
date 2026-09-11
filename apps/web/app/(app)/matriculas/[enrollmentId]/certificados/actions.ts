@@ -1,13 +1,20 @@
 'use server';
 
-import { redirect } from 'next/navigation';
+// ============================================================================
+// certificados/actions.ts — Emitir/revocar un certificado. NINGUNA llama a
+// redirect() (ver la nota extensa en periodos/actions.ts): devuelven un
+// ActionState que CertificadoForms.tsx consume con useActionState,
+// revalidatePath alcanza para reflejar el cambio sin navegar a ningun lado.
+// ============================================================================
+
+import { revalidatePath } from 'next/cache';
 import { requireAccessToken, apiFetch, toErrorMessage } from '@/lib/api';
+import type { ActionState } from '@/lib/action-state';
 
 // Sin "templateId": se emite con la plantilla FIJA del curso (ver la nota
 // extensa en page.tsx y en certificate.service.ts, "issue").
-export async function emitirCertificado(enrollmentId: string, _formData: FormData) {
+export async function emitirCertificado(enrollmentId: string, _prevState: ActionState): Promise<ActionState> {
   const token = await requireAccessToken();
-  const path = `/matriculas/${enrollmentId}/certificados`;
 
   try {
     await apiFetch(token, `/enrollments/${enrollmentId}/certificates`, {
@@ -15,21 +22,26 @@ export async function emitirCertificado(enrollmentId: string, _formData: FormDat
       body: JSON.stringify({}),
     });
   } catch (err) {
-    redirect(`${path}?error=${encodeURIComponent(toErrorMessage(err))}`);
+    return { error: toErrorMessage(err) };
   }
 
-  redirect(path);
+  revalidatePath(`/matriculas/${enrollmentId}/certificados`);
+  return { error: null };
 }
 
-export async function revocarCertificado(enrollmentId: string, certificateId: string) {
+export async function revocarCertificado(
+  enrollmentId: string,
+  certificateId: string,
+  _prevState: ActionState,
+): Promise<ActionState> {
   const token = await requireAccessToken();
-  const path = `/matriculas/${enrollmentId}/certificados`;
 
   try {
     await apiFetch(token, `/certificates/${certificateId}/revoke`, { method: 'PATCH' });
   } catch (err) {
-    redirect(`${path}?error=${encodeURIComponent(toErrorMessage(err))}`);
+    return { error: toErrorMessage(err) };
   }
 
-  redirect(path);
+  revalidatePath(`/matriculas/${enrollmentId}/certificados`);
+  return { error: null };
 }

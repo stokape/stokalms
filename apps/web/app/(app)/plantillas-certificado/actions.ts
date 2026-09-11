@@ -1,11 +1,19 @@
 'use server';
 
-import { redirect } from 'next/navigation';
+// ============================================================================
+// plantillas-certificado/actions.ts — Crear una plantilla. No llama a
+// redirect() (ver la nota extensa en periodos/actions.ts): devuelve un
+// ActionState que CrearPlantillaForm.tsx consume con useActionState,
+// revalidatePath alcanza para reflejar el cambio sin navegar a ningun lado.
+// ============================================================================
+
+import { revalidatePath } from 'next/cache';
 import { requireAccessToken, apiFetch, toErrorMessage } from '@/lib/api';
+import type { ActionState } from '@/lib/action-state';
 
 const PATH = '/plantillas-certificado';
 
-export async function crearPlantilla(formData: FormData) {
+export async function crearPlantilla(_prevState: ActionState, formData: FormData): Promise<ActionState> {
   const token = await requireAccessToken();
 
   const name = String(formData.get('name') ?? '').trim();
@@ -17,8 +25,9 @@ export async function crearPlantilla(formData: FormData) {
       body: JSON.stringify({ name, htmlTemplate }),
     });
   } catch (err) {
-    redirect(`${PATH}?error=${encodeURIComponent(toErrorMessage(err))}`);
+    return { error: toErrorMessage(err) };
   }
 
-  redirect(PATH);
+  revalidatePath(PATH);
+  return { error: null };
 }

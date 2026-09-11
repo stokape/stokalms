@@ -20,12 +20,10 @@ import { ErrorBanner } from '@/components/ErrorBanner';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
-import { Button } from '@/components/ui/Button';
 import { LinkButton } from '@/components/ui/LinkButton';
 import { FileIcon } from '@/components/ui/icons';
-import { fieldClasses } from '@/components/ui/field-styles';
 import { getLocale } from '@/lib/locale';
-import { crearPlantilla } from './actions';
+import { CrearPlantillaForm } from './CrearPlantillaForm';
 import { SAMPLE_TEMPLATES } from './sample-templates';
 
 const TEXT = {
@@ -48,6 +46,7 @@ const TEXT = {
     namePlaceholder: 'Nombre de la plantilla (ej. Certificado estándar)',
     namePrefix: 'Certificado',
     submit: 'Crear plantilla',
+    submitting: 'Creando…',
   },
   en: {
     title: 'Certificate templates',
@@ -68,6 +67,7 @@ const TEXT = {
     namePlaceholder: 'Template name (e.g. Standard certificate)',
     namePrefix: 'Certificate',
     submit: 'Create template',
+    submitting: 'Creating…',
   },
 };
 
@@ -95,9 +95,9 @@ const PLANTILLA_EN_BLANCO = `<html>
 export default async function PlantillasCertificadoPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; base?: string }>;
+  searchParams: Promise<{ base?: string }>;
 }) {
-  const { error, base } = await searchParams;
+  const { base } = await searchParams;
   const token = await requireAccessToken();
   const tr = TEXT[await getLocale()];
 
@@ -117,12 +117,6 @@ export default async function PlantillasCertificadoPage({
   return (
     <div className="mx-auto max-w-4xl">
       <PageHeader title={tr.title} description={tr.description} />
-
-      {error && (
-        <div className="mb-6">
-          <ErrorBanner message={decodeURIComponent(error)} />
-        </div>
-      )}
 
       <Card className="mb-8">
         <h2 className="mb-3 text-base font-medium">{tr.existing}</h2>
@@ -215,27 +209,14 @@ export default async function PlantillasCertificadoPage({
               </Link>
               {tr.htmlHelpEnd}
             </p>
-            <form action={crearPlantilla} className="flex flex-col gap-3">
-              <input
-                name="name"
-                type="text"
-                required
-                placeholder={tr.namePlaceholder}
-                defaultValue={selectedSample ? `${tr.namePrefix} ${selectedSample.label}` : ''}
-                className={fieldClasses}
-              />
-              <textarea
-                key={base ?? 'blank'}
-                name="htmlTemplate"
-                required
-                rows={12}
-                defaultValue={defaultHtml}
-                className={`${fieldClasses} font-mono text-xs`}
-              />
-              <Button type="submit" className="self-start">
-                {tr.submit}
-              </Button>
-            </form>
+            <CrearPlantillaForm
+              namePlaceholder={tr.namePlaceholder}
+              defaultName={selectedSample ? `${tr.namePrefix} ${selectedSample.label}` : ''}
+              formKey={base ?? 'blank'}
+              defaultHtml={defaultHtml}
+              submitLabel={tr.submit}
+              submittingLabel={tr.submitting}
+            />
           </Card>
         </>
       )}

@@ -1,11 +1,25 @@
 'use server';
 
-import { redirect } from 'next/navigation';
-import { requireAccessToken, apiFetch, toErrorMessage } from '@/lib/api';
+// ============================================================================
+// [templateId]/actions.ts — Editar/borrar una plantilla. NINGUNA llama a
+// redirect() (ver la nota extensa en periodos/actions.ts): editar se queda
+// en la misma pantalla (revalidatePath alcanza); borrar SI cambia de
+// pantalla (no queda plantilla que mostrar), asi que devuelve "redirectTo"
+// para que el cliente navegue con router.push() (ver useActionRedirect.ts).
+// ============================================================================
 
-export async function editarPlantilla(templateId: string, formData: FormData) {
+import { revalidatePath } from 'next/cache';
+import { requireAccessToken, apiFetch, toErrorMessage } from '@/lib/api';
+import type { ActionState } from '@/lib/action-state';
+
+export type PlantillaActionState = { error: string | null; saved?: boolean; redirectTo?: string };
+
+export async function editarPlantilla(
+  templateId: string,
+  _prevState: PlantillaActionState,
+  formData: FormData,
+): Promise<PlantillaActionState> {
   const token = await requireAccessToken();
-  const path = `/plantillas-certificado/${templateId}`;
 
   const name = String(formData.get('name') ?? '').trim();
   const htmlTemplate = String(formData.get('htmlTemplate') ?? '');
@@ -16,20 +30,25 @@ export async function editarPlantilla(templateId: string, formData: FormData) {
       body: JSON.stringify({ name, htmlTemplate }),
     });
   } catch (err) {
-    redirect(`${path}?error=${encodeURIComponent(toErrorMessage(err))}`);
+    return { error: toErrorMessage(err) };
   }
 
-  redirect(`${path}?saved=1`);
+  revalidatePath(`/plantillas-certificado/${templateId}`);
+  return { error: null, saved: true };
 }
 
-export async function eliminarPlantilla(templateId: string) {
+export async function eliminarPlantilla(
+  templateId: string,
+  _prevState: ActionState,
+): Promise<ActionState> {
   const token = await requireAccessToken();
 
   try {
     await apiFetch(token, `/certificate-templates/${templateId}`, { method: 'DELETE' });
   } catch (err) {
-    redirect(`/plantillas-certificado/${templateId}?error=${encodeURIComponent(toErrorMessage(err))}`);
+    return { error: toErrorMessage(err) };
   }
 
-  redirect('/plantillas-certificado');
+  revalidatePath('/plantillas-certificado');
+  return { error: null, redirectTo: '/plantillas-certificado' };
 }

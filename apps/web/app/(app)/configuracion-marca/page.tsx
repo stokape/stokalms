@@ -15,7 +15,6 @@
 
 import { requireAccessToken, apiFetch, toErrorMessage } from '@/lib/api';
 import { ErrorBanner } from '@/components/ErrorBanner';
-import { SuccessBanner } from '@/components/SuccessBanner';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { getLocale } from '@/lib/locale';
 import { actualizarMarca, actualizarLogo, actualizarFondo, actualizarFavicon } from './actions';
@@ -48,12 +47,7 @@ interface Tenant {
   };
 }
 
-export default async function ConfiguracionMarcaPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ error?: string; saved?: string }>;
-}) {
-  const { error, saved } = await searchParams;
+export default async function ConfiguracionMarcaPage() {
   const token = await requireAccessToken();
   const locale = await getLocale();
   const t = TEXT[locale];
@@ -78,15 +72,6 @@ export default async function ConfiguracionMarcaPage({
           </>
         }
       />
-
-      {error && (
-        <div className="mb-6">
-          <ErrorBanner message={decodeURIComponent(error)} />
-        </div>
-      )}
-      {saved && (
-        <SuccessBanner>{t.saved}</SuccessBanner>
-      )}
 
       <BrandingStudio
         tenantName={tenant.name}

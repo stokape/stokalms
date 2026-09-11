@@ -5,6 +5,12 @@
 // "[courseId]" en el nombre de la carpeta es un segmento DINAMICO de
 // Next.js: captura lo que venga en esa parte de la URL (ej. "/cursos/abc-123")
 // y lo entrega en "params.courseId".
+//
+// Asignar escala/plantilla y eliminar el curso viven en CourseDetailForms.tsx
+// (Client Components) A PROPOSITO -- ver la nota extensa en actions.ts: esas
+// Server Actions ya NO llaman a redirect(), necesitan "useActionState" (solo
+// disponible del lado del cliente) para poder mostrarle el error a la
+// persona sin cambiar de pantalla.
 // ============================================================================
 
 import Link from 'next/link';
@@ -12,16 +18,19 @@ import { requireAccessToken, apiFetch, toErrorMessage, getCoursePermissions, can
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Card } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
 import { LinkButton } from '@/components/ui/LinkButton';
-import { selectClasses } from '@/components/ui/field-styles';
 import { getLocale } from '@/lib/locale';
-import { asignarEscalaDeNotas, asignarPlantillaDeCertificado } from './actions';
+import { PendingSetupCard, EliminarCursoButton } from './CourseDetailForms';
 
 const TEXT = {
   es: {
     back: '← Cursos',
     assign: 'Asignar',
+    assigning: 'Asignando…',
+    deleteCourse: 'Eliminar curso',
+    deletingCourse: 'Eliminando…',
+    confirmDelete: (title: string) =>
+      `¿Eliminar el curso "${title}"? Esto solo funciona si no tiene secciones ni matrículas todavía.`,
     noGradingScale: 'Este curso todavía no tiene una escala de notas asignada — hasta que le asignes una, la pantalla de notas finales no va a poder calcular nada.',
     noGradingScaleEmpty: 'Tu institución todavía no creó ninguna escala de notas.',
     noTemplate: 'Este curso todavía no tiene una plantilla de certificado asignada — hasta que le asignes una, no se van a poder emitir certificados para sus matrículas.',
@@ -38,6 +47,11 @@ const TEXT = {
   en: {
     back: '← Courses',
     assign: 'Assign',
+    assigning: 'Assigning…',
+    deleteCourse: 'Delete course',
+    deletingCourse: 'Deleting…',
+    confirmDelete: (title: string) =>
+      `Delete the course "${title}"? This only works if it has no sections or enrollments yet.`,
     noGradingScale: "This course doesn't have a grading scale assigned yet — until you assign one, the final grades screen won't be able to calculate anything.",
     noGradingScaleEmpty: "Your institution hasn't created any grading scales yet.",
     noTemplate: "This course doesn't have a certificate template assigned yet — until you assign one, certificates can't be issued for its enrollments.",
@@ -77,55 +91,12 @@ interface CertificateTemplate {
   name: string;
 }
 
-function PendingSetupCard({
-  message,
-  emptyMessage,
-  isEmpty,
-  action,
-  fieldName,
-  options,
-  assignLabel,
-}: {
-  message: string;
-  emptyMessage: string;
-  isEmpty: boolean;
-  action: (formData: FormData) => Promise<void>;
-  fieldName: string;
-  options: { id: string; name: string }[];
-  assignLabel: string;
-}) {
-  return (
-    <Card className="mb-6 border-warning/30 bg-warning-bg">
-      <p className="mb-3 text-sm text-warning">{message}</p>
-      {isEmpty ? (
-        <p className="text-sm text-warning">{emptyMessage}</p>
-      ) : (
-        <form action={action} className="flex max-w-sm flex-wrap gap-2">
-          <select name={fieldName} required className={selectClasses + ' flex-1'}>
-            {options.map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.name}
-              </option>
-            ))}
-          </select>
-          <Button type="submit" size="md">
-            {assignLabel}
-          </Button>
-        </form>
-      )}
-    </Card>
-  );
-}
-
 export default async function CourseDetailPage({
   params,
-  searchParams,
 }: {
   params: Promise<{ courseId: string }>;
-  searchParams: Promise<{ error?: string }>;
 }) {
   const { courseId } = await params;
-  const { error } = await searchParams;
   const token = await requireAccessToken();
   const t = TEXT[await getLocale()];
 
@@ -182,41 +153,53 @@ export default async function CourseDetailPage({
 
   const permissions = await getCoursePermissions(token, courseId);
   const canCreateSection = can(permissions, 'section', 'create');
+  const canDeleteCourse = can(permissions, 'course', 'delete');
 
   return (
     <div>
       <Link href="/cursos" className="text-sm text-muted hover:text-primary">
         {t.back}
       </Link>
-      <PageHeader title={course.title} description={<span className="font-mono">{course.code}</span>} />
-
-      {error && (
-        <div className="mb-6">
-          <ErrorBanner message={decodeURIComponent(error)} />
-        </div>
-      )}
+      <PageHeader
+        title={course.title}
+        description={<span className="font-mono">{course.code}</span>}
+        actions={
+          canDeleteCourse && (
+            <EliminarCursoButton
+              courseId={courseId}
+              confirmMessage={t.confirmDelete(course.title)}
+              label={t.deleteCourse}
+              deletingLabel={t.deletingCourse}
+            />
+          )
+        }
+      />
 
       {!course.gradingScaleId && gradingScales && (
         <PendingSetupCard
+          courseId={courseId}
+          kind="gradingScale"
           message={t.noGradingScale}
           emptyMessage={t.noGradingScaleEmpty}
           isEmpty={gradingScales.length === 0}
-          action={asignarEscalaDeNotas.bind(null, courseId)}
           fieldName="gradingScaleId"
           options={gradingScales}
           assignLabel={t.assign}
+          assigningLabel={t.assigning}
         />
       )}
 
       {!course.certificateTemplateId && templates && (
         <PendingSetupCard
+          courseId={courseId}
+          kind="certificateTemplate"
           message={t.noTemplate}
           emptyMessage={t.noTemplateEmpty}
           isEmpty={templates.length === 0}
-          action={asignarPlantillaDeCertificado.bind(null, courseId)}
           fieldName="certificateTemplateId"
           options={templates}
           assignLabel={t.assign}
+          assigningLabel={t.assigning}
         />
       )}
 

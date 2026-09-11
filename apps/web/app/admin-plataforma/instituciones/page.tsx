@@ -12,7 +12,7 @@ import { ErrorBanner } from '@/components/ErrorBanner';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Badge } from '@/components/ui/Badge';
 import { getLocale } from '@/lib/locale';
-import { cambiarEstadoInstitucion } from './actions';
+import { EstadoInstitucionButton } from './EstadoInstitucionButton';
 
 const TEXT = {
   es: {
@@ -55,12 +55,7 @@ interface TenantSummary {
   domainCount: number;
 }
 
-export default async function InstitucionesPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ error?: string }>;
-}) {
-  const { error } = await searchParams;
+export default async function InstitucionesPage() {
   const token = await requireAccessToken();
   const t = TEXT[await getLocale()];
 
@@ -78,12 +73,6 @@ export default async function InstitucionesPage({
   return (
     <div className="mx-auto max-w-3xl px-6">
       <PageHeader title={t.title} description={t.description} />
-
-      {error && (
-        <div className="mb-6">
-          <ErrorBanner message={decodeURIComponent(error)} />
-        </div>
-      )}
 
       {tenants.length === 0 ? (
         <p className="text-sm text-muted">{t.empty}</p>
@@ -108,14 +97,12 @@ export default async function InstitucionesPage({
                 </div>
 
                 <div className="flex shrink-0 items-center gap-4">
-                  <form action={cambiarEstadoInstitucion.bind(null, tn.id, !tn.active)}>
-                    <button
-                      type="submit"
-                      className={`text-xs font-medium hover:underline ${tn.active ? 'text-danger' : 'text-success'}`}
-                    >
-                      {tn.active ? t.deactivate : t.activate}
-                    </button>
-                  </form>
+                  <EstadoInstitucionButton
+                    tenantId={tn.id}
+                    active={tn.active}
+                    deactivateLabel={t.deactivate}
+                    activateLabel={t.activate}
+                  />
                   <Link
                     href={`/admin-plataforma/instituciones/${tn.id}`}
                     className="text-sm font-medium text-primary hover:underline"

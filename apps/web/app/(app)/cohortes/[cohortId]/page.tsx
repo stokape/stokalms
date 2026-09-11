@@ -1,9 +1,14 @@
 // ============================================================================
-// cohortes/[cohortId]/page.tsx — Detalle de una cohorte: sus miembros,
+// cohortes/[cohortId]/page.tsx — Detalle de un grupo: sus miembros,
 // agregar/quitar alumnos. Requiere "cohort:view" para entrar;
 // agregar/quitar exige "cohort:assign" (Coordinador académico también lo
-// tiene); borrar la cohorte exige "cohort:delete" (solo Super Admin/
+// tiene); borrar el grupo exige "cohort:delete" (solo Super Admin/
 // Administrador de entidad).
+//
+// Agregar/quitar/borrar viven en ../CohorteForms.tsx (Client Components) A
+// PROPOSITO -- ver la nota extensa en actions.ts: esas Server Actions ya NO
+// llaman a redirect(), necesitan "useActionState" (solo disponible del lado
+// del cliente) para poder mostrarle el error a la persona.
 // ============================================================================
 
 import Link from 'next/link';
@@ -11,38 +16,37 @@ import { requireAccessToken, apiFetch, getPermissions, can, toErrorMessage } fro
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Card } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
-import { ConfirmSubmitButton } from '@/components/ui/ConfirmSubmitButton';
-import { selectClasses } from '@/components/ui/field-styles';
 import { getLocale } from '@/lib/locale';
-import { agregarMiembro, quitarMiembro, eliminarCohorte } from '../actions';
+import { EliminarGrupoButton, QuitarMiembroButton, AgregarMiembroForm } from '../CohorteForms';
 
 const TEXT = {
   es: {
-    back: '← Cohortes',
+    back: '← Grupos',
     membersTitle: 'Miembros',
-    noMembers: 'Todavía no hay nadie en esta cohorte.',
+    noMembers: 'Todavía no hay nadie en este grupo.',
     remove: 'Quitar',
-    removeConfirm: (name: string) => `¿Quitar a ${name} de esta cohorte?`,
+    removeConfirm: (name: string) => `¿Quitar a ${name} de este grupo?`,
     addMember: 'Agregar alumno',
     pickPerson: 'Elige a quién agregar',
     add: 'Agregar',
-    deleteCohort: 'Eliminar cohorte',
-    deleteCohortConfirm: (name: string) => `¿Eliminar la cohorte "${name}"? No se puede deshacer.`,
-    everyoneAssigned: 'No hay nadie más para agregar (o ya están todos en esta cohorte).',
+    adding: 'Agregando…',
+    deleteCohort: 'Eliminar grupo',
+    deleteCohortConfirm: (name: string) => `¿Eliminar el grupo "${name}"? No se puede deshacer.`,
+    everyoneAssigned: 'No hay nadie más para agregar (o ya están todos en este grupo).',
   },
   en: {
-    back: '← Cohorts',
+    back: '← Groups',
     membersTitle: 'Members',
-    noMembers: 'No one is in this cohort yet.',
+    noMembers: 'No one is in this group yet.',
     remove: 'Remove',
-    removeConfirm: (name: string) => `Remove ${name} from this cohort?`,
+    removeConfirm: (name: string) => `Remove ${name} from this group?`,
     addMember: 'Add student',
     pickPerson: 'Choose who to add',
     add: 'Add',
-    deleteCohort: 'Delete cohort',
-    deleteCohortConfirm: (name: string) => `Delete the "${name}" cohort? This can't be undone.`,
-    everyoneAssigned: 'No one else to add (or everyone is already in this cohort).',
+    adding: 'Adding…',
+    deleteCohort: 'Delete group',
+    deleteCohortConfirm: (name: string) => `Delete the "${name}" group? This can't be undone.`,
+    everyoneAssigned: 'No one else to add (or everyone is already in this group).',
   },
 };
 
@@ -61,13 +65,10 @@ interface Member {
 
 export default async function CohortDetallePage({
   params,
-  searchParams,
 }: {
   params: Promise<{ cohortId: string }>;
-  searchParams: Promise<{ error?: string }>;
 }) {
   const { cohortId } = await params;
-  const { error } = await searchParams;
   const token = await requireAccessToken();
   const t = TEXT[await getLocale()];
   const permissions = await getPermissions(token);
@@ -102,24 +103,14 @@ export default async function CohortDetallePage({
         description={cohort.description ?? undefined}
         actions={
           canDelete && (
-            <form action={eliminarCohorte.bind(null, cohortId)}>
-              <ConfirmSubmitButton
-                variant="danger"
-                size="sm"
-                confirmMessage={t.deleteCohortConfirm(cohort.name)}
-              >
-                {t.deleteCohort}
-              </ConfirmSubmitButton>
-            </form>
+            <EliminarGrupoButton
+              cohortId={cohortId}
+              confirmMessage={t.deleteCohortConfirm(cohort.name)}
+              label={t.deleteCohort}
+            />
           )
         }
       />
-
-      {error && (
-        <div className="mb-6">
-          <ErrorBanner message={decodeURIComponent(error)} />
-        </div>
-      )}
 
       <h2 className="mb-3 text-base font-medium">{t.membersTitle}</h2>
       <Card className="mb-8">
@@ -133,33 +124,25 @@ export default async function CohortDetallePage({
                   <p className="truncate text-sm font-medium">{m.fullName}</p>
                   <p className="truncate text-xs text-muted">{m.email}</p>
                 </div>
-                <form action={quitarMiembro.bind(null, cohortId, m.userTenantId)}>
-                  <ConfirmSubmitButton
-                    className="shrink-0 text-xs font-medium text-danger hover:underline"
-                    confirmMessage={t.removeConfirm(m.fullName)}
-                  >
-                    {t.remove}
-                  </ConfirmSubmitButton>
-                </form>
+                <QuitarMiembroButton
+                  cohortId={cohortId}
+                  userTenantId={m.userTenantId}
+                  confirmMessage={t.removeConfirm(m.fullName)}
+                  label={t.remove}
+                />
               </li>
             ))}
           </ul>
         )}
 
         {available.length > 0 ? (
-          <form action={agregarMiembro.bind(null, cohortId)} className="flex flex-wrap items-center gap-2">
-            <select name="userTenantId" required className={`min-w-[220px] ${selectClasses}`}>
-              <option value="">{t.pickPerson}</option>
-              {available.map((m) => (
-                <option key={m.userTenantId} value={m.userTenantId}>
-                  {m.fullName} — {m.email}
-                </option>
-              ))}
-            </select>
-            <Button type="submit" variant="secondary" size="sm">
-              {t.add}
-            </Button>
-          </form>
+          <AgregarMiembroForm
+            cohortId={cohortId}
+            available={available}
+            pickPersonLabel={t.pickPerson}
+            addLabel={t.add}
+            addingLabel={t.adding}
+          />
         ) : (
           <p className="text-xs text-muted">{t.everyoneAssigned}</p>
         )}

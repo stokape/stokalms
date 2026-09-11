@@ -16,10 +16,8 @@
 import Link from 'next/link';
 import { requireAccessToken, apiFetch, toErrorMessage, getPermissions, can } from '@/lib/api';
 import { ErrorBanner } from '@/components/ErrorBanner';
-import { Button } from '@/components/ui/Button';
-import { ConfirmSubmitButton } from '@/components/ui/ConfirmSubmitButton';
 import { getLocale } from '@/lib/locale';
-import { emitirCertificado, revocarCertificado } from './actions';
+import { RevocarCertificadoButton, EmitirCertificadoForm } from './CertificadoForms';
 
 const TEXT = {
   es: {
@@ -36,6 +34,7 @@ const TEXT = {
     issueNew: 'Emitir un nuevo certificado',
     issueHelp: 'Se emite con la plantilla ya asignada al curso. Solo se puede emitir si la matrícula ya está en estado "Completado" y el curso tiene una plantilla asignada (esto último se configura desde el detalle del curso).',
     issue: 'Emitir certificado',
+    issuing: 'Emitiendo…',
   },
   en: {
     back: '← My enrollments',
@@ -51,6 +50,7 @@ const TEXT = {
     issueNew: 'Issue a new certificate',
     issueHelp: 'It\'s issued with the template already assigned to the course. It can only be issued if the enrollment is already "Completed" and the course has a template assigned (the latter is configured from the course detail page).',
     issue: 'Issue certificate',
+    issuing: 'Issuing…',
   },
 };
 
@@ -64,13 +64,10 @@ interface Certificate {
 
 export default async function CertificadosDeMatriculaPage({
   params,
-  searchParams,
 }: {
   params: Promise<{ enrollmentId: string }>;
-  searchParams: Promise<{ error?: string }>;
 }) {
   const { enrollmentId } = await params;
-  const { error } = await searchParams;
   const token = await requireAccessToken();
   const locale = await getLocale();
   const t = TEXT[locale];
@@ -92,12 +89,6 @@ export default async function CertificadosDeMatriculaPage({
         {t.back}
       </Link>
       <h1 className="mt-2 mb-6 text-2xl font-semibold">{t.title}</h1>
-
-      {error && (
-        <div className="mb-6">
-          <ErrorBanner message={decodeURIComponent(error)} />
-        </div>
-      )}
 
       {certificates.length === 0 ? (
         <p className="mb-8 text-zinc-500">{t.empty}</p>
@@ -125,14 +116,12 @@ export default async function CertificadosDeMatriculaPage({
                   {t.downloadPdf}
                 </a>
                 {!c.revoked && canRevoke && (
-                  <form action={revocarCertificado.bind(null, enrollmentId, c.id)}>
-                    <ConfirmSubmitButton
-                      className="text-xs text-red-600 underline dark:text-red-400"
-                      confirmMessage={t.revokeConfirm}
-                    >
-                      {t.revoke}
-                    </ConfirmSubmitButton>
-                  </form>
+                  <RevocarCertificadoButton
+                    enrollmentId={enrollmentId}
+                    certificateId={c.id}
+                    confirmMessage={t.revokeConfirm}
+                    label={t.revoke}
+                  />
                 )}
               </div>
             </li>
@@ -144,9 +133,7 @@ export default async function CertificadosDeMatriculaPage({
         <>
           <h2 className="mb-3 text-lg font-medium">{t.issueNew}</h2>
           <p className="mb-3 text-sm text-zinc-500">{t.issueHelp}</p>
-          <form action={emitirCertificado.bind(null, enrollmentId)}>
-            <Button type="submit">{t.issue}</Button>
-          </form>
+          <EmitirCertificadoForm enrollmentId={enrollmentId} label={t.issue} submittingLabel={t.issuing} />
         </>
       )}
     </div>

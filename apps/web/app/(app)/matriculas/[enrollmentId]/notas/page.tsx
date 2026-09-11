@@ -8,10 +8,8 @@
 import Link from 'next/link';
 import { requireAccessToken, apiFetch, toErrorMessage, getPermissions, can } from '@/lib/api';
 import { ErrorBanner } from '@/components/ErrorBanner';
-import { Button } from '@/components/ui/Button';
-import { ConfirmSubmitButton } from '@/components/ui/ConfirmSubmitButton';
 import { getLocale } from '@/lib/locale';
-import { crearAnotacion, eliminarAnotacion } from './actions';
+import { EliminarAnotacionButton, CrearAnotacionForm } from './AnotacionForms';
 
 const TEXT = {
   es: {
@@ -22,6 +20,7 @@ const TEXT = {
     deleteConfirm: '¿Eliminar esta anotación? No se puede deshacer.',
     placeholder: 'Ej. Mejoró mucho su participación en las últimas clases.',
     submit: 'Agregar anotación',
+    submitting: 'Agregando…',
   },
   en: {
     back: "← This enrollment's certificates",
@@ -31,6 +30,7 @@ const TEXT = {
     deleteConfirm: "Delete this note? This can't be undone.",
     placeholder: 'E.g. Their participation improved a lot in recent classes.',
     submit: 'Add note',
+    submitting: 'Adding…',
   },
 };
 
@@ -43,13 +43,10 @@ interface StudentNote {
 
 export default async function AnotacionesDeMatriculaPage({
   params,
-  searchParams,
 }: {
   params: Promise<{ enrollmentId: string }>;
-  searchParams: Promise<{ error?: string }>;
 }) {
   const { enrollmentId } = await params;
-  const { error } = await searchParams;
   const token = await requireAccessToken();
   const locale = await getLocale();
   const t = TEXT[locale];
@@ -72,12 +69,6 @@ export default async function AnotacionesDeMatriculaPage({
       </Link>
       <h1 className="mt-2 mb-6 text-2xl font-semibold">{t.title}</h1>
 
-      {error && (
-        <div className="mb-6">
-          <ErrorBanner message={decodeURIComponent(error)} />
-        </div>
-      )}
-
       {notes.length === 0 ? (
         <p className="mb-8 text-zinc-500">{t.empty}</p>
       ) : (
@@ -90,14 +81,12 @@ export default async function AnotacionesDeMatriculaPage({
                 {new Date(note.createdAt).toLocaleString(locale === 'en' ? 'en-US' : 'es-PE', { dateStyle: 'long', timeStyle: 'short' })}
               </p>
               {canDelete && (
-                <form action={eliminarAnotacion.bind(null, enrollmentId, note.id)} className="mt-1">
-                  <ConfirmSubmitButton
-                    className="text-xs text-red-600 underline dark:text-red-400"
-                    confirmMessage={t.deleteConfirm}
-                  >
-                    {t.delete}
-                  </ConfirmSubmitButton>
-                </form>
+                <EliminarAnotacionButton
+                  enrollmentId={enrollmentId}
+                  noteId={note.id}
+                  confirmMessage={t.deleteConfirm}
+                  label={t.delete}
+                />
               )}
             </li>
           ))}
@@ -105,19 +94,12 @@ export default async function AnotacionesDeMatriculaPage({
       )}
 
       {canCreate && (
-        <form action={crearAnotacion.bind(null, enrollmentId)} className="flex max-w-xl flex-col gap-3">
-          <textarea
-            name="body"
-            rows={4}
-            required
-            maxLength={2000}
-            placeholder={t.placeholder}
-            className="rounded border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-          />
-          <Button type="submit" className="self-start">
-            {t.submit}
-          </Button>
-        </form>
+        <CrearAnotacionForm
+          enrollmentId={enrollmentId}
+          placeholder={t.placeholder}
+          submitLabel={t.submit}
+          submittingLabel={t.submitting}
+        />
       )}
     </div>
   );

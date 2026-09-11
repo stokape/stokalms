@@ -1,9 +1,15 @@
+'use client';
+
 // ============================================================================
 // PricingCard.tsx — Una tarjeta de plan (Starter/Business/Pro/Enterprise).
-// Presentacional puro: no sabe de donde salen los datos (los recibe ya
-// resueltos por PricingPlans.tsx/PricingSection.tsx) ni que hace el CTA al
-// hacer clic (recibe el <form action={...}> ya armado como "ctaAction", un
-// Server Action enlazado con el planId/periodo — ver app/precios/actions.ts).
+// Presentacional: no sabe de donde salen los datos (los recibe ya resueltos
+// por PricingPlans.tsx/PricingSection.tsx) — recibe "ctaAction" (la Server
+// Action enlazada con el planId/periodo, ver app/precios/actions.ts) y la
+// dispara con useActionState.
+//
+// Client Component A PROPOSITO (ver periodos/PeriodosForms.tsx):
+// registrarSeleccionPlan ya NO llama a redirect() (ver la nota extensa en
+// actions.ts), useActionState + useActionRedirect necesitan el cliente.
 //
 // "planText" es "PreciosDictionary['plan']" SIN "activeUsersUpTo" (una
 // funcion) — PricingSection.tsx ya la resolvio en "plan.activeUsersLabel"
@@ -12,9 +18,12 @@
 // funcion como prop.
 // ============================================================================
 
+import { useActionState } from 'react';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { PlanFeature } from './PlanFeature';
+import { useActionRedirect } from '@/components/ui/useActionRedirect';
+import { INITIAL_ACTION_STATE, type ActionState } from '@/lib/action-state';
 import {
   formatPEN,
   getAnnualSaving,
@@ -37,10 +46,12 @@ export function PricingCard({
   period: BillingPeriod;
   planText: PlanText;
   featuresText: PreciosDictionary['features'];
-  /** <form action={...}> ya con planId/periodo enlazados (ver
+  /** Server Action ya enlazada con planId/periodo (ver
    * app/precios/actions.ts, registrarSeleccionPlan). */
-  ctaAction: (formData: FormData) => void;
+  ctaAction: (prevState: ActionState) => Promise<ActionState>;
 }) {
+  const [state, formAction] = useActionState(ctaAction, INITIAL_ACTION_STATE);
+  useActionRedirect(state);
   const price = getPriceForPeriod(plan, period);
   const saving = period === 'annual' ? getAnnualSaving(plan) : null;
   const ctaLabel = planText.cta[plan.planId];
@@ -91,7 +102,7 @@ export function PricingCard({
         <p className="mt-3 text-sm font-medium text-muted">{plan.activeUsersLabel}</p>
       </div>
 
-      <form action={ctaAction}>
+      <form action={formAction}>
         <Button type="submit" variant={plan.recommended ? 'primary' : 'secondary'} className="w-full" size="lg">
           {ctaLabel}
         </Button>

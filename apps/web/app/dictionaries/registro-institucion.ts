@@ -42,6 +42,7 @@ const es = {
   messageLabel: 'Cuéntanos un poco más (opcional)',
   messagePlaceholder: 'Ej. cuántos estudiantes tienen, qué cursos dictan...',
   submit: 'Enviar solicitud',
+  submitting: 'Enviando…',
 };
 
 const en = {
@@ -66,6 +67,7 @@ const en = {
   messageLabel: 'Tell us a bit more (optional)',
   messagePlaceholder: 'E.g. how many students you have, what courses you teach...',
   submit: 'Send request',
+  submitting: 'Sending…',
 };
 
 const dictionaries = { es, en };

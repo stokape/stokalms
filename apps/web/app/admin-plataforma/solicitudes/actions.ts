@@ -1,8 +1,21 @@
 'use server';
 
-import { redirect } from 'next/navigation';
+// ============================================================================
+// admin-plataforma/solicitudes/actions.ts — Aprobar/rechazar una solicitud.
+//
+// NINGUNA llama a redirect() (ver la nota extensa en periodos/actions.ts):
+// esta misma pantalla lee headers() directo (para armar el link "Ir a la
+// institución", ver page.tsx) — el re-render post-redirect() de Next.js le
+// devolvia el host INTERNO del contenedor en vez del dominio publico real.
+// Ahora devuelven un ActionState que SolicitudForms.tsx consume con
+// useActionState, revalidatePath alcanza para reflejar el cambio sin
+// navegar a ningun lado.
+// ============================================================================
+
+import { revalidatePath } from 'next/cache';
 import { requireAccessToken, apiFetch, toErrorMessage } from '@/lib/api';
 import { setTempCredentialsCookie } from '../temp-credentials';
+import type { ActionState } from '@/lib/action-state';
 
 const PATH = '/admin-plataforma/solicitudes';
 
@@ -13,7 +26,7 @@ interface ProvisionedTenant {
   keycloakWarning: string | null;
 }
 
-export async function aprobarSolicitud(id: string) {
+export async function aprobarSolicitud(id: string, _prevState: ActionState): Promise<ActionState> {
   const token = await requireAccessToken();
 
   let result: ProvisionedTenant;
@@ -22,7 +35,7 @@ export async function aprobarSolicitud(id: string) {
       method: 'PATCH',
     });
   } catch (err) {
-    redirect(`${PATH}?error=${encodeURIComponent(toErrorMessage(err))}`);
+    return { error: toErrorMessage(err) };
   }
 
   // Ver temp-credentials.ts: la contraseña temporal NUNCA va en la URL.
@@ -32,10 +45,15 @@ export async function aprobarSolicitud(id: string) {
     keycloakWarning: result.keycloakWarning,
   });
 
-  redirect(PATH);
+  revalidatePath(PATH);
+  return { error: null };
 }
 
-export async function rechazarSolicitud(id: string, formData: FormData) {
+export async function rechazarSolicitud(
+  id: string,
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
   const token = await requireAccessToken();
   const reason = String(formData.get('reason') ?? '').trim();
 
@@ -45,8 +63,9 @@ export async function rechazarSolicitud(id: string, formData: FormData) {
       body: JSON.stringify({ reason: reason || undefined }),
     });
   } catch (err) {
-    redirect(`${PATH}?error=${encodeURIComponent(toErrorMessage(err))}`);
+    return { error: toErrorMessage(err) };
   }
 
-  redirect(PATH);
+  revalidatePath(PATH);
+  return { error: null };
 }

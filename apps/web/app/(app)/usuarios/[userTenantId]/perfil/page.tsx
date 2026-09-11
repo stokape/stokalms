@@ -5,13 +5,17 @@
 // mismo. Esta pantalla requiere "user_profile:edit" (Coordinador académico,
 // Administrador) y llega normalmente desde la lista de matriculados de una
 // sección (ver secciones/[sectionId]/page.tsx).
+//
+// El formulario vive en PerfilForm.tsx (Client Component) A PROPOSITO --
+// ver la nota extensa en periodos/actions.ts: la Server Action ya NO llama
+// a redirect(), necesita useActionState (solo disponible del lado del
+// cliente).
 // ============================================================================
 
 import { requireAccessToken, apiFetch, toErrorMessage } from '@/lib/api';
 import { ErrorBanner } from '@/components/ErrorBanner';
-import { Button } from '@/components/ui/Button';
 import { getLocale } from '@/lib/locale';
-import { actualizarPerfilDeAlumno } from './actions';
+import { PerfilForm } from './PerfilForm';
 
 const TEXT = {
   es: {
@@ -25,6 +29,7 @@ const TEXT = {
     province: 'Provincia',
     district: 'Distrito',
     saveChanges: 'Guardar cambios',
+    saving: 'Guardando…',
   },
   en: {
     title: 'Edit profile',
@@ -37,6 +42,7 @@ const TEXT = {
     province: 'Province',
     district: 'District',
     saveChanges: 'Save changes',
+    saving: 'Saving…',
   },
 };
 
@@ -54,13 +60,10 @@ interface StaffEditableProfile {
 
 export default async function EditarPerfilDeAlumnoPage({
   params,
-  searchParams,
 }: {
   params: Promise<{ userTenantId: string }>;
-  searchParams: Promise<{ error?: string; ok?: string }>;
 }) {
   const { userTenantId } = await params;
-  const { error, ok } = await searchParams;
   const token = await requireAccessToken();
   const t = TEXT[await getLocale()];
 
@@ -76,95 +79,7 @@ export default async function EditarPerfilDeAlumnoPage({
       <h1 className="mb-1 text-2xl font-semibold">{t.title}</h1>
       <p className="mb-6 text-sm text-zinc-500">{profile.fullName} · {profile.email}</p>
 
-      {error && (
-        <div className="mb-6">
-          <ErrorBanner message={decodeURIComponent(error)} />
-        </div>
-      )}
-      {ok && (
-        <div className="mb-6 rounded-lg bg-green-50 px-4 py-3 text-sm text-green-700 dark:bg-green-950 dark:text-green-300">
-          {t.updated}
-        </div>
-      )}
-
-      <form
-        action={actualizarPerfilDeAlumno.bind(null, userTenantId)}
-        className="grid max-w-xl grid-cols-1 gap-3 sm:grid-cols-2"
-      >
-        <label className="text-xs text-zinc-500">
-          {t.firstName}
-          <input
-            name="firstName"
-            type="text"
-            maxLength={120}
-            defaultValue={profile.firstName ?? ''}
-            className="mt-1 w-full rounded border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
-          />
-        </label>
-        <label className="text-xs text-zinc-500">
-          {t.lastName}
-          <input
-            name="lastName"
-            type="text"
-            maxLength={120}
-            defaultValue={profile.lastName ?? ''}
-            className="mt-1 w-full rounded border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
-          />
-        </label>
-        <label className="text-xs text-zinc-500">
-          {t.phone}
-          <input
-            name="phone"
-            type="tel"
-            maxLength={30}
-            defaultValue={profile.phone ?? ''}
-            className="mt-1 w-full rounded border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
-          />
-        </label>
-        <label className="text-xs text-zinc-500 sm:col-span-2">
-          {t.address}
-          <input
-            name="address"
-            type="text"
-            maxLength={300}
-            defaultValue={profile.address ?? ''}
-            className="mt-1 w-full rounded border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
-          />
-        </label>
-        <label className="text-xs text-zinc-500">
-          {t.department}
-          <input
-            name="department"
-            type="text"
-            maxLength={120}
-            defaultValue={profile.department ?? ''}
-            className="mt-1 w-full rounded border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
-          />
-        </label>
-        <label className="text-xs text-zinc-500">
-          {t.province}
-          <input
-            name="province"
-            type="text"
-            maxLength={120}
-            defaultValue={profile.province ?? ''}
-            className="mt-1 w-full rounded border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
-          />
-        </label>
-        <label className="text-xs text-zinc-500">
-          {t.district}
-          <input
-            name="district"
-            type="text"
-            maxLength={120}
-            defaultValue={profile.district ?? ''}
-            className="mt-1 w-full rounded border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
-          />
-        </label>
-        <Button type="submit" className="self-start sm:col-span-2">
-          {t.saveChanges}
-        </Button>
-      </form>
+      <PerfilForm userTenantId={userTenantId} profile={profile} t={t} />
     </div>
   );
 }

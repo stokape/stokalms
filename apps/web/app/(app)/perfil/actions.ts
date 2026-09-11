@@ -1,9 +1,18 @@
 'use server';
 
-import { redirect } from 'next/navigation';
+// ============================================================================
+// perfil/actions.ts — Actualizar mi propio perfil / mi foto. NINGUNA llama a
+// redirect() (ver la nota extensa en periodos/actions.ts): devuelven un
+// estado que MiPerfilForms.tsx consume con useActionState, revalidatePath
+// alcanza para reflejar el cambio sin navegar a ningun lado.
+// ============================================================================
+
+import { revalidatePath } from 'next/cache';
 import { requireAccessToken, apiFetch, apiFetchUpload, toErrorMessage } from '@/lib/api';
 
 const PATH = '/perfil';
+
+export type PerfilActionState = { error: string | null; saved?: boolean };
 
 // Reusa el MISMO endpoint de staff (PATCH /users/:userTenantId/profile,
 // ver user-management/user.service.ts) apuntado a la PROPIA membresia —
@@ -11,7 +20,11 @@ const PATH = '/perfil';
 // page.tsx), o sea que ya podia editar el perfil de CUALQUIERA en su
 // tenant; esto simplemente le permite hacerlo tambien sobre si mismo, sin
 // tener que buscarse en "Usuarios y roles" primero.
-export async function actualizarMiPerfil(userTenantId: string, formData: FormData) {
+export async function actualizarMiPerfil(
+  userTenantId: string,
+  _prevState: PerfilActionState,
+  formData: FormData,
+): Promise<PerfilActionState> {
   const token = await requireAccessToken();
 
   const fields = ['firstName', 'lastName', 'phone', 'address', 'department', 'province', 'district'];
@@ -27,18 +40,22 @@ export async function actualizarMiPerfil(userTenantId: string, formData: FormDat
       body: JSON.stringify(body),
     });
   } catch (err) {
-    redirect(`${PATH}?error=${encodeURIComponent(toErrorMessage(err))}`);
+    return { error: toErrorMessage(err) };
   }
 
-  redirect(`${PATH}?ok=1`);
+  revalidatePath(PATH);
+  return { error: null, saved: true };
 }
 
-export async function actualizarFoto(formData: FormData) {
+export async function actualizarFoto(
+  _prevState: PerfilActionState,
+  formData: FormData,
+): Promise<PerfilActionState> {
   const token = await requireAccessToken();
   const file = formData.get('file');
 
   if (!(file instanceof File) || file.size === 0) {
-    redirect(`${PATH}?error=${encodeURIComponent('Elige una imagen para subir.')}`);
+    return { error: 'Elige una imagen para subir.' };
   }
 
   const uploadForm = new FormData();
@@ -47,8 +64,9 @@ export async function actualizarFoto(formData: FormData) {
   try {
     await apiFetchUpload(token, '/profile/photo', uploadForm);
   } catch (err) {
-    redirect(`${PATH}?error=${encodeURIComponent(toErrorMessage(err))}`);
+    return { error: toErrorMessage(err) };
   }
 
-  redirect(PATH);
+  revalidatePath(PATH);
+  return { error: null };
 }

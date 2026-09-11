@@ -1,13 +1,26 @@
 'use server';
 
-import { redirect } from 'next/navigation';
+// ============================================================================
+// evaluaciones/actions.ts — Crear categoría de notas, crear/borrar
+// Evaluación. NINGUNA llama a redirect() (ver la nota extensa en
+// periodos/actions.ts): devuelven un ActionState que EvaluacionForms.tsx
+// consume con useActionState, revalidatePath alcanza para reflejar el
+// cambio sin navegar a ningun lado.
+// ============================================================================
+
+import { revalidatePath } from 'next/cache';
 import { requireAccessToken, apiFetch, toErrorMessage } from '@/lib/api';
+import type { ActionState } from '@/lib/action-state';
 
 function path(courseId: string) {
   return `/cursos/${courseId}/evaluaciones`;
 }
 
-export async function crearCategoria(courseId: string, formData: FormData) {
+export async function crearCategoria(
+  courseId: string,
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
   const token = await requireAccessToken();
   const name = String(formData.get('name') ?? '').trim();
   const weightPct = Number(formData.get('weightPct') ?? 0);
@@ -19,13 +32,18 @@ export async function crearCategoria(courseId: string, formData: FormData) {
       body: JSON.stringify({ name, weightPct, dropLowest }),
     });
   } catch (err) {
-    redirect(`${path(courseId)}?error=${encodeURIComponent(toErrorMessage(err))}`);
+    return { error: toErrorMessage(err) };
   }
 
-  redirect(path(courseId));
+  revalidatePath(path(courseId));
+  return { error: null };
 }
 
-export async function crearEvaluacion(courseId: string, formData: FormData) {
+export async function crearEvaluacion(
+  courseId: string,
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
   const token = await requireAccessToken();
   const type = String(formData.get('type') ?? '');
   const gradebookCategoryId = String(formData.get('gradebookCategoryId') ?? '');
@@ -48,13 +66,18 @@ export async function crearEvaluacion(courseId: string, formData: FormData) {
       }),
     });
   } catch (err) {
-    redirect(`${path(courseId)}?error=${encodeURIComponent(toErrorMessage(err))}`);
+    return { error: toErrorMessage(err) };
   }
 
-  redirect(path(courseId));
+  revalidatePath(path(courseId));
+  return { error: null };
 }
 
-export async function eliminarEvaluacion(courseId: string, assessmentId: string) {
+export async function eliminarEvaluacion(
+  courseId: string,
+  assessmentId: string,
+  _prevState: ActionState,
+): Promise<ActionState> {
   const token = await requireAccessToken();
 
   try {
@@ -62,8 +85,9 @@ export async function eliminarEvaluacion(courseId: string, assessmentId: string)
       method: 'DELETE',
     });
   } catch (err) {
-    redirect(`${path(courseId)}?error=${encodeURIComponent(toErrorMessage(err))}`);
+    return { error: toErrorMessage(err) };
   }
 
-  redirect(path(courseId));
+  revalidatePath(path(courseId));
+  return { error: null };
 }

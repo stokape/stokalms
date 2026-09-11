@@ -1,7 +1,16 @@
 'use server';
 
-import { redirect } from 'next/navigation';
+// ============================================================================
+// [assessmentId]/actions.ts — Agregar/borrar preguntas, calificar respuestas
+// manualmente. NINGUNA llama a redirect() (ver la nota extensa en
+// periodos/actions.ts): devuelven un ActionState que AssessmentForms.tsx
+// consume con useActionState, revalidatePath alcanza para reflejar el
+// cambio sin navegar a ningun lado.
+// ============================================================================
+
+import { revalidatePath } from 'next/cache';
 import { requireAccessToken, apiFetch, toErrorMessage } from '@/lib/api';
+import type { ActionState } from '@/lib/action-state';
 
 function path(courseId: string, assessmentId: string) {
   return `/cursos/${courseId}/evaluaciones/${assessmentId}`;
@@ -62,7 +71,12 @@ function buildQuestionPayload(type: string, formData: FormData) {
   };
 }
 
-export async function crearPregunta(courseId: string, assessmentId: string, formData: FormData) {
+export async function crearPregunta(
+  courseId: string,
+  assessmentId: string,
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
   const token = await requireAccessToken();
   const type = String(formData.get('type') ?? '');
   const points = Number(formData.get('points') ?? 0);
@@ -74,17 +88,19 @@ export async function crearPregunta(courseId: string, assessmentId: string, form
       body: JSON.stringify({ type, body, correctAnswer, points }),
     });
   } catch (err) {
-    redirect(`${path(courseId, assessmentId)}?error=${encodeURIComponent(toErrorMessage(err))}`);
+    return { error: toErrorMessage(err) };
   }
 
-  redirect(path(courseId, assessmentId));
+  revalidatePath(path(courseId, assessmentId));
+  return { error: null };
 }
 
 export async function eliminarPregunta(
   courseId: string,
   assessmentId: string,
   questionId: string,
-) {
+  _prevState: ActionState,
+): Promise<ActionState> {
   const token = await requireAccessToken();
 
   try {
@@ -94,10 +110,11 @@ export async function eliminarPregunta(
       { method: 'DELETE' },
     );
   } catch (err) {
-    redirect(`${path(courseId, assessmentId)}?error=${encodeURIComponent(toErrorMessage(err))}`);
+    return { error: toErrorMessage(err) };
   }
 
-  redirect(path(courseId, assessmentId));
+  revalidatePath(path(courseId, assessmentId));
+  return { error: null };
 }
 
 export async function calificarRespuesta(
@@ -105,8 +122,9 @@ export async function calificarRespuesta(
   assessmentId: string,
   submissionId: string,
   questionId: string,
+  _prevState: ActionState,
   formData: FormData,
-) {
+): Promise<ActionState> {
   const token = await requireAccessToken();
   const score = Number(formData.get('score') ?? 0);
   const feedback = String(formData.get('feedback') ?? '').trim();
@@ -118,8 +136,9 @@ export async function calificarRespuesta(
       { method: 'PATCH', body: JSON.stringify({ score, feedback: feedback || undefined }) },
     );
   } catch (err) {
-    redirect(`${path(courseId, assessmentId)}?error=${encodeURIComponent(toErrorMessage(err))}`);
+    return { error: toErrorMessage(err) };
   }
 
-  redirect(path(courseId, assessmentId));
+  revalidatePath(path(courseId, assessmentId));
+  return { error: null };
 }

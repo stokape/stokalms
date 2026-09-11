@@ -1,11 +1,22 @@
 'use server';
 
-import { redirect } from 'next/navigation';
-import { requireAccessToken, apiFetch, toErrorMessage } from '@/lib/api';
+// ============================================================================
+// notas/actions.ts — Crear/borrar una anotación de desempeño. NINGUNA llama
+// a redirect() (ver la nota extensa en periodos/actions.ts): devuelven un
+// ActionState que AnotacionForms.tsx consume con useActionState,
+// revalidatePath alcanza para reflejar el cambio sin navegar a ningun lado.
+// ============================================================================
 
-export async function crearAnotacion(enrollmentId: string, formData: FormData) {
+import { revalidatePath } from 'next/cache';
+import { requireAccessToken, apiFetch, toErrorMessage } from '@/lib/api';
+import type { ActionState } from '@/lib/action-state';
+
+export async function crearAnotacion(
+  enrollmentId: string,
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
   const token = await requireAccessToken();
-  const path = `/matriculas/${enrollmentId}/notas`;
   const body = String(formData.get('body') ?? '').trim();
 
   try {
@@ -14,21 +25,26 @@ export async function crearAnotacion(enrollmentId: string, formData: FormData) {
       body: JSON.stringify({ body }),
     });
   } catch (err) {
-    redirect(`${path}?error=${encodeURIComponent(toErrorMessage(err))}`);
+    return { error: toErrorMessage(err) };
   }
 
-  redirect(path);
+  revalidatePath(`/matriculas/${enrollmentId}/notas`);
+  return { error: null };
 }
 
-export async function eliminarAnotacion(enrollmentId: string, noteId: string) {
+export async function eliminarAnotacion(
+  enrollmentId: string,
+  noteId: string,
+  _prevState: ActionState,
+): Promise<ActionState> {
   const token = await requireAccessToken();
-  const path = `/matriculas/${enrollmentId}/notas`;
 
   try {
     await apiFetch(token, `/enrollments/${enrollmentId}/notes/${noteId}`, { method: 'DELETE' });
   } catch (err) {
-    redirect(`${path}?error=${encodeURIComponent(toErrorMessage(err))}`);
+    return { error: toErrorMessage(err) };
   }
 
-  redirect(path);
+  revalidatePath(`/matriculas/${enrollmentId}/notas`);
+  return { error: null };
 }

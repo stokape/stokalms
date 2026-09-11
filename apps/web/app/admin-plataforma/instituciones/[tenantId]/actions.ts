@@ -3,18 +3,28 @@
 // ============================================================================
 // admin-plataforma/instituciones/[tenantId]/actions.ts — Todo lo que se
 // puede hacer desde el detalle de UNA institucion: activar/desactivar,
-// dominios (mismo flujo TXT que (app)/dominios/actions.ts, pero apuntando a
-// "/platform/tenants/:tenantId/domains" en vez de "/tenant/domains") y
-// roles (mismo flujo que (app)/usuarios/actions.ts, apuntando a
-// "/platform/tenants/:tenantId/members/...").
+// cambiar el plan, dominios (mismo flujo TXT que (app)/dominios/actions.ts,
+// pero apuntando a "/platform/tenants/:tenantId/domains" en vez de
+// "/tenant/domains") y roles (mismo flujo que (app)/usuarios/actions.ts,
+// apuntando a "/platform/tenants/:tenantId/members/...").
+//
+// NINGUNA llama a redirect() (ver la nota extensa en periodos/actions.ts):
+// todas se quedan en esta misma pantalla, asi que devuelven un ActionState
+// que InstitucionForms.tsx consume con useActionState, y revalidatePath
+// alcanza para reflejar el cambio sin navegar a ningun lado.
 // ============================================================================
 
-import { redirect } from 'next/navigation';
+import { revalidatePath } from 'next/cache';
 import { requireAccessToken, apiFetch, apiFetchUpload, toErrorMessage } from '@/lib/api';
+type ActionState = { error: string | null; saved?: boolean };
 
 const path = (tenantId: string) => `/admin-plataforma/instituciones/${tenantId}`;
 
-export async function cambiarEstadoInstitucion(tenantId: string, active: boolean) {
+export async function cambiarEstadoInstitucion(
+  tenantId: string,
+  active: boolean,
+  _prevState: ActionState,
+): Promise<ActionState> {
   const token = await requireAccessToken();
 
   try {
@@ -23,13 +33,18 @@ export async function cambiarEstadoInstitucion(tenantId: string, active: boolean
       body: JSON.stringify({ active }),
     });
   } catch (err) {
-    redirect(`${path(tenantId)}?error=${encodeURIComponent(toErrorMessage(err))}`);
+    return { error: toErrorMessage(err) };
   }
 
-  redirect(path(tenantId));
+  revalidatePath(path(tenantId));
+  return { error: null };
 }
 
-export async function cambiarPlanInstitucion(tenantId: string, formData: FormData) {
+export async function cambiarPlanInstitucion(
+  tenantId: string,
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
   const token = await requireAccessToken();
   const plan = String(formData.get('plan') ?? '');
 
@@ -39,13 +54,18 @@ export async function cambiarPlanInstitucion(tenantId: string, formData: FormDat
       body: JSON.stringify({ plan }),
     });
   } catch (err) {
-    redirect(`${path(tenantId)}?error=${encodeURIComponent(toErrorMessage(err))}`);
+    return { error: toErrorMessage(err) };
   }
 
-  redirect(`${path(tenantId)}?saved=1`);
+  revalidatePath(path(tenantId));
+  return { error: null, saved: true };
 }
 
-export async function agregarDominio(tenantId: string, formData: FormData) {
+export async function agregarDominio(
+  tenantId: string,
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
   const token = await requireAccessToken();
   const domain = String(formData.get('domain') ?? '').trim();
 
@@ -55,37 +75,53 @@ export async function agregarDominio(tenantId: string, formData: FormData) {
       body: JSON.stringify({ domain }),
     });
   } catch (err) {
-    redirect(`${path(tenantId)}?error=${encodeURIComponent(toErrorMessage(err))}`);
+    return { error: toErrorMessage(err) };
   }
 
-  redirect(`${path(tenantId)}?saved=1`);
+  revalidatePath(path(tenantId));
+  return { error: null, saved: true };
 }
 
-export async function verificarDominio(tenantId: string, domainId: string) {
+export async function verificarDominio(
+  tenantId: string,
+  domainId: string,
+  _prevState: ActionState,
+): Promise<ActionState> {
   const token = await requireAccessToken();
 
   try {
     await apiFetch(token, `/platform/tenants/${tenantId}/domains/${domainId}/verify`, { method: 'PATCH' });
   } catch (err) {
-    redirect(`${path(tenantId)}?error=${encodeURIComponent(toErrorMessage(err))}`);
+    return { error: toErrorMessage(err) };
   }
 
-  redirect(`${path(tenantId)}?saved=1`);
+  revalidatePath(path(tenantId));
+  return { error: null, saved: true };
 }
 
-export async function eliminarDominio(tenantId: string, domainId: string) {
+export async function eliminarDominio(
+  tenantId: string,
+  domainId: string,
+  _prevState: ActionState,
+): Promise<ActionState> {
   const token = await requireAccessToken();
 
   try {
     await apiFetch(token, `/platform/tenants/${tenantId}/domains/${domainId}`, { method: 'DELETE' });
   } catch (err) {
-    redirect(`${path(tenantId)}?error=${encodeURIComponent(toErrorMessage(err))}`);
+    return { error: toErrorMessage(err) };
   }
 
-  redirect(`${path(tenantId)}?saved=1`);
+  revalidatePath(path(tenantId));
+  return { error: null, saved: true };
 }
 
-export async function asignarRol(tenantId: string, userTenantId: string, formData: FormData) {
+export async function asignarRol(
+  tenantId: string,
+  userTenantId: string,
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
   const token = await requireAccessToken();
   const roleId = String(formData.get('roleId') ?? '');
   const scopeCourseId = String(formData.get('scopeCourseId') ?? '').trim() || undefined;
@@ -96,13 +132,19 @@ export async function asignarRol(tenantId: string, userTenantId: string, formDat
       body: JSON.stringify({ roleId, scopeCourseId }),
     });
   } catch (err) {
-    redirect(`${path(tenantId)}?error=${encodeURIComponent(toErrorMessage(err))}`);
+    return { error: toErrorMessage(err) };
   }
 
-  redirect(path(tenantId));
+  revalidatePath(path(tenantId));
+  return { error: null };
 }
 
-export async function quitarRol(tenantId: string, userTenantId: string, userRoleId: string) {
+export async function quitarRol(
+  tenantId: string,
+  userTenantId: string,
+  userRoleId: string,
+  _prevState: ActionState,
+): Promise<ActionState> {
   const token = await requireAccessToken();
 
   try {
@@ -112,10 +154,11 @@ export async function quitarRol(tenantId: string, userTenantId: string, userRole
       { method: 'DELETE' },
     );
   } catch (err) {
-    redirect(`${path(tenantId)}?error=${encodeURIComponent(toErrorMessage(err))}`);
+    return { error: toErrorMessage(err) };
   }
 
-  redirect(path(tenantId));
+  revalidatePath(path(tenantId));
+  return { error: null };
 }
 
 // --- Marca (nombre, colores, logo, fondo, favicon) ----------------------
@@ -124,7 +167,11 @@ export async function quitarRol(tenantId: string, userTenantId: string, userRole
 // extensa en platform-tenants.service.ts sobre por que esto reusa la MISMA
 // logica del backend que el autoservicio, solo que con el tenantId de la URL.
 
-export async function actualizarMarcaInstitucion(tenantId: string, formData: FormData) {
+export async function actualizarMarcaInstitucion(
+  tenantId: string,
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
   const token = await requireAccessToken();
 
   const name = String(formData.get('name') ?? '').trim();
@@ -143,18 +190,24 @@ export async function actualizarMarcaInstitucion(tenantId: string, formData: For
       }),
     });
   } catch (err) {
-    redirect(`${path(tenantId)}?error=${encodeURIComponent(toErrorMessage(err))}`);
+    return { error: toErrorMessage(err) };
   }
 
-  redirect(`${path(tenantId)}?saved=1`);
+  revalidatePath(path(tenantId));
+  return { error: null, saved: true };
 }
 
-async function subirImagenInstitucion(tenantId: string, endpoint: string, formData: FormData, campoVacio: string) {
+async function subirImagenInstitucion(
+  tenantId: string,
+  endpoint: string,
+  formData: FormData,
+  campoVacio: string,
+): Promise<ActionState> {
   const token = await requireAccessToken();
   const file = formData.get('file');
 
   if (!(file instanceof File) || file.size === 0) {
-    redirect(`${path(tenantId)}?error=${encodeURIComponent(campoVacio)}`);
+    return { error: campoVacio };
   }
 
   const uploadForm = new FormData();
@@ -163,21 +216,34 @@ async function subirImagenInstitucion(tenantId: string, endpoint: string, formDa
   try {
     await apiFetchUpload(token, `/platform/tenants/${tenantId}/${endpoint}`, uploadForm);
   } catch (err) {
-    redirect(`${path(tenantId)}?error=${encodeURIComponent(toErrorMessage(err))}`);
+    return { error: toErrorMessage(err) };
   }
 
-  redirect(`${path(tenantId)}?saved=1`);
+  revalidatePath(path(tenantId));
+  return { error: null, saved: true };
 }
 
-export async function subirLogoInstitucion(tenantId: string, formData: FormData) {
+export async function subirLogoInstitucion(
+  tenantId: string,
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
   return subirImagenInstitucion(tenantId, 'logo', formData, 'Elige una imagen para el logo.');
 }
 
-export async function subirFondoInstitucion(tenantId: string, formData: FormData) {
+export async function subirFondoInstitucion(
+  tenantId: string,
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
   return subirImagenInstitucion(tenantId, 'background-image', formData, 'Elige una imagen para el fondo.');
 }
 
-export async function subirFaviconInstitucion(tenantId: string, formData: FormData) {
+export async function subirFaviconInstitucion(
+  tenantId: string,
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
   return subirImagenInstitucion(tenantId, 'favicon', formData, 'Elige una imagen para el favicon.');
 }
 
@@ -185,7 +251,11 @@ export async function subirFaviconInstitucion(tenantId: string, formData: FormDa
 // Mismo flujo que (app)/mantenimiento/actions.ts, apuntando al mismo
 // "branding" cross-tenant de arriba.
 
-export async function guardarMantenimientoInstitucion(tenantId: string, formData: FormData) {
+export async function guardarMantenimientoInstitucion(
+  tenantId: string,
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
   const token = await requireAccessToken();
 
   const maintenanceMode = formData.get('maintenanceMode') === 'on';
@@ -199,13 +269,18 @@ export async function guardarMantenimientoInstitucion(tenantId: string, formData
       body: JSON.stringify({ maintenanceMode, maintenanceMessage, maintenanceEndsAt }),
     });
   } catch (err) {
-    redirect(`${path(tenantId)}?error=${encodeURIComponent(toErrorMessage(err))}`);
+    return { error: toErrorMessage(err) };
   }
 
-  redirect(`${path(tenantId)}?saved=1`);
+  revalidatePath(path(tenantId));
+  return { error: null, saved: true };
 }
 
-export async function subirImagenMantenimientoInstitucion(tenantId: string, formData: FormData) {
+export async function subirImagenMantenimientoInstitucion(
+  tenantId: string,
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
   return subirImagenInstitucion(
     tenantId,
     'maintenance-image',
@@ -214,14 +289,18 @@ export async function subirImagenMantenimientoInstitucion(tenantId: string, form
   );
 }
 
-export async function quitarImagenMantenimientoInstitucion(tenantId: string) {
+export async function quitarImagenMantenimientoInstitucion(
+  tenantId: string,
+  _prevState: ActionState,
+): Promise<ActionState> {
   const token = await requireAccessToken();
 
   try {
     await apiFetch(token, `/platform/tenants/${tenantId}/maintenance-image`, { method: 'DELETE' });
   } catch (err) {
-    redirect(`${path(tenantId)}?error=${encodeURIComponent(toErrorMessage(err))}`);
+    return { error: toErrorMessage(err) };
   }
 
-  redirect(`${path(tenantId)}?saved=1`);
+  revalidatePath(path(tenantId));
+  return { error: null, saved: true };
 }

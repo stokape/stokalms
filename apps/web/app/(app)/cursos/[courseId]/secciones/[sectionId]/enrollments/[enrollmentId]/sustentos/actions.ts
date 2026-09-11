@@ -1,21 +1,29 @@
 'use server';
 
-import { redirect } from 'next/navigation';
+// ============================================================================
+// sustentos/actions.ts — Subir un archivo de respaldo. No llama a redirect()
+// (ver la nota extensa en periodos/actions.ts): devuelve un ActionState que
+// SustentoForm.tsx consume con useActionState, revalidatePath alcanza para
+// que la lista se actualice sin navegar a ningun lado.
+// ============================================================================
+
+import { revalidatePath } from 'next/cache';
 import { requireAccessToken, apiFetchUpload, toErrorMessage } from '@/lib/api';
+import type { ActionState } from '@/lib/action-state';
 
 export async function subirSustento(
   courseId: string,
   sectionId: string,
   enrollmentId: string,
+  _prevState: ActionState,
   formData: FormData,
-) {
+): Promise<ActionState> {
   const token = await requireAccessToken();
-  const path = `/cursos/${courseId}/secciones/${sectionId}/enrollments/${enrollmentId}/sustentos`;
   const file = formData.get('file');
   const description = String(formData.get('description') ?? '').trim();
 
   if (!(file instanceof File) || file.size === 0) {
-    redirect(`${path}?error=${encodeURIComponent('Elige un archivo para subir.')}`);
+    return { error: 'Elige un archivo para subir.' };
   }
 
   const uploadForm = new FormData();
@@ -29,8 +37,9 @@ export async function subirSustento(
       uploadForm,
     );
   } catch (err) {
-    redirect(`${path}?error=${encodeURIComponent(toErrorMessage(err))}`);
+    return { error: toErrorMessage(err) };
   }
 
-  redirect(path);
+  revalidatePath(`/cursos/${courseId}/secciones/${sectionId}/enrollments/${enrollmentId}/sustentos`);
+  return { error: null };
 }

@@ -13,19 +13,11 @@
 
 import { requireAccessToken, apiFetch, toErrorMessage } from '@/lib/api';
 import { ErrorBanner } from '@/components/ErrorBanner';
-import { SuccessBanner } from '@/components/SuccessBanner';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
-import { Button } from '@/components/ui/Button';
-import { ConfirmSubmitButton } from '@/components/ui/ConfirmSubmitButton';
-import { fieldClasses, labelClasses, fileInputClasses } from '@/components/ui/field-styles';
 import { getLocale } from '@/lib/locale';
-import {
-  guardarMantenimiento,
-  subirImagenMantenimiento,
-  quitarImagenMantenimiento,
-} from './actions';
+import { GuardarMantenimientoForm, QuitarImagenButton, SubirImagenForm } from './MantenimientoForms';
 
 const TEXT = {
   es: {
@@ -41,6 +33,7 @@ const TEXT = {
     endsAtLabel: 'Vuelve aproximadamente a las (opcional)',
     endsAtHelp: 'Solo informativo: no apaga el mantenimiento solo, hay que volver aquí para eso.',
     save: 'Guardar',
+    saving: 'Guardando…',
     backgroundImage: 'Imagen de fondo (opcional)',
     backgroundHelp: (name: string) => `Libre — no tiene que ser la marca de todos los días de ${name}. Es solo para este aviso puntual (ej. una foto de la mudanza, un diseño con su propio mensaje). Si no subes ninguna, el aviso se muestra con el fondo difuminado habitual de la institución.`,
     backgroundAlt: 'Imagen de fondo del aviso de mantenimiento',
@@ -48,6 +41,7 @@ const TEXT = {
     removeImageConfirm: '¿Quitar esta imagen?',
     replace: 'Reemplazar',
     uploadImage: 'Subir imagen',
+    uploadingImage: 'Subiendo…',
     preview: 'Vista previa del aviso',
     defaultMessage: 'Estamos haciendo tareas de mantenimiento.',
   },
@@ -64,6 +58,7 @@ const TEXT = {
     endsAtLabel: 'Back around (optional)',
     endsAtHelp: "Informational only: it doesn't turn maintenance off by itself, you need to come back here for that.",
     save: 'Save',
+    saving: 'Saving…',
     backgroundImage: 'Background image (optional)',
     backgroundHelp: (name: string) => `Free choice — it doesn't have to be ${name}'s everyday branding. It's just for this one-off notice (e.g. a moving-day photo, a design with its own message). If you don't upload one, the notice shows the institution's usual blurred background.`,
     backgroundAlt: 'Maintenance notice background image',
@@ -71,6 +66,7 @@ const TEXT = {
     removeImageConfirm: 'Remove this image?',
     replace: 'Replace',
     uploadImage: 'Upload image',
+    uploadingImage: 'Uploading…',
     preview: 'Notice preview',
     defaultMessage: "We're doing maintenance work.",
   },
@@ -95,12 +91,7 @@ function toDatetimeLocalValue(iso: string | null): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-export default async function MantenimientoPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ error?: string; saved?: string }>;
-}) {
-  const { error, saved } = await searchParams;
+export default async function MantenimientoPage() {
   const token = await requireAccessToken();
   const t = TEXT[await getLocale()];
 
@@ -125,64 +116,22 @@ export default async function MantenimientoPage({
         }
       />
 
-      {error && (
-        <div className="mb-6">
-          <ErrorBanner message={decodeURIComponent(error)} />
-        </div>
-      )}
-      {saved && (
-        <SuccessBanner>{t.done}</SuccessBanner>
-      )}
-
-      <Card>
-        <form action={guardarMantenimiento} className="space-y-4">
-          <label className="flex items-start gap-3">
-            <input
-              type="checkbox"
-              name="maintenanceMode"
-              defaultChecked={tenant.maintenanceMode}
-              className="mt-0.5 h-4 w-4 rounded border-border text-primary focus:ring-primary/30"
-            />
-            <span className="text-sm">
-              <span className="font-medium">{t.enable}</span>
-              <span className="block text-xs text-muted">{t.enableHelp(tenant.name)}</span>
-            </span>
-          </label>
-
-          <div>
-            <label className={labelClasses} htmlFor="maintenanceMessage">
-              {t.messageLabel}
-            </label>
-            <textarea
-              id="maintenanceMessage"
-              name="maintenanceMessage"
-              rows={3}
-              maxLength={500}
-              placeholder={t.messagePlaceholder}
-              defaultValue={tenant.maintenanceMessage ?? ''}
-              className={fieldClasses}
-            />
-          </div>
-
-          <div>
-            <label className={labelClasses} htmlFor="maintenanceEndsAt">
-              {t.endsAtLabel}
-            </label>
-            <input
-              id="maintenanceEndsAt"
-              name="maintenanceEndsAt"
-              type="datetime-local"
-              defaultValue={toDatetimeLocalValue(tenant.maintenanceEndsAt)}
-              className={`max-w-xs ${fieldClasses}`}
-            />
-            <p className="mt-1 text-xs text-muted">{t.endsAtHelp}</p>
-          </div>
-
-          <div className="flex justify-end">
-            <Button type="submit">{t.save}</Button>
-          </div>
-        </form>
-      </Card>
+      <GuardarMantenimientoForm
+        maintenanceMode={tenant.maintenanceMode}
+        maintenanceMessage={tenant.maintenanceMessage ?? ''}
+        maintenanceEndsAtValue={toDatetimeLocalValue(tenant.maintenanceEndsAt)}
+        t={{
+          done: t.done,
+          enable: t.enable,
+          enableHelp: t.enableHelp(tenant.name),
+          messageLabel: t.messageLabel,
+          messagePlaceholder: t.messagePlaceholder,
+          endsAtLabel: t.endsAtLabel,
+          endsAtHelp: t.endsAtHelp,
+          save: t.save,
+          saving: t.saving,
+        }}
+      />
 
       <Card className="mt-6">
         <h2 className="mb-1 text-sm font-semibold">{t.backgroundImage}</h2>
@@ -196,23 +145,14 @@ export default async function MantenimientoPage({
               alt={t.backgroundAlt}
               className="mb-2 h-32 w-full rounded-lg border border-border object-cover"
             />
-            <form action={quitarImagenMantenimiento}>
-              <ConfirmSubmitButton
-                className="text-xs font-medium text-danger hover:underline"
-                confirmMessage={t.removeImageConfirm}
-              >
-                {t.removeImage}
-              </ConfirmSubmitButton>
-            </form>
+            <QuitarImagenButton confirmMessage={t.removeImageConfirm} label={t.removeImage} />
           </div>
         )}
 
-        <form action={subirImagenMantenimiento} className="flex flex-wrap items-center gap-3">
-          <input type="file" name="file" accept="image/*" required className={fileInputClasses} />
-          <Button type="submit" variant="secondary" size="sm">
-            {tenant.maintenanceImageUrl ? t.replace : t.uploadImage}
-          </Button>
-        </form>
+        <SubirImagenForm
+          submitLabel={tenant.maintenanceImageUrl ? t.replace : t.uploadImage}
+          submittingLabel={t.uploadingImage}
+        />
       </Card>
 
       {(tenant.maintenanceMessage || tenant.maintenanceImageUrl) && (

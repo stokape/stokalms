@@ -15,14 +15,10 @@
 
 import { requireAccessToken, apiFetch, toErrorMessage, getPermissions, can } from '@/lib/api';
 import { ErrorBanner } from '@/components/ErrorBanner';
-import { SuccessBanner } from '@/components/SuccessBanner';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Card } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
-import { Field } from '@/components/ui/Field';
-import { fileInputClasses } from '@/components/ui/field-styles';
 import { getLocale } from '@/lib/locale';
-import { actualizarFoto, actualizarMiPerfil } from './actions';
+import { ActualizarFotoForm, ActualizarMiPerfilForm } from './MiPerfilForms';
 
 interface Profile {
   userTenantId: string;
@@ -55,6 +51,8 @@ const TEXT = {
     district: 'Distrito',
     enrolledOn: 'Fecha de inscripción',
     saveChanges: 'Guardar cambios',
+    saving: 'Guardando…',
+    uploadingPhoto: 'Subiendo…',
     readOnlyNote: 'Estos datos son de solo lectura desde aquí — si alguno está mal o incompleto, pídele a quien administra tu institución que lo corrija.',
     unspecified: 'No especificado',
   },
@@ -73,6 +71,8 @@ const TEXT = {
     district: 'District',
     enrolledOn: 'Enrollment date',
     saveChanges: 'Save changes',
+    saving: 'Saving…',
+    uploadingPhoto: 'Uploading…',
     readOnlyNote: "This data is read-only from here — if anything is wrong or incomplete, ask whoever manages your institution to correct it.",
     unspecified: 'Not specified',
   },
@@ -87,12 +87,7 @@ function campo(label: string, value: string | null, unspecified: string) {
   );
 }
 
-export default async function PerfilPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ error?: string; ok?: string }>;
-}) {
-  const { error, ok } = await searchParams;
+export default async function PerfilPage() {
   const token = await requireAccessToken();
   const locale = await getLocale();
   const t = TEXT[locale];
@@ -111,13 +106,6 @@ export default async function PerfilPage({
     <div>
       <PageHeader title={t.title} />
 
-      {error && (
-        <div className="mb-6">
-          <ErrorBanner message={decodeURIComponent(error)} />
-        </div>
-      )}
-      {ok && <SuccessBanner>{t.updated}</SuccessBanner>}
-
       <Card className="mb-6 flex flex-wrap items-center gap-6">
         {profile.avatarUrl ? (
           // eslint-disable-next-line @next/next/no-img-element -- URL firmada temporal, no un asset estatico.
@@ -133,12 +121,7 @@ export default async function PerfilPage({
         )}
         <div>
           <p className="mb-2 font-medium">{profile.fullName}</p>
-          <form action={actualizarFoto} className="flex flex-wrap items-center gap-2">
-            <input name="file" type="file" accept="image/*" required className={fileInputClasses} />
-            <Button type="submit" variant="secondary" size="sm">
-              {t.uploadPhoto}
-            </Button>
-          </form>
+          <ActualizarFotoForm uploadLabel={t.uploadPhoto} uploadingLabel={t.uploadingPhoto} />
         </div>
       </Card>
 
@@ -146,37 +129,14 @@ export default async function PerfilPage({
         <h2 className="mb-4 text-base font-medium">{t.personalData}</h2>
 
         {canEditOwnData ? (
-          <form
-            action={actualizarMiPerfil.bind(null, profile.userTenantId)}
-            className="grid max-w-xl grid-cols-1 gap-4 sm:grid-cols-2"
-          >
-            <Field label={t.firstName} name="firstName" maxLength={120} defaultValue={profile.firstName ?? ''} />
-            <Field label={t.lastName} name="lastName" maxLength={120} defaultValue={profile.lastName ?? ''} />
-            <div>
-              <dt className="text-xs text-muted">{t.email}</dt>
-              <dd className="mt-0.5">{profile.email}</dd>
-            </div>
-            <Field label={t.phone} name="phone" type="tel" maxLength={30} defaultValue={profile.phone ?? ''} />
-            <Field
-              label={t.address}
-              name="address"
-              maxLength={300}
-              defaultValue={profile.address ?? ''}
-              className="sm:col-span-2"
-            />
-            <Field label={t.department} name="department" maxLength={120} defaultValue={profile.department ?? ''} />
-            <Field label={t.province} name="province" maxLength={120} defaultValue={profile.province ?? ''} />
-            <Field label={t.district} name="district" maxLength={120} defaultValue={profile.district ?? ''} />
-            <div>
-              <dt className="text-xs text-muted">{t.enrolledOn}</dt>
-              <dd className="mt-0.5">
-                {new Date(profile.enrolledAt).toLocaleDateString(locale === 'en' ? 'en-US' : 'es-PE', { dateStyle: 'long' })}
-              </dd>
-            </div>
-            <Button type="submit" className="self-start sm:col-span-2">
-              {t.saveChanges}
-            </Button>
-          </form>
+          <ActualizarMiPerfilForm
+            profile={profile}
+            enrolledAtFormatted={new Date(profile.enrolledAt).toLocaleDateString(
+              locale === 'en' ? 'en-US' : 'es-PE',
+              { dateStyle: 'long' },
+            )}
+            t={t}
+          />
         ) : (
           <>
             <p className="mb-4 text-sm text-muted">{t.readOnlyNote}</p>

@@ -8,10 +8,9 @@
 
 import { requireAccessToken, apiFetch, toErrorMessage } from '@/lib/api';
 import { ErrorBanner } from '@/components/ErrorBanner';
-import { Button } from '@/components/ui/Button';
 import { Breadcrumbs } from '@/components/ui/Breadcrumbs';
 import { getLocale, type Locale } from '@/lib/locale';
-import { marcarAsistencia } from './actions';
+import { AsistenciaForm } from './AsistenciaForm';
 
 interface RosterRow {
   enrollmentId: string;
@@ -46,6 +45,7 @@ const TEXT = {
     student: 'Estudiante',
     status: 'Estado',
     submit: 'Guardar asistencia',
+    submitting: 'Guardando…',
   },
   en: {
     back: 'Section',
@@ -58,6 +58,7 @@ const TEXT = {
     student: 'Student',
     status: 'Status',
     submit: 'Save attendance',
+    submitting: 'Saving…',
   },
 };
 
@@ -70,10 +71,10 @@ export default async function AsistenciaPage({
   searchParams,
 }: {
   params: Promise<{ courseId: string; sectionId: string }>;
-  searchParams: Promise<{ date?: string; error?: string; ok?: string }>;
+  searchParams: Promise<{ date?: string }>;
 }) {
   const { courseId, sectionId } = await params;
-  const { date, error, ok } = await searchParams;
+  const { date } = await searchParams;
   const sessionDate = date || today();
   const token = await requireAccessToken();
   const locale = await getLocale();
@@ -117,17 +118,6 @@ export default async function AsistenciaPage({
       />
       <h1 className="mt-1 mb-6 text-2xl font-semibold">{t.title}</h1>
 
-      {error && (
-        <div className="mb-6">
-          <ErrorBanner message={decodeURIComponent(error)} />
-        </div>
-      )}
-      {ok && (
-        <div className="mb-6 rounded-lg bg-green-50 px-4 py-3 text-sm text-green-700 dark:bg-green-950 dark:text-green-300">
-          {t.saved}
-        </div>
-      )}
-
       <form method="get" className="mb-6 flex items-center gap-2">
         <label className="text-sm text-zinc-500" htmlFor="date">
           {t.date}:
@@ -150,44 +140,18 @@ export default async function AsistenciaPage({
       {roster.length === 0 ? (
         <p className="text-zinc-500">{t.noStudents}</p>
       ) : (
-        <form action={marcarAsistencia.bind(null, courseId, sectionId)}>
-          <input type="hidden" name="sessionDate" value={sessionDate} />
-          <div className="mb-6 overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead>
-              <tr className="border-b border-zinc-200 dark:border-zinc-800">
-                <th className="py-2">{t.student}</th>
-                <th className="py-2">{t.status}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {roster.map((row) => (
-                <tr key={row.enrollmentId} className="border-b border-zinc-100 dark:border-zinc-900">
-                  <td className="py-2">
-                    {row.student.fullName}
-                    <br />
-                    <span className="text-xs text-zinc-500">{row.student.email}</span>
-                  </td>
-                  <td className="py-2">
-                    <select
-                      name={`status_${row.enrollmentId}`}
-                      defaultValue={row.status ?? 'present'}
-                      className="rounded border border-zinc-300 px-2 py-1 dark:border-zinc-700 dark:bg-zinc-900"
-                    >
-                      {STATUS_OPTIONS.map((opt) => (
-                        <option key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </option>
-                      ))}
-                    </select>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          </div>
-          <Button type="submit">{t.submit}</Button>
-        </form>
+        <AsistenciaForm
+          courseId={courseId}
+          sectionId={sectionId}
+          sessionDate={sessionDate}
+          roster={roster}
+          statusOptions={STATUS_OPTIONS}
+          studentLabel={t.student}
+          statusLabel={t.status}
+          submitLabel={t.submit}
+          submittingLabel={t.submitting}
+          savedLabel={t.saved}
+        />
       )}
     </div>
   );

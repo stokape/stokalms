@@ -1,15 +1,33 @@
 'use server';
 
-import { redirect } from 'next/navigation';
+// ============================================================================
+// mantenimiento/actions.ts — Prender/apagar el modo mantenimiento, subir/
+// quitar la imagen de fondo del aviso. NINGUNA llama a redirect() (ver la
+// nota extensa en periodos/actions.ts): devuelven un estado que
+// MantenimientoForms.tsx consume con useActionState.
+//
+// El home publico y el resto de la app (ver app/page.tsx y (app)/layout.tsx)
+// leen "maintenanceMode" en cada visita: revalidatePath('/', 'layout')
+// invalida TODO el arbol, no solo esta pantalla.
+// ============================================================================
+
+import { revalidatePath } from 'next/cache';
 import { requireAccessToken, apiFetch, apiFetchUpload, toErrorMessage } from '@/lib/api';
 
-const PATH = '/mantenimiento';
+export type MantenimientoActionState = { error: string | null; saved?: boolean };
+
+function invalidateEverything() {
+  revalidatePath('/', 'layout');
+}
 
 // Un unico formulario (ver page.tsx) prende/apaga el modo mantenimiento Y
 // guarda el mensaje/fecha en el mismo envio — separarlo en dos acciones
 // (una para el switch, otra para el texto) solo agregaba un paso extra sin
 // ningun beneficio real.
-export async function guardarMantenimiento(formData: FormData) {
+export async function guardarMantenimiento(
+  _prevState: MantenimientoActionState,
+  formData: FormData,
+): Promise<MantenimientoActionState> {
   const token = await requireAccessToken();
 
   const maintenanceMode = formData.get('maintenanceMode') === 'on';
@@ -27,13 +45,11 @@ export async function guardarMantenimiento(formData: FormData) {
       body: JSON.stringify({ maintenanceMode, maintenanceMessage, maintenanceEndsAt }),
     });
   } catch (err) {
-    redirect(`${PATH}?error=${encodeURIComponent(toErrorMessage(err))}`);
+    return { error: toErrorMessage(err) };
   }
 
-  // El home publico y el resto de la app (ver app/page.tsx y
-  // (app)/layout.tsx) leen "maintenanceMode" en cada visita: hay que
-  // invalidar tambien esas rutas, no solo esta pantalla.
-  redirect(`${PATH}?saved=1`);
+  invalidateEverything();
+  return { error: null, saved: true };
 }
 
 // Imagen de fondo del landing de mantenimiento — libre, no tiene que ser la
@@ -41,12 +57,15 @@ export async function guardarMantenimiento(formData: FormData) {
 // StoredBranding): quien administra puede subir algo puntual ("estamos de
 // mudanza", un aviso con su propio diseño, etc.) sin tocar la marca
 // habitual de la institucion.
-export async function subirImagenMantenimiento(formData: FormData) {
+export async function subirImagenMantenimiento(
+  _prevState: MantenimientoActionState,
+  formData: FormData,
+): Promise<MantenimientoActionState> {
   const token = await requireAccessToken();
   const file = formData.get('file');
 
   if (!(file instanceof File) || file.size === 0) {
-    redirect(`${PATH}?error=${encodeURIComponent('Elige una imagen para el fondo.')}`);
+    return { error: 'Elige una imagen para el fondo.' };
   }
 
   const uploadForm = new FormData();
@@ -55,20 +74,24 @@ export async function subirImagenMantenimiento(formData: FormData) {
   try {
     await apiFetchUpload(token, '/tenant/maintenance-image', uploadForm);
   } catch (err) {
-    redirect(`${PATH}?error=${encodeURIComponent(toErrorMessage(err))}`);
+    return { error: toErrorMessage(err) };
   }
 
-  redirect(`${PATH}?saved=1`);
+  invalidateEverything();
+  return { error: null, saved: true };
 }
 
-export async function quitarImagenMantenimiento() {
+export async function quitarImagenMantenimiento(
+  _prevState: MantenimientoActionState,
+): Promise<MantenimientoActionState> {
   const token = await requireAccessToken();
 
   try {
     await apiFetch(token, '/tenant/maintenance-image', { method: 'DELETE' });
   } catch (err) {
-    redirect(`${PATH}?error=${encodeURIComponent(toErrorMessage(err))}`);
+    return { error: toErrorMessage(err) };
   }
 
-  redirect(`${PATH}?saved=1`);
+  invalidateEverything();
+  return { error: null, saved: true };
 }

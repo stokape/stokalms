@@ -1,45 +1,47 @@
 // ============================================================================
 // admin-plataforma/instituciones/[tenantId]/page.tsx — Detalle de UNA
-// institucion desde el panel de plataforma: activar/desactivar, dominios
-// (mismo flujo TXT que (app)/dominios/page.tsx) y miembros/roles (mismo
-// flujo que (app)/usuarios/page.tsx), pero apuntando a CUALQUIER tenant por
-// id, no al "tenant activo del request" — ver la nota extensa en
-// platform-tenants.service.ts (backend).
+// institucion desde el panel de plataforma: activar/desactivar, asignar
+// plan, dominios (mismo flujo TXT que (app)/dominios/page.tsx) y
+// miembros/roles (mismo flujo que (app)/usuarios/page.tsx), pero apuntando
+// a CUALQUIER tenant por id, no al "tenant activo del request" — ver la
+// nota extensa en platform-tenants.service.ts (backend).
 //
 // A diferencia de (app)/usuarios/page.tsx, aca NO se ofrece acotar un rol a
 // un curso especifico: eso exigiria otro endpoint cross-tenant solo para
 // listar cursos de una institucion ajena, y no es parte de lo que se pidio
 // (activar/desactivar, dominios, roles) — se puede agregar despues si hace
 // falta.
+//
+// Todos los formularios viven en InstitucionForms.tsx (Client Components) A
+// PROPOSITO -- ver la nota extensa en periodos/actions.ts: las Server
+// Actions ya NO llaman a redirect(), necesitan useActionState (solo
+// disponible del lado del cliente) para poder mostrarle el error/éxito a la
+// persona sin cambiar de pantalla.
 // ============================================================================
 
 import Link from 'next/link';
 import { requireAccessToken, apiFetch, toErrorMessage } from '@/lib/api';
 import { ErrorBanner } from '@/components/ErrorBanner';
-import { SuccessBanner } from '@/components/SuccessBanner';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
-import { Button } from '@/components/ui/Button';
-import { ConfirmSubmitButton } from '@/components/ui/ConfirmSubmitButton';
-import { fieldClasses, labelClasses, fileInputClasses, selectClasses } from '@/components/ui/field-styles';
 import { getLocale } from '@/lib/locale';
 import {
-  cambiarEstadoInstitucion,
-  cambiarPlanInstitucion,
-  agregarDominio,
-  verificarDominio,
-  eliminarDominio,
-  asignarRol,
-  quitarRol,
-  actualizarMarcaInstitucion,
-  subirLogoInstitucion,
-  subirFondoInstitucion,
-  subirFaviconInstitucion,
-  guardarMantenimientoInstitucion,
-  subirImagenMantenimientoInstitucion,
-  quitarImagenMantenimientoInstitucion,
-} from './actions';
+  EstadoInstitucionForm,
+  PlanForm,
+  MarcaInstitucionForm,
+  LogoInstitucionForm,
+  FaviconInstitucionForm,
+  FondoInstitucionForm,
+  VerificarDominioButton,
+  EliminarDominioButton,
+  AgregarDominioForm,
+  MantenimientoInstitucionForm,
+  QuitarImagenMantenimientoButton,
+  SubirImagenMantenimientoForm,
+  QuitarRolButton,
+  AsignarRolForm,
+} from './InstitucionForms';
 
 const TEXT = {
   es: {
@@ -56,14 +58,17 @@ const TEXT = {
     backgroundColor: 'Color de fondo (respaldo)',
     colorPickerTitle: 'Elegir color',
     saveNameAndColor: 'Guardar nombre y colores',
+    savingNameAndColor: 'Guardando…',
     logo: 'Logo',
     uploadLogo: 'Subir logo',
+    uploadingLogo: 'Subiendo…',
     favicon: 'Favicon',
     uploadFavicon: 'Subir favicon',
+    uploadingFavicon: 'Subiendo…',
     backgroundImage: 'Imagen de fondo',
     uploadBackground: 'Subir imagen de fondo',
+    uploadingBackground: 'Subiendo…',
     domainsTitle: 'Dominios',
-    done: 'Listo.',
     primary: 'Principal',
     verified: 'Verificado',
     unverified: 'Sin verificar',
@@ -75,6 +80,7 @@ const TEXT = {
     deleteConfirm: (domain: string) => `¿Eliminar el dominio "${domain}"?`,
     placeholder: 'campus.institutosanmartin.edu.pe',
     addDomain: 'Agregar dominio',
+    addingDomain: 'Agregando…',
     maintenanceTitle: 'Mantenimiento',
     maintenanceActive: 'Activo',
     maintenanceOff: 'Apagado',
@@ -84,11 +90,13 @@ const TEXT = {
     messagePlaceholder: 'Estamos haciendo tareas de mantenimiento. Volvemos en un rato.',
     endsAtLabel: 'Vuelve aproximadamente a las (opcional)',
     save: 'Guardar',
+    saving: 'Guardando…',
     maintenanceImage: 'Imagen de fondo del aviso (opcional)',
     removeImage: 'Quitar imagen',
     removeImageConfirm: '¿Quitar esta imagen?',
     replace: 'Reemplazar',
     uploadImage: 'Subir imagen',
+    uploadingImage: 'Subiendo…',
     membersTitle: 'Miembros y roles',
     noMembers: 'Todavía nadie se unió a esta institución.',
     person: 'Persona',
@@ -98,6 +106,7 @@ const TEXT = {
     remove: 'Quitar',
     removeConfirm: (role: string, name: string) => `¿Quitarle el rol "${role}" a ${name}?`,
     assignRole: 'Asignar rol',
+    assigningRole: 'Asignando…',
     deactivateConfirm:
       'Al desactivarla, nadie de esta institución (ni siquiera su Super Admin) va a poder iniciar sesión hasta que se reactive. ¿Continuar?',
     planTitle: 'Plan',
@@ -107,6 +116,7 @@ const TEXT = {
     planPro: 'Pro',
     planEnterprise: 'Enterprise',
     savePlan: 'Guardar plan',
+    savingPlan: 'Guardando…',
   },
   en: {
     back: '← Institutions',
@@ -122,14 +132,17 @@ const TEXT = {
     backgroundColor: 'Background color (fallback)',
     colorPickerTitle: 'Choose a color',
     saveNameAndColor: 'Save name and colors',
+    savingNameAndColor: 'Saving…',
     logo: 'Logo',
     uploadLogo: 'Upload logo',
+    uploadingLogo: 'Uploading…',
     favicon: 'Favicon',
     uploadFavicon: 'Upload favicon',
+    uploadingFavicon: 'Uploading…',
     backgroundImage: 'Background image',
     uploadBackground: 'Upload background image',
+    uploadingBackground: 'Uploading…',
     domainsTitle: 'Domains',
-    done: 'Done.',
     primary: 'Primary',
     verified: 'Verified',
     unverified: 'Unverified',
@@ -141,6 +154,7 @@ const TEXT = {
     deleteConfirm: (domain: string) => `Delete the "${domain}" domain?`,
     placeholder: 'campus.institutosanmartin.edu.pe',
     addDomain: 'Add domain',
+    addingDomain: 'Adding…',
     maintenanceTitle: 'Maintenance',
     maintenanceActive: 'Active',
     maintenanceOff: 'Off',
@@ -150,11 +164,13 @@ const TEXT = {
     messagePlaceholder: "We're doing maintenance work. Back shortly.",
     endsAtLabel: 'Back around (optional)',
     save: 'Save',
+    saving: 'Saving…',
     maintenanceImage: 'Notice background image (optional)',
     removeImage: 'Remove image',
     removeImageConfirm: 'Remove this image?',
     replace: 'Replace',
     uploadImage: 'Upload image',
+    uploadingImage: 'Uploading…',
     membersTitle: 'Members and roles',
     noMembers: 'No one has joined this institution yet.',
     person: 'Person',
@@ -164,6 +180,7 @@ const TEXT = {
     remove: 'Remove',
     removeConfirm: (role: string, name: string) => `Remove the "${role}" role from ${name}?`,
     assignRole: 'Assign role',
+    assigningRole: 'Assigning…',
     deactivateConfirm:
       "Once deactivated, no one at this institution (not even its Super Admin) will be able to log in until it's reactivated. Continue?",
     planTitle: 'Plan',
@@ -173,6 +190,7 @@ const TEXT = {
     planPro: 'Pro',
     planEnterprise: 'Enterprise',
     savePlan: 'Save plan',
+    savingPlan: 'Saving…',
   },
 };
 
@@ -240,13 +258,10 @@ function toDatetimeLocalValue(iso: string | null): string {
 
 export default async function InstitucionDetallePage({
   params,
-  searchParams,
 }: {
   params: Promise<{ tenantId: string }>;
-  searchParams: Promise<{ error?: string; saved?: string }>;
 }) {
   const { tenantId } = await params;
-  const { error, saved } = await searchParams;
   const token = await requireAccessToken();
   const t = TEXT[await getLocale()];
 
@@ -290,90 +305,53 @@ export default async function InstitucionDetallePage({
         title={tenant.name}
         description={tenant.active ? <Badge tone="success">{t.active}</Badge> : <Badge tone="danger">{t.inactive}</Badge>}
         actions={
-          <form action={cambiarEstadoInstitucion.bind(null, tenantId, !tenant.active)}>
-            {tenant.active ? (
-              <ConfirmSubmitButton variant="danger" size="sm" confirmMessage={t.deactivateConfirm}>
-                {t.deactivate}
-              </ConfirmSubmitButton>
-            ) : (
-              <Button type="submit" variant="primary" size="sm">
-                {t.activate}
-              </Button>
-            )}
-          </form>
+          <EstadoInstitucionForm
+            tenantId={tenantId}
+            active={tenant.active}
+            deactivateLabel={t.deactivate}
+            activateLabel={t.activate}
+            confirmMessage={t.deactivateConfirm}
+          />
         }
       />
       {tenant.active && <p className="-mt-4 mb-6 text-xs text-muted">{t.deactivateWarning}</p>}
-
-      {error && (
-        <div className="mb-6">
-          <ErrorBanner message={decodeURIComponent(error)} />
-        </div>
-      )}
-      {saved && (
-        <SuccessBanner>{t.done}</SuccessBanner>
-      )}
 
       {/* --- Plan --- */}
       <h2 className="mb-1 text-base font-medium">{t.planTitle}</h2>
       <p className="mb-3 text-xs text-muted">{t.planHelp}</p>
       <Card className="mb-8">
-        <form action={cambiarPlanInstitucion.bind(null, tenantId)} className="flex flex-wrap items-end gap-3">
-          <select name="plan" defaultValue={tenant.plan} className={selectClasses}>
-            <option value="starter">{t.planStarter}</option>
-            <option value="business">{t.planBusiness}</option>
-            <option value="pro">{t.planPro}</option>
-            <option value="enterprise">{t.planEnterprise}</option>
-          </select>
-          <Button type="submit" variant="primary" size="sm">
-            {t.savePlan}
-          </Button>
-        </form>
+        <PlanForm
+          tenantId={tenantId}
+          plan={tenant.plan}
+          options={[
+            { value: 'starter', label: t.planStarter },
+            { value: 'business', label: t.planBusiness },
+            { value: 'pro', label: t.planPro },
+            { value: 'enterprise', label: t.planEnterprise },
+          ]}
+          submitLabel={t.savePlan}
+          submittingLabel={t.savingPlan}
+        />
       </Card>
 
       {/* --- Marca --- */}
       <h2 className="mb-3 text-base font-medium">{t.brandTitle}</h2>
       <div className="mb-8 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>
-          <form action={actualizarMarcaInstitucion.bind(null, tenantId)} className="flex flex-col gap-4">
-            <div>
-              <label className={labelClasses} htmlFor="brand-name">{t.institutionName}</label>
-              <input id="brand-name" name="name" type="text" required defaultValue={branding.name} className={fieldClasses} />
-            </div>
-            <div>
-              <span className={labelClasses}>{t.primaryColor}</span>
-              <div className="flex items-center gap-2">
-                <input
-                  type="color"
-                  name="primaryColor"
-                  defaultValue={branding.branding.primaryColor || '#1e90ff'}
-                  className="h-10 w-14 cursor-pointer rounded-lg border border-border bg-transparent p-1"
-                  title={t.colorPickerTitle}
-                />
-                <span className="font-mono text-xs text-muted">
-                  {branding.branding.primaryColor || '#1e90ff'}
-                </span>
-              </div>
-            </div>
-            <div>
-              <span className={labelClasses}>{t.backgroundColor}</span>
-              <div className="flex items-center gap-2">
-                <input
-                  type="color"
-                  name="backgroundColor"
-                  defaultValue={branding.branding.backgroundColor || '#1e90ff'}
-                  className="h-10 w-14 cursor-pointer rounded-lg border border-border bg-transparent p-1"
-                  title={t.colorPickerTitle}
-                />
-                <span className="font-mono text-xs text-muted">
-                  {branding.branding.backgroundColor || '#1e90ff'}
-                </span>
-              </div>
-            </div>
-            <Button type="submit" size="sm" className="self-start">
-              {t.saveNameAndColor}
-            </Button>
-          </form>
+          <MarcaInstitucionForm
+            tenantId={tenantId}
+            name={branding.name}
+            primaryColor={branding.branding.primaryColor || '#1e90ff'}
+            backgroundColor={branding.branding.backgroundColor || '#1e90ff'}
+            t={{
+              institutionName: t.institutionName,
+              primaryColor: t.primaryColor,
+              backgroundColor: t.backgroundColor,
+              colorPickerTitle: t.colorPickerTitle,
+              saveNameAndColor: t.saveNameAndColor,
+              saving: t.savingNameAndColor,
+            }}
+          />
         </Card>
 
         <div className="flex flex-col gap-4">
@@ -387,12 +365,7 @@ export default async function InstitucionDetallePage({
                 className="mb-3 h-14 w-auto rounded-lg border border-border bg-white object-contain"
               />
             )}
-            <form action={subirLogoInstitucion.bind(null, tenantId)} className="flex flex-wrap items-center gap-2">
-              <input name="file" type="file" accept="image/*" required className={fileInputClasses} />
-              <Button type="submit" variant="secondary" size="sm">
-                {t.uploadLogo}
-              </Button>
-            </form>
+            <LogoInstitucionForm tenantId={tenantId} submitLabel={t.uploadLogo} submittingLabel={t.uploadingLogo} />
           </Card>
 
           <Card>
@@ -405,12 +378,11 @@ export default async function InstitucionDetallePage({
                 className="mb-3 h-10 w-10 rounded-lg border border-border bg-white object-contain"
               />
             )}
-            <form action={subirFaviconInstitucion.bind(null, tenantId)} className="flex flex-wrap items-center gap-2">
-              <input name="file" type="file" accept="image/*" required className={fileInputClasses} />
-              <Button type="submit" variant="secondary" size="sm">
-                {t.uploadFavicon}
-              </Button>
-            </form>
+            <FaviconInstitucionForm
+              tenantId={tenantId}
+              submitLabel={t.uploadFavicon}
+              submittingLabel={t.uploadingFavicon}
+            />
           </Card>
         </div>
 
@@ -424,12 +396,11 @@ export default async function InstitucionDetallePage({
               className="mb-3 h-32 w-full rounded-lg border border-border object-cover"
             />
           )}
-          <form action={subirFondoInstitucion.bind(null, tenantId)} className="flex flex-wrap items-center gap-2">
-            <input name="file" type="file" accept="image/*" required className={fileInputClasses} />
-            <Button type="submit" variant="secondary" size="sm">
-              {t.uploadBackground}
-            </Button>
-          </form>
+          <FondoInstitucionForm
+            tenantId={tenantId}
+            submitLabel={t.uploadBackground}
+            submittingLabel={t.uploadingBackground}
+          />
         </Card>
       </div>
 
@@ -459,22 +430,14 @@ export default async function InstitucionDetallePage({
                   )}
 
                   <div className="mt-2 flex gap-4">
-                    {!d.verified && (
-                      <form action={verificarDominio.bind(null, tenantId, d.id)}>
-                        <button type="submit" className="text-xs font-medium text-primary hover:underline">
-                          {t.verifyNow}
-                        </button>
-                      </form>
-                    )}
+                    {!d.verified && <VerificarDominioButton tenantId={tenantId} domainId={d.id} label={t.verifyNow} />}
                     {!d.isPrimary && (
-                      <form action={eliminarDominio.bind(null, tenantId, d.id)}>
-                        <ConfirmSubmitButton
-                          className="text-xs font-medium text-danger hover:underline"
-                          confirmMessage={t.deleteConfirm(d.domain)}
-                        >
-                          {t.delete}
-                        </ConfirmSubmitButton>
-                      </form>
+                      <EliminarDominioButton
+                        tenantId={tenantId}
+                        domainId={d.id}
+                        confirmMessage={t.deleteConfirm(d.domain)}
+                        label={t.delete}
+                      />
                     )}
                   </div>
                 </li>
@@ -483,18 +446,12 @@ export default async function InstitucionDetallePage({
           </ul>
         )}
 
-        <form action={agregarDominio.bind(null, tenantId)} className="flex flex-wrap items-center gap-2">
-          <input
-            name="domain"
-            type="text"
-            required
-            placeholder={t.placeholder}
-            className={`max-w-xs ${fieldClasses}`}
-          />
-          <Button type="submit" variant="secondary" size="sm">
-            {t.addDomain}
-          </Button>
-        </form>
+        <AgregarDominioForm
+          tenantId={tenantId}
+          placeholder={t.placeholder}
+          submitLabel={t.addDomain}
+          submittingLabel={t.addingDomain}
+        />
       </Card>
 
       {/* --- Mantenimiento --- */}
@@ -507,48 +464,21 @@ export default async function InstitucionDetallePage({
         )}
       </div>
       <Card className="mb-4">
-        <form action={guardarMantenimientoInstitucion.bind(null, tenantId)} className="space-y-4">
-          <label className="flex items-start gap-3">
-            <input
-              type="checkbox"
-              name="maintenanceMode"
-              defaultChecked={branding.maintenanceMode}
-              className="mt-0.5 h-4 w-4 rounded border-border text-primary focus:ring-primary/30"
-            />
-            <span className="text-sm">
-              <span className="font-medium">{t.enableMaintenance}</span>
-              <span className="block text-xs text-muted">{t.enableMaintenanceHelp}</span>
-            </span>
-          </label>
-
-          <div>
-            <label className={labelClasses} htmlFor="maintenanceMessage">{t.messageLabel}</label>
-            <textarea
-              id="maintenanceMessage"
-              name="maintenanceMessage"
-              rows={3}
-              maxLength={500}
-              placeholder={t.messagePlaceholder}
-              defaultValue={branding.maintenanceMessage ?? ''}
-              className={fieldClasses}
-            />
-          </div>
-
-          <div>
-            <label className={labelClasses} htmlFor="maintenanceEndsAt">{t.endsAtLabel}</label>
-            <input
-              id="maintenanceEndsAt"
-              name="maintenanceEndsAt"
-              type="datetime-local"
-              defaultValue={toDatetimeLocalValue(branding.maintenanceEndsAt)}
-              className={`max-w-xs ${fieldClasses}`}
-            />
-          </div>
-
-          <div className="flex justify-end">
-            <Button type="submit" size="sm">{t.save}</Button>
-          </div>
-        </form>
+        <MantenimientoInstitucionForm
+          tenantId={tenantId}
+          maintenanceMode={branding.maintenanceMode}
+          maintenanceMessage={branding.maintenanceMessage ?? ''}
+          maintenanceEndsAtValue={toDatetimeLocalValue(branding.maintenanceEndsAt)}
+          t={{
+            enableMaintenance: t.enableMaintenance,
+            enableMaintenanceHelp: t.enableMaintenanceHelp,
+            messageLabel: t.messageLabel,
+            messagePlaceholder: t.messagePlaceholder,
+            endsAtLabel: t.endsAtLabel,
+            save: t.save,
+            saving: t.saving,
+          }}
+        />
       </Card>
 
       <Card className="mb-8">
@@ -561,25 +491,18 @@ export default async function InstitucionDetallePage({
               alt={t.maintenanceImage}
               className="mb-2 h-28 w-full rounded-lg border border-border object-cover"
             />
-            <form action={quitarImagenMantenimientoInstitucion.bind(null, tenantId)}>
-              <ConfirmSubmitButton
-                className="text-xs font-medium text-danger hover:underline"
-                confirmMessage={t.removeImageConfirm}
-              >
-                {t.removeImage}
-              </ConfirmSubmitButton>
-            </form>
+            <QuitarImagenMantenimientoButton
+              tenantId={tenantId}
+              confirmMessage={t.removeImageConfirm}
+              label={t.removeImage}
+            />
           </div>
         )}
-        <form
-          action={subirImagenMantenimientoInstitucion.bind(null, tenantId)}
-          className="flex flex-wrap items-center gap-2"
-        >
-          <input name="file" type="file" accept="image/*" required className={fileInputClasses} />
-          <Button type="submit" variant="secondary" size="sm">
-            {branding.maintenanceImageUrl ? t.replace : t.uploadImage}
-          </Button>
-        </form>
+        <SubirImagenMantenimientoForm
+          tenantId={tenantId}
+          submitLabel={branding.maintenanceImageUrl ? t.replace : t.uploadImage}
+          submittingLabel={t.uploadingImage}
+        />
       </Card>
 
       {/* --- Miembros y roles --- */}
@@ -635,31 +558,25 @@ export default async function InstitucionDetallePage({
                           {r.roleName}
                           {r.scopeCourseTitle && <span className="text-muted"> · {r.scopeCourseTitle}</span>}
                         </span>
-                        <form action={quitarRol.bind(null, tenantId, m.userTenantId, r.userRoleId)}>
-                          <ConfirmSubmitButton
-                            className="text-xs font-medium text-danger hover:underline"
-                            confirmMessage={t.removeConfirm(r.roleName, m.fullName)}
-                          >
-                            {t.remove}
-                          </ConfirmSubmitButton>
-                        </form>
+                        <QuitarRolButton
+                          tenantId={tenantId}
+                          userTenantId={m.userTenantId}
+                          userRoleId={r.userRoleId}
+                          confirmMessage={t.removeConfirm(r.roleName, m.fullName)}
+                          label={t.remove}
+                        />
                       </li>
                     ))}
                   </ul>
                 )}
 
-                <form action={asignarRol.bind(null, tenantId, m.userTenantId)} className="flex flex-wrap items-center gap-2">
-                  <select name="roleId" required className={`max-w-[220px] ${selectClasses}`}>
-                    {roles.map((r) => (
-                      <option key={r.id} value={r.id}>
-                        {r.name}
-                      </option>
-                    ))}
-                  </select>
-                  <Button type="submit" size="sm">
-                    {t.assignRole}
-                  </Button>
-                </form>
+                <AsignarRolForm
+                  tenantId={tenantId}
+                  userTenantId={m.userTenantId}
+                  roles={roles}
+                  submitLabel={t.assignRole}
+                  submittingLabel={t.assigningRole}
+                />
               </div>
             </details>
           ))}

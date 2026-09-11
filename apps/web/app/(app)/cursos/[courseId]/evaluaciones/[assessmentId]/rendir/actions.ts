@@ -1,7 +1,14 @@
 'use server';
 
-import { redirect } from 'next/navigation';
+// ============================================================================
+// rendir/actions.ts — Entregar un examen. No llama a redirect() (ver la nota
+// extensa en periodos/actions.ts): devuelve un ActionState y el CLIENTE
+// navega de vuelta a la evaluación con router.push() (ver EntregarExamenForm.tsx
+// / useActionRedirect.ts) tras una entrega exitosa.
+// ============================================================================
+
 import { requireAccessToken, apiFetch, toErrorMessage } from '@/lib/api';
+import type { ActionState } from '@/lib/action-state';
 
 interface Question {
   id: string;
@@ -46,10 +53,10 @@ function buildAnswer(question: Question, formData: FormData): unknown {
 export async function entregarExamen(
   courseId: string,
   assessmentId: string,
+  _prevState: ActionState,
   formData: FormData,
-) {
+): Promise<ActionState> {
   const token = await requireAccessToken();
-  const listPath = `/cursos/${courseId}/evaluaciones/${assessmentId}`;
 
   try {
     const questions = await apiFetch<Question[]>(
@@ -64,8 +71,8 @@ export async function entregarExamen(
       body: JSON.stringify({ answers }),
     });
   } catch (err) {
-    redirect(`${listPath}/rendir?error=${encodeURIComponent(toErrorMessage(err))}`);
+    return { error: toErrorMessage(err) };
   }
 
-  redirect(listPath);
+  return { error: null, redirectTo: `/cursos/${courseId}/evaluaciones/${assessmentId}` };
 }

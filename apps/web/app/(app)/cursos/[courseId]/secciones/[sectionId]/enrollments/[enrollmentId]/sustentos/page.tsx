@@ -8,10 +8,9 @@
 
 import { requireAccessToken, apiFetch, toErrorMessage } from '@/lib/api';
 import { ErrorBanner } from '@/components/ErrorBanner';
-import { Button } from '@/components/ui/Button';
 import { Breadcrumbs } from '@/components/ui/Breadcrumbs';
 import { getLocale } from '@/lib/locale';
-import { subirSustento } from './actions';
+import { SustentoForm } from './SustentoForm';
 
 const TEXT = {
   es: {
@@ -21,6 +20,7 @@ const TEXT = {
     empty: 'Todavía no se subió ningún archivo de respaldo.',
     descriptionPlaceholder: 'Descripción (opcional)',
     submit: 'Subir archivo',
+    submitting: 'Subiendo…',
   },
   en: {
     back: 'Section',
@@ -29,6 +29,7 @@ const TEXT = {
     empty: 'No supporting files have been uploaded yet.',
     descriptionPlaceholder: 'Description (optional)',
     submit: 'Upload file',
+    submitting: 'Uploading…',
   },
 };
 
@@ -43,13 +44,10 @@ interface Attachment {
 
 export default async function SustentosPage({
   params,
-  searchParams,
 }: {
   params: Promise<{ courseId: string; sectionId: string; enrollmentId: string }>;
-  searchParams: Promise<{ error?: string }>;
 }) {
   const { courseId, sectionId, enrollmentId } = await params;
-  const { error } = await searchParams;
   const token = await requireAccessToken();
   const locale = await getLocale();
   const t = TEXT[locale];
@@ -91,12 +89,6 @@ export default async function SustentosPage({
       />
       <h1 className="mt-1 mb-6 text-2xl font-semibold">{t.title}</h1>
 
-      {error && (
-        <div className="mb-6">
-          <ErrorBanner message={decodeURIComponent(error)} />
-        </div>
-      )}
-
       {attachments.length === 0 ? (
         <p className="mb-8 text-zinc-500">{t.empty}</p>
       ) : (
@@ -116,21 +108,14 @@ export default async function SustentosPage({
         </ul>
       )}
 
-      <form
-        action={subirSustento.bind(null, courseId, sectionId, enrollmentId)}
-        className="flex max-w-sm flex-col gap-3"
-      >
-        <input name="file" type="file" required className="text-sm" />
-        <input
-          name="description"
-          type="text"
-          placeholder={t.descriptionPlaceholder}
-          className="rounded border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-        />
-        <Button type="submit" className="self-start">
-          {t.submit}
-        </Button>
-      </form>
+      <SustentoForm
+        courseId={courseId}
+        sectionId={sectionId}
+        enrollmentId={enrollmentId}
+        descriptionPlaceholder={t.descriptionPlaceholder}
+        submitLabel={t.submit}
+        submittingLabel={t.submitting}
+      />
     </div>
   );
 }

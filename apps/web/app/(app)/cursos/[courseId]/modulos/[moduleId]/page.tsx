@@ -10,10 +10,13 @@
 import Link from 'next/link';
 import { requireAccessToken, apiFetch, toErrorMessage, getCoursePermissions, can } from '@/lib/api';
 import { ErrorBanner } from '@/components/ErrorBanner';
-import { Button } from '@/components/ui/Button';
-import { ConfirmSubmitButton } from '@/components/ui/ConfirmSubmitButton';
 import { getLocale, type Locale } from '@/lib/locale';
-import { crearLeccion, actualizarModulo, actualizarLeccionTitulo, eliminarLeccion } from './actions';
+import {
+  RenombrarModuloForm,
+  ActualizarLeccionTituloForm,
+  EliminarLeccionButton,
+  CrearLeccionForm,
+} from './LeccionForms';
 
 interface CourseModule {
   id: string;
@@ -42,15 +45,18 @@ const TEXT = {
   es: {
     backToContent: '← Contenido del curso',
     renameModule: 'Renombrar módulo',
+    renamingModule: 'Renombrando…',
     lessons: 'Lecciones',
     noLessons: 'Este módulo todavía no tiene ninguna lección.',
     save: 'Guardar',
+    saving: 'Guardando…',
     delete: 'Eliminar',
     deleteConfirm: (title: string) => `¿Eliminar la lección "${title}"? Se pierden también sus recursos. No se puede deshacer.`,
     createLesson: 'Crear una lección nueva',
     lessonPlaceholder: 'Ej. "Lección 1 - Introducción"',
     contentPlaceholder: 'Texto de la lección (opcional, se puede completar después). Los archivos y enlaces se agregan aparte, una vez creada la lección.',
     createLessonSubmit: 'Crear lección',
+    creatingLesson: 'Creando…',
     assessmentsHeading: 'Tareas y evaluaciones de este módulo',
     noAssessments: 'Este módulo todavía no tiene ninguna evaluación.',
     untitled: (type: string) => `${type} sin título`,
@@ -59,15 +65,18 @@ const TEXT = {
   en: {
     backToContent: '← Course content',
     renameModule: 'Rename module',
+    renamingModule: 'Renaming…',
     lessons: 'Lessons',
     noLessons: "This module doesn't have any lessons yet.",
     save: 'Save',
+    saving: 'Saving…',
     delete: 'Delete',
     deleteConfirm: (title: string) => `Delete the "${title}" lesson? Its resources are lost too. This can't be undone.`,
     createLesson: 'Create a new lesson',
     lessonPlaceholder: 'E.g. "Lesson 1 - Introduction"',
     contentPlaceholder: 'Lesson text (optional, can be filled in later). Files and links are added separately, once the lesson is created.',
     createLessonSubmit: 'Create lesson',
+    creatingLesson: 'Creating…',
     assessmentsHeading: 'Assignments and assessments for this module',
     noAssessments: "This module doesn't have any assessments yet.",
     untitled: (type: string) => `Untitled ${type}`,
@@ -77,13 +86,10 @@ const TEXT = {
 
 export default async function LeccionesDelModuloPage({
   params,
-  searchParams,
 }: {
   params: Promise<{ courseId: string; moduleId: string }>;
-  searchParams: Promise<{ error?: string }>;
 }) {
   const { courseId, moduleId } = await params;
-  const { error } = await searchParams;
   const token = await requireAccessToken();
   const locale = await getLocale();
   const t = TEXT[locale];
@@ -128,31 +134,14 @@ export default async function LeccionesDelModuloPage({
       </Link>
       <h1 className="mt-2 mb-6 text-2xl font-semibold">{courseModule.title}</h1>
 
-      {error && (
-        <div className="mb-6">
-          <ErrorBanner message={decodeURIComponent(error)} />
-        </div>
-      )}
-
       {canEditModule && (
-        <form
-          action={actualizarModulo.bind(null, courseId, moduleId)}
-          className="mb-8 flex max-w-sm gap-2"
-        >
-          <input
-            name="title"
-            type="text"
-            defaultValue={courseModule.title}
-            required
-            className="flex-1 rounded border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-          />
-          <button
-            type="submit"
-            className="rounded-full border border-zinc-300 px-4 py-2 text-sm hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
-          >
-            {t.renameModule}
-          </button>
-        </form>
+        <RenombrarModuloForm
+          courseId={courseId}
+          moduleId={moduleId}
+          title={courseModule.title}
+          submitLabel={t.renameModule}
+          submittingLabel={t.renamingModule}
+        />
       )}
 
       <h2 className="mb-3 text-lg font-medium">{t.lessons}</h2>
@@ -170,31 +159,23 @@ export default async function LeccionesDelModuloPage({
               </Link>
               <div className="flex items-center gap-3">
                 {canEditLesson && (
-                  <form
-                    action={actualizarLeccionTitulo.bind(null, courseId, moduleId, lesson.id)}
-                    className="flex items-center gap-1"
-                  >
-                    <input
-                      name="title"
-                      type="text"
-                      defaultValue={lesson.title}
-                      required
-                      className="w-40 rounded border border-zinc-300 px-2 py-1 text-xs dark:border-zinc-700 dark:bg-zinc-900"
-                    />
-                    <button type="submit" className="text-xs underline">
-                      {t.save}
-                    </button>
-                  </form>
+                  <ActualizarLeccionTituloForm
+                    courseId={courseId}
+                    moduleId={moduleId}
+                    lessonId={lesson.id}
+                    title={lesson.title}
+                    saveLabel={t.save}
+                    savingLabel={t.saving}
+                  />
                 )}
                 {canDeleteLesson && (
-                  <form action={eliminarLeccion.bind(null, courseId, moduleId, lesson.id)}>
-                    <ConfirmSubmitButton
-                      className="text-xs text-red-600 underline dark:text-red-400"
-                      confirmMessage={t.deleteConfirm(lesson.title)}
-                    >
-                      {t.delete}
-                    </ConfirmSubmitButton>
-                  </form>
+                  <EliminarLeccionButton
+                    courseId={courseId}
+                    moduleId={moduleId}
+                    lessonId={lesson.id}
+                    confirmMessage={t.deleteConfirm(lesson.title)}
+                    label={t.delete}
+                  />
                 )}
               </div>
             </li>
@@ -205,27 +186,14 @@ export default async function LeccionesDelModuloPage({
       {canCreateLesson && (
         <>
           <h3 className="mb-3 text-base font-medium">{t.createLesson}</h3>
-          <form
-            action={crearLeccion.bind(null, courseId, moduleId)}
-            className="mb-10 flex max-w-xl flex-col gap-3"
-          >
-            <input
-              name="title"
-              type="text"
-              required
-              placeholder={t.lessonPlaceholder}
-              className="rounded border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
-            />
-            <textarea
-              name="content"
-              rows={6}
-              placeholder={t.contentPlaceholder}
-              className="rounded border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
-            />
-            <Button type="submit" className="self-start">
-              {t.createLessonSubmit}
-            </Button>
-          </form>
+          <CrearLeccionForm
+            courseId={courseId}
+            moduleId={moduleId}
+            titlePlaceholder={t.lessonPlaceholder}
+            contentPlaceholder={t.contentPlaceholder}
+            submitLabel={t.createLessonSubmit}
+            submittingLabel={t.creatingLesson}
+          />
         </>
       )}
 

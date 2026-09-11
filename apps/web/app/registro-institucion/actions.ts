@@ -1,10 +1,24 @@
 'use server';
 
-import { redirect } from 'next/navigation';
+// ============================================================================
+// registro-institucion/actions.ts — Crear una solicitud de alta. No llama a
+// redirect() (ver la nota extensa en periodos/actions.ts): esta misma
+// pantalla lee headers() directo (para mostrar el dominio raiz real, ver
+// page.tsx) — el re-render post-redirect() de Next.js le devolvia el host
+// INTERNO del contenedor en vez del dominio publico real. Ahora la accion
+// devuelve un estado que RegistrationForm.tsx consume con useActionState, y
+// la confirmacion de "enviado" se muestra sin navegar a ningun lado.
+// ============================================================================
+
 import { apiFetchPublic, toErrorMessage } from '@/lib/api';
 import { trackEvent } from '@/lib/analytics';
 
-export async function crearSolicitud(formData: FormData) {
+export type SolicitudActionState = { error: string | null; submitted?: boolean };
+
+export async function crearSolicitud(
+  _prevState: SolicitudActionState,
+  formData: FormData,
+): Promise<SolicitudActionState> {
   const dto = {
     institutionName: String(formData.get('institutionName') ?? '').trim(),
     desiredSubdomain: String(formData.get('desiredSubdomain') ?? '').trim().toLowerCase(),
@@ -22,9 +36,9 @@ export async function crearSolicitud(formData: FormData) {
       body: JSON.stringify(dto),
     });
   } catch (err) {
-    redirect(`/registro-institucion?error=${encodeURIComponent(toErrorMessage(err))}`);
+    return { error: toErrorMessage(err) };
   }
 
   void trackEvent('registration_submitted');
-  redirect('/registro-institucion?enviado=1');
+  return { error: null, submitted: true };
 }

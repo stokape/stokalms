@@ -13,15 +13,22 @@
 // props desde page.tsx) — nada de esto reemplaza el guardado real, solo
 // agrega una vista previa y una forma mas comoda de elegir el color ENCIMA
 // de los mismos formularios de siempre.
+//
+// Las 4 Server Actions ya NO llaman a redirect() (ver la nota extensa en
+// periodos/actions.ts) -- BrandingStudio.tsx YA ES un Client Component (por
+// la vista previa en vivo), asi que useActionState se usa directo aca
+// adentro, sin necesitar un wrapper aparte.
 // ============================================================================
 
-import { useRef, useState } from 'react';
+import { useActionState, useRef, useState } from 'react';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
+import { ErrorBanner } from '@/components/ErrorBanner';
 import { fileInputClasses, labelClasses } from '@/components/ui/field-styles';
 import { derivePrimaryPalette } from '@/lib/color';
 import { StokaBrandingBadge } from '@/components/StokaBrandingBadge';
+import { INITIAL_ACTION_STATE, type ActionState } from '@/lib/action-state';
 import type { Locale } from '@/lib/locale';
 
 // Paleta curada de colores institucionales tipicos — clic directo en vez de
@@ -65,6 +72,7 @@ const TEXT = {
     colorPickerTitle: 'Elegir color con la paleta del sistema',
     colorHelp: 'Se usa solo si todavía no subiste una imagen de fondo — la imagen siempre tiene prioridad.',
     saveNameAndColor: 'Guardar nombre y colores',
+    saving: 'Guardando…',
     hideStokaBrandingLabel: 'Ocultar el sello "Hecho con Stoka LMS"',
     hideStokaBrandingHelp:
       'Ese sello aparece por defecto en tu página de inicio, en el pie de la app y en la verificación pública de certificados. Ocultarlo es parte del plan Pro.',
@@ -85,6 +93,7 @@ const TEXT = {
     previewHelp: 'Así se va a ver tu página de inicio pública con lo que elegiste arriba — se actualiza al instante, todavía no guardaste nada.',
     institutionNamePlaceholder: 'Nombre de tu institución',
     login: 'Iniciar sesión',
+    uploading: 'Subiendo…',
   },
   en: {
     nameAndColor: 'Name and colors',
@@ -95,6 +104,7 @@ const TEXT = {
     colorPickerTitle: "Choose a color with the system's picker",
     colorHelp: "Only used if you haven't uploaded a background image yet — the image always takes priority.",
     saveNameAndColor: 'Save name and colors',
+    saving: 'Saving…',
     hideStokaBrandingLabel: 'Hide the "Made with Stoka LMS" badge',
     hideStokaBrandingHelp:
       "That badge shows by default on your home page, the app's footer, and public certificate verification. Hiding it is part of the Pro plan.",
@@ -115,10 +125,11 @@ const TEXT = {
     previewHelp: "This is how your public home page will look with what you chose above — it updates instantly, you haven't saved anything yet.",
     institutionNamePlaceholder: "Your institution's name",
     login: 'Log in',
+    uploading: 'Uploading…',
   },
 };
 
-type ServerAction = (formData: FormData) => void | Promise<void>;
+type ServerAction = (prevState: ActionState, formData: FormData) => Promise<ActionState>;
 
 interface BrandingStudioProps {
   tenantName: string;
@@ -163,6 +174,14 @@ export function BrandingStudio({
   const [hideStokaBranding, setHideStokaBranding] = useState(initialHideStokaBranding);
   const colorInputRef = useRef<HTMLInputElement>(null);
   const primaryColorInputRef = useRef<HTMLInputElement>(null);
+
+  const [marcaState, marcaFormAction, marcaPending] = useActionState(actualizarMarca, INITIAL_ACTION_STATE);
+  const [logoState, logoFormAction, logoPending] = useActionState(actualizarLogo, INITIAL_ACTION_STATE);
+  const [fondoState, fondoFormAction, fondoPending] = useActionState(actualizarFondo, INITIAL_ACTION_STATE);
+  const [faviconState, faviconFormAction, faviconPending] = useActionState(
+    actualizarFavicon,
+    INITIAL_ACTION_STATE,
+  );
 
   // Paleta derivada del color de marca elegido (hover, texto de contraste)
   // para que el boton de la vista previa de abajo se vea EXACTAMENTE como
@@ -213,7 +232,12 @@ export function BrandingStudio({
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>
           <h2 className="mb-4 text-base font-medium">{t.nameAndColor}</h2>
-          <form action={actualizarMarca} className="flex flex-col gap-4">
+          {marcaState.error && (
+            <div className="mb-3">
+              <ErrorBanner message={marcaState.error} />
+            </div>
+          )}
+          <form action={marcaFormAction} className="flex flex-col gap-4">
             <Field
               label={t.institutionName}
               name="name"
@@ -303,8 +327,8 @@ export function BrandingStudio({
                 <span className="block text-xs text-muted">{t.hideStokaBrandingHelp}</span>
               </span>
             </label>
-            <Button type="submit" className="self-start">
-              {t.saveNameAndColor}
+            <Button type="submit" className="self-start" disabled={marcaPending}>
+              {marcaPending ? t.saving : t.saveNameAndColor}
             </Button>
           </form>
         </Card>
@@ -325,7 +349,12 @@ export function BrandingStudio({
               {t.logoBroken}
             </p>
           )}
-          <form action={actualizarLogo} className="flex flex-col gap-3">
+          {logoState.error && (
+            <div className="mb-3">
+              <ErrorBanner message={logoState.error} />
+            </div>
+          )}
+          <form action={logoFormAction} className="flex flex-col gap-3">
             <input
               name="file"
               type="file"
@@ -334,8 +363,8 @@ export function BrandingStudio({
               onChange={onLogoFileChange}
               className={fileInputClasses}
             />
-            <Button type="submit" variant="secondary" size="sm" className="self-start">
-              {t.uploadLogo}
+            <Button type="submit" variant="secondary" size="sm" className="self-start" disabled={logoPending}>
+              {logoPending ? t.uploading : t.uploadLogo}
             </Button>
           </form>
         </Card>
@@ -357,7 +386,12 @@ export function BrandingStudio({
               {t.faviconBroken}
             </p>
           )}
-          <form action={actualizarFavicon} className="flex flex-col gap-3">
+          {faviconState.error && (
+            <div className="mb-3">
+              <ErrorBanner message={faviconState.error} />
+            </div>
+          )}
+          <form action={faviconFormAction} className="flex flex-col gap-3">
             <input
               name="file"
               type="file"
@@ -366,8 +400,8 @@ export function BrandingStudio({
               onChange={onFaviconFileChange}
               className={fileInputClasses}
             />
-            <Button type="submit" variant="secondary" size="sm" className="self-start">
-              {t.uploadFavicon}
+            <Button type="submit" variant="secondary" size="sm" className="self-start" disabled={faviconPending}>
+              {faviconPending ? t.uploading : t.uploadFavicon}
             </Button>
           </form>
         </Card>
@@ -388,7 +422,12 @@ export function BrandingStudio({
               {t.backgroundBroken}
             </p>
           )}
-          <form action={actualizarFondo} className="flex flex-col gap-3">
+          {fondoState.error && (
+            <div className="mb-3">
+              <ErrorBanner message={fondoState.error} />
+            </div>
+          )}
+          <form action={fondoFormAction} className="flex flex-col gap-3">
             <input
               name="file"
               type="file"
@@ -397,8 +436,8 @@ export function BrandingStudio({
               onChange={onBgFileChange}
               className={fileInputClasses}
             />
-            <Button type="submit" variant="secondary" size="sm" className="self-start">
-              {t.uploadBackground}
+            <Button type="submit" variant="secondary" size="sm" className="self-start" disabled={fondoPending}>
+              {fondoPending ? t.uploading : t.uploadBackground}
             </Button>
           </form>
         </Card>

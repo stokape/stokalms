@@ -21,18 +21,15 @@
 import Link from 'next/link';
 import { requireAccessToken, apiFetch, getPermissions, can, toErrorMessage } from '@/lib/api';
 import { ErrorBanner } from '@/components/ErrorBanner';
-import { SuccessBanner } from '@/components/SuccessBanner';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
-import { Button } from '@/components/ui/Button';
 import { LinkButton } from '@/components/ui/LinkButton';
-import { ConfirmSubmitButton } from '@/components/ui/ConfirmSubmitButton';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { UsersIcon } from '@/components/ui/icons';
-import { fieldClasses, selectClasses, fileInputClasses } from '@/components/ui/field-styles';
+import { fieldClasses } from '@/components/ui/field-styles';
 import { getLocale } from '@/lib/locale';
-import { asignarRol, quitarRol, asignarRolesCSV, asignarRolMasivo } from './actions';
+import { QuitarRolButton, AsignarRolForm, AsignarRolMasivoForm, AsignarRolesCSVForm } from './UsuariosForms';
 
 const TEXT = {
   es: {
@@ -52,12 +49,14 @@ const TEXT = {
     wholeTenant: 'Todo el tenant',
     onlyInOption: 'Solo en',
     assignRole: 'Asignar rol',
+    assigningRole: 'Asignando…',
     footerPrefix: 'Para que alguien nuevo aparezca aquí, primero tiene que matricularse en un curso (ver',
     courses: 'Cursos',
     footerSuffix: ') o iniciar sesión al menos una vez.',
     bulkTitle: 'Asignar roles a varias personas a la vez (CSV)',
     bulkHelp: 'Un archivo con dos columnas separadas por coma: email, nombre del rol — una fila por persona. Cada nombre de rol debe coincidir exactamente con uno de los roles existentes.',
     bulkUpload: 'Subir CSV',
+    uploadingCsv: 'Subiendo…',
     bulkOk: (count: number, errorNote: string) => `Se procesaron ${count} filas correctamente${errorNote}.`,
     bulkErrorsNote: (n: number) => `, con ${n} error${n === 1 ? '' : 'es'} (detalle abajo)`,
     bulkErrorRow: (email: string, message: string) => `${email}: ${message}`,
@@ -68,6 +67,7 @@ const TEXT = {
     selectPerson: (name: string) => `Seleccionar a ${name}`,
     bulkSelectHint: 'Selecciona personas de la lista y elige un rol para asignárselo a todas de una vez (aplica a todo el tenant, sin acotar a un curso).',
     bulkAssignSelected: 'Asignar a los seleccionados',
+    assigningSelected: 'Asignando…',
   },
   en: {
     title: 'Users and roles',
@@ -86,12 +86,14 @@ const TEXT = {
     wholeTenant: 'Entire tenant',
     onlyInOption: 'Only in',
     assignRole: 'Assign role',
+    assigningRole: 'Assigning…',
     footerPrefix: 'For someone new to appear here, they first need to enroll in a course (see',
     courses: 'Courses',
     footerSuffix: ') or log in at least once.',
     bulkTitle: 'Assign roles to several people at once (CSV)',
     bulkHelp: 'A file with two comma-separated columns: email, role name — one row per person. Each role name must match an existing role exactly.',
     bulkUpload: 'Upload CSV',
+    uploadingCsv: 'Uploading…',
     bulkOk: (count: number, errorNote: string) => `${count} rows were processed successfully${errorNote}.`,
     bulkErrorsNote: (n: number) => `, with ${n} error${n === 1 ? '' : 's'} (details below)`,
     bulkErrorRow: (email: string, message: string) => `${email}: ${message}`,
@@ -102,6 +104,7 @@ const TEXT = {
     selectPerson: (name: string) => `Select ${name}`,
     bulkSelectHint: 'Select people from the list and pick a role to assign it to all of them at once (applies tenant-wide, not scoped to a course).',
     bulkAssignSelected: 'Assign to selected',
+    assigningSelected: 'Assigning…',
   },
 };
 
@@ -134,12 +137,9 @@ interface Course {
 export default async function UsuariosPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; bulkOk?: string; bulkErrors?: string; q?: string }>;
+  searchParams: Promise<{ q?: string }>;
 }) {
-  const { error, bulkOk, bulkErrors, q } = await searchParams;
-  const parsedBulkErrors: Array<{ email: string; message?: string }> = bulkErrors
-    ? JSON.parse(bulkErrors)
-    : [];
+  const { q } = await searchParams;
   const token = await requireAccessToken();
   const t = TEXT[await getLocale()];
   const permissions = await getPermissions(token);
@@ -199,54 +199,21 @@ export default async function UsuariosPage({
         </form>
       )}
 
-      {error && (
-        <div className="mb-6">
-          <ErrorBanner message={decodeURIComponent(error)} />
-        </div>
-      )}
-
-      {bulkOk !== undefined && (
-        <SuccessBanner>
-          <p>
-            {t.bulkOk(
-              Number(bulkOk),
-              parsedBulkErrors.length > 0 ? t.bulkErrorsNote(parsedBulkErrors.length) : '',
-            )}
-          </p>
-          {parsedBulkErrors.length > 0 && (
-            <ul className="mt-2 list-disc space-y-0.5 pl-5 text-xs text-danger">
-              {parsedBulkErrors.map((e, i) => (
-                <li key={i}>{t.bulkErrorRow(e.email, e.message ?? '')}</li>
-              ))}
-            </ul>
-          )}
-        </SuccessBanner>
-      )}
-
       {canBulkAssign && filteredMembers.length > 0 && (
-        // Ver la nota junto a los checkboxes mas abajo: este <form> no
-        // envuelve la lista — cada fila le manda sus checkboxes marcados via
-        // el atributo "form", asociandolos aunque vivan en otra parte del
-        // DOM (necesario porque cada fila ya tiene SU PROPIO <form> para
-        // asignar/quitar un rol individual, y HTML no permite anidar
-        // formularios).
-        <form
-          id="bulk-role-form"
-          action={asignarRolMasivo}
-          className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-dashed border-border bg-surface/50 px-4 py-3"
-        >
-          <p className="mr-2 flex-1 basis-full text-sm text-muted sm:basis-auto">{t.bulkSelectHint}</p>
-          <select name="roleId" required className={`max-w-[200px] ${selectClasses}`}>
-            {roles.map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.name}
-              </option>
-            ))}
-          </select>
-          <Button type="submit" variant="secondary" size="sm">
-            {t.bulkAssignSelected}
-          </Button>
-        </form>
+        // Ver la nota en UsuariosForms.tsx: este <form> no envuelve la lista
+        // — cada fila le manda sus checkboxes marcados via el atributo
+        // "form", asociandolos aunque vivan en otra parte del DOM (necesario
+        // porque cada fila ya tiene SU PROPIO <form> para asignar/quitar un
+        // rol individual, y HTML no permite anidar formularios).
+        <AsignarRolMasivoForm
+          roles={roles}
+          hint={t.bulkSelectHint}
+          submitLabel={t.bulkAssignSelected}
+          submittingLabel={t.assigningSelected}
+          okLabel={t.bulkOk}
+          errorsNoteLabel={t.bulkErrorsNote}
+          errorRowLabel={t.bulkErrorRow}
+        />
       )}
 
       {members.length === 0 ? (
@@ -343,56 +310,27 @@ export default async function UsuariosPage({
                             <span className="text-muted"> · {t.onlyIn} {r.scopeCourseTitle}</span>
                           )}
                         </span>
-                        <form action={quitarRol.bind(null, m.userTenantId, r.userRoleId)}>
-                          <ConfirmSubmitButton
-                            className="text-xs font-medium text-danger hover:underline"
-                            confirmMessage={t.removeConfirm(r.roleName, m.fullName)}
-                          >
-                            {t.remove}
-                          </ConfirmSubmitButton>
-                        </form>
+                        <QuitarRolButton
+                          userTenantId={m.userTenantId}
+                          userRoleId={r.userRoleId}
+                          confirmMessage={t.removeConfirm(r.roleName, m.fullName)}
+                          label={t.remove}
+                        />
                       </li>
                     ))}
                   </ul>
                 )}
 
-                <form
-                  action={asignarRol.bind(null, m.userTenantId)}
-                  className="flex flex-wrap items-center gap-2"
-                >
-                  {/* "max-w-[...]" en vez de "w-auto": "selectClasses" ya trae
-                     "w-full" (pensado para un <label> propio en una sola
-                     columna) — un ancho fijo simplemente le pone un techo,
-                     nunca compite con esa utilidad por especificidad (a
-                     diferencia de agregar OTRO "w-*"), asi el <select>
-                     no fuerza a los demas campos de esta fila a saltar de
-                     linea. Mismo truco que dominios/page.tsx. */}
-                  <select name="roleId" required className={`max-w-[220px] ${selectClasses}`}>
-                    {roles.map((r) => (
-                      <option key={r.id} value={r.id}>
-                        {r.name}
-                      </option>
-                    ))}
-                  </select>
-                  {courses && courses.length > 0 && (
-                    <select
-                      name="scopeCourseId"
-                      defaultValue=""
-                      title={t.scopeTitle}
-                      className={`max-w-[220px] ${selectClasses}`}
-                    >
-                      <option value="">{t.wholeTenant}</option>
-                      {courses.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {t.onlyInOption}: {c.title}
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                  <Button type="submit" size="sm">
-                    {t.assignRole}
-                  </Button>
-                </form>
+                <AsignarRolForm
+                  userTenantId={m.userTenantId}
+                  roles={roles}
+                  courses={courses}
+                  scopeTitle={t.scopeTitle}
+                  wholeTenantLabel={t.wholeTenant}
+                  onlyInLabel={t.onlyInOption}
+                  submitLabel={t.assignRole}
+                  submittingLabel={t.assigningRole}
+                />
               </div>
               </details>
             </div>
@@ -412,12 +350,13 @@ export default async function UsuariosPage({
         <Card className="mt-6">
           <h2 className="mb-1 text-base font-medium">{t.bulkTitle}</h2>
           <p className="mb-4 text-sm text-muted">{t.bulkHelp}</p>
-          <form action={asignarRolesCSV} className="flex flex-wrap items-center gap-3">
-            <input name="file" type="file" accept=".csv,text/csv" required className={fileInputClasses} />
-            <Button type="submit" variant="secondary" size="sm">
-              {t.bulkUpload}
-            </Button>
-          </form>
+          <AsignarRolesCSVForm
+            submitLabel={t.bulkUpload}
+            submittingLabel={t.uploadingCsv}
+            okLabel={t.bulkOk}
+            errorsNoteLabel={t.bulkErrorsNote}
+            errorRowLabel={t.bulkErrorRow}
+          />
         </Card>
       )}
     </div>

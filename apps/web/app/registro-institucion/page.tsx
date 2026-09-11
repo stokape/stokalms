@@ -19,20 +19,18 @@
 
 import Link from 'next/link';
 import { headers } from 'next/headers';
-import { ErrorBanner } from '@/components/ErrorBanner';
 import { LocaleSwitcher } from '@/components/LocaleSwitcher';
 import { StokaWordmark } from '@/components/StokaLogo';
 import { getLocale } from '@/lib/locale';
 import { getRegistroInstitucionDictionary } from '../dictionaries/registro-institucion';
-import { crearSolicitud } from './actions';
 import { RegistrationForm } from './RegistrationForm';
 
 export default async function RegistroInstitucionPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; enviado?: string; plan?: string }>;
+  searchParams: Promise<{ plan?: string }>;
 }) {
-  const [{ error, enviado, plan }, locale, hostHeader] = await Promise.all([
+  const [{ plan }, locale, hostHeader] = await Promise.all([
     searchParams,
     getLocale(),
     headers().then((h) => h.get('host') ?? ''),
@@ -62,27 +60,11 @@ export default async function RegistroInstitucionPage({
       <h1 className="mb-2 text-2xl font-semibold tracking-tight">{t.title}</h1>
       <p className="mb-6 text-sm text-muted">{isEnterprise ? t.enterpriseIntro : t.subtitle}</p>
 
-      {enviado && (
-        <div className="mb-6 rounded-xl border border-success/20 bg-success-bg px-4 py-4 text-sm text-success">
-          <p className="font-medium">{t.successTitle}</p>
-          <p className="mt-1">{t.successBody}</p>
-        </div>
-      )}
-
-      {error && (
-        <div className="mb-6">
-          <ErrorBanner message={decodeURIComponent(error)} />
-        </div>
-      )}
-
-      {!enviado && (
-        <RegistrationForm
-          action={crearSolicitud}
-          t={t}
-          rootHostname={rootHostname}
-          messagePrefill={isEnterprise ? t.enterpriseMessagePrefill : undefined}
-        />
-      )}
+      <RegistrationForm
+        t={t}
+        rootHostname={rootHostname}
+        messagePrefill={isEnterprise ? t.enterpriseMessagePrefill : undefined}
+      />
     </div>
   );
 }

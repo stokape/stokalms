@@ -1,7 +1,22 @@
 'use server';
 
-import { redirect } from 'next/navigation';
+// ============================================================================
+// [lessonId]/actions.ts — Editar el contenido de la Lección, sus Recursos
+// (subir archivo/enlace, editar, borrar) y generar preguntas con IA.
+//
+// NINGUNA llama a redirect(): se detecto en produccion que redirect() dentro
+// de una Server Action dispara un re-renderizado interno de Next.js donde
+// headers()/cookies() dejan de reflejar el request real (ver la nota
+// extensa en periodos/actions.ts). Todas devuelven un ActionState (ver
+// LessonForms.tsx, que las consume con useActionState) y revalidatePath()
+// alcanza para reflejar el cambio sin navegar a ningun lado. El resultado de
+// la IA (antes viajaba codificado en la URL del redirect) ahora viaja en el
+// propio estado que devuelve la Server Action.
+// ============================================================================
+
+import { revalidatePath } from 'next/cache';
 import { requireAccessToken, apiFetch, apiFetchUpload, toErrorMessage } from '@/lib/api';
+import type { ActionState } from '@/lib/action-state';
 
 function lessonPath(courseId: string, moduleId: string, lessonId: string) {
   return `/cursos/${courseId}/modulos/${moduleId}/${lessonId}`;
@@ -11,10 +26,10 @@ export async function actualizarLeccion(
   courseId: string,
   moduleId: string,
   lessonId: string,
+  _prevState: ActionState,
   formData: FormData,
-) {
+): Promise<ActionState> {
   const token = await requireAccessToken();
-  const path = lessonPath(courseId, moduleId, lessonId);
   const title = String(formData.get('title') ?? '').trim();
   const content = String(formData.get('content') ?? '');
 
@@ -24,10 +39,11 @@ export async function actualizarLeccion(
       body: JSON.stringify({ title, content }),
     });
   } catch (err) {
-    redirect(`${path}?error=${encodeURIComponent(toErrorMessage(err))}`);
+    return { error: toErrorMessage(err) };
   }
 
-  redirect(path);
+  revalidatePath(lessonPath(courseId, moduleId, lessonId));
+  return { error: null };
 }
 
 export async function actualizarRecurso(
@@ -35,10 +51,10 @@ export async function actualizarRecurso(
   moduleId: string,
   lessonId: string,
   resourceId: string,
+  _prevState: ActionState,
   formData: FormData,
-) {
+): Promise<ActionState> {
   const token = await requireAccessToken();
-  const path = lessonPath(courseId, moduleId, lessonId);
   const title = String(formData.get('title') ?? '').trim();
   const description = String(formData.get('description') ?? '').trim();
   const url = String(formData.get('url') ?? '').trim();
@@ -57,25 +73,26 @@ export async function actualizarRecurso(
       },
     );
   } catch (err) {
-    redirect(`${path}?error=${encodeURIComponent(toErrorMessage(err))}`);
+    return { error: toErrorMessage(err) };
   }
 
-  redirect(path);
+  revalidatePath(lessonPath(courseId, moduleId, lessonId));
+  return { error: null };
 }
 
 export async function subirRecurso(
   courseId: string,
   moduleId: string,
   lessonId: string,
+  _prevState: ActionState,
   formData: FormData,
-) {
+): Promise<ActionState> {
   const token = await requireAccessToken();
-  const path = lessonPath(courseId, moduleId, lessonId);
   const file = formData.get('file');
   const title = String(formData.get('title') ?? '').trim();
 
   if (!(file instanceof File) || file.size === 0) {
-    redirect(`${path}?error=${encodeURIComponent('Elige un archivo para subir.')}`);
+    return { error: 'Elige un archivo para subir.' };
   }
 
   // Se arma un FormData NUEVO (en vez de reenviar el que llegó del
@@ -93,20 +110,21 @@ export async function subirRecurso(
       uploadForm,
     );
   } catch (err) {
-    redirect(`${path}?error=${encodeURIComponent(toErrorMessage(err))}`);
+    return { error: toErrorMessage(err) };
   }
 
-  redirect(path);
+  revalidatePath(lessonPath(courseId, moduleId, lessonId));
+  return { error: null };
 }
 
 export async function crearRecursoEnlace(
   courseId: string,
   moduleId: string,
   lessonId: string,
+  _prevState: ActionState,
   formData: FormData,
-) {
+): Promise<ActionState> {
   const token = await requireAccessToken();
-  const path = lessonPath(courseId, moduleId, lessonId);
   const title = String(formData.get('title') ?? '').trim();
   const url = String(formData.get('url') ?? '').trim();
   const description = String(formData.get('description') ?? '').trim();
@@ -118,29 +136,36 @@ export async function crearRecursoEnlace(
       { method: 'POST', body: JSON.stringify({ title, url, description: description || undefined }) },
     );
   } catch (err) {
-    redirect(`${path}?error=${encodeURIComponent(toErrorMessage(err))}`);
+    return { error: toErrorMessage(err) };
   }
 
-  redirect(path);
+  revalidatePath(lessonPath(courseId, moduleId, lessonId));
+  return { error: null };
 }
 
+export type GeneratedQuestion = {
+  prompt: string;
+  options: string[];
+  correctIndex: number;
+};
+
+export type AiActionState = {
+  error: string | null;
+  notConfigured?: boolean;
+  questions?: GeneratedQuestion[];
+};
+
 // "Funcionalidades de IA" (plan Pro) — genera preguntas BORRADOR desde el
-// contenido de la lección (ver ai.service.ts, backend). El resultado viaja
-// de vuelta como query param en el redirect (mismo patrón que
-// "?bulkOk=...&bulkErrors=..." en usuarios/actions.ts): esta pantalla es un
-// Server Component sin estado de cliente, así que no hay otra forma de
-// "mostrar el resultado de la última acción" sin agregar un Client
-// Component solo para esto.
+// contenido de la lección (ver ai.service.ts, backend).
 export async function generarPreguntasIA(
   courseId: string,
   moduleId: string,
   lessonId: string,
-  _formData: FormData,
-) {
+  _prevState: AiActionState,
+): Promise<AiActionState> {
   const token = await requireAccessToken();
-  const path = lessonPath(courseId, moduleId, lessonId);
 
-  let result: { configured: boolean; questions?: unknown; error?: string };
+  let result: { configured: boolean; questions?: GeneratedQuestion[]; error?: string };
   try {
     result = await apiFetch(
       token,
@@ -148,17 +173,17 @@ export async function generarPreguntasIA(
       { method: 'POST' },
     );
   } catch (err) {
-    redirect(`${path}?error=${encodeURIComponent(toErrorMessage(err))}`);
+    return { error: toErrorMessage(err) };
   }
 
   if (!result.configured) {
-    redirect(`${path}?aiNotConfigured=1`);
+    return { error: null, notConfigured: true };
   }
   if (result.error) {
-    redirect(`${path}?error=${encodeURIComponent(result.error)}`);
+    return { error: result.error };
   }
 
-  redirect(`${path}?aiQuestions=${encodeURIComponent(Buffer.from(JSON.stringify(result.questions)).toString('base64url'))}`);
+  return { error: null, questions: result.questions };
 }
 
 export async function eliminarRecurso(
@@ -166,9 +191,9 @@ export async function eliminarRecurso(
   moduleId: string,
   lessonId: string,
   resourceId: string,
-) {
+  _prevState: ActionState,
+): Promise<ActionState> {
   const token = await requireAccessToken();
-  const path = lessonPath(courseId, moduleId, lessonId);
 
   try {
     await apiFetch(
@@ -177,8 +202,9 @@ export async function eliminarRecurso(
       { method: 'DELETE' },
     );
   } catch (err) {
-    redirect(`${path}?error=${encodeURIComponent(toErrorMessage(err))}`);
+    return { error: toErrorMessage(err) };
   }
 
-  redirect(path);
+  revalidatePath(lessonPath(courseId, moduleId, lessonId));
+  return { error: null };
 }

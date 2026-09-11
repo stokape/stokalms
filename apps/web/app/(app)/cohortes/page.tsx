@@ -1,11 +1,19 @@
 // ============================================================================
-// cohortes/page.tsx — Listado de cohortes ("Promoción 2026", "Turno
-// mañana"...) — ver apps/api/src/modules/cohort/. Requiere "cohort:view"
-// (Super Admin, Administrador de entidad, Coordinador académico — ver
-// prisma/seed.js). Crear/borrar cohortes exige además "cohort:create"/
-// "cohort:delete" (solo Super Admin/Administrador de entidad) — el
-// Coordinador ve la lista y entra a cada cohorte a asignar alumnos, pero
-// no puede crear una nueva ni borrar una existente.
+// cohortes/page.tsx — Listado de grupos ("Promoción 2026", "Turno mañana"...)
+// — ver apps/api/src/modules/cohort/ (el modelo/permiso en el backend se
+// sigue llamando "cohort"; la ruta "/cohortes" también, para no romper
+// enlaces existentes — solo el nombre que ve la persona usuaria cambió a
+// "Grupo", más claro que "cohorte"). Requiere "cohort:view" (Super Admin,
+// Administrador de entidad, Coordinador académico — ver prisma/seed.js).
+// Crear/borrar un grupo exige además "cohort:create"/"cohort:delete" (solo
+// Super Admin/Administrador de entidad) — el Coordinador ve la lista y
+// entra a cada grupo a asignar alumnos, pero no puede crear uno nuevo ni
+// borrar uno existente.
+//
+// Crear vive en CohorteForms.tsx (Client Component) A PROPOSITO -- ver la
+// nota extensa en actions.ts: esa Server Action ya NO llama a redirect(),
+// necesita "useActionState" (solo disponible del lado del cliente) para
+// poder mostrarle el error a la persona.
 // ============================================================================
 
 import Link from 'next/link';
@@ -13,43 +21,43 @@ import { requireAccessToken, apiFetch, getPermissions, can, toErrorMessage } fro
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Card } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { CohortIcon } from '@/components/ui/icons';
-import { fieldClasses, labelClasses } from '@/components/ui/field-styles';
 import { getLocale } from '@/lib/locale';
-import { crearCohorte } from './actions';
+import { CrearGrupoForm } from './CohorteForms';
 
 const TEXT = {
   es: {
-    title: 'Cohortes',
+    title: 'Grupos',
     description: 'Agrupa alumnos (ej. "Promoción 2026", "Turno mañana") para matricular y reportar en bloque.',
     members: (n: number) => `${n} ${n === 1 ? 'miembro' : 'miembros'}`,
     manage: 'Gestionar →',
-    empty: 'Todavía no hay cohortes creadas.',
-    emptyWithCreate: 'Creá la primera para agrupar alumnos y matricularlos en bloque.',
-    emptyNoCreate: 'Pedile a un administrador de la institución que cree una.',
-    createCta: 'Crear cohorte ↓',
-    createTitle: 'Crear cohorte',
+    empty: 'Todavía no hay grupos creados.',
+    emptyWithCreate: 'Creá el primero para agrupar alumnos y matricularlos en bloque.',
+    emptyNoCreate: 'Pedile a un administrador de la institución que cree uno.',
+    createCta: 'Crear grupo ↓',
+    createTitle: 'Crear grupo',
     nameLabel: 'Nombre',
     namePlaceholder: 'Ej. Promoción 2026',
     descriptionLabel: 'Descripción (opcional)',
-    create: 'Crear cohorte',
+    create: 'Crear grupo',
+    creating: 'Creando…',
   },
   en: {
-    title: 'Cohorts',
+    title: 'Groups',
     description: 'Group students (e.g. "Class of 2026", "Morning shift") to enroll and report on in bulk.',
     members: (n: number) => `${n} ${n === 1 ? 'member' : 'members'}`,
     manage: 'Manage →',
-    empty: 'No cohorts created yet.',
+    empty: 'No groups created yet.',
     emptyWithCreate: 'Create the first one to group students and enroll them in bulk.',
     emptyNoCreate: 'Ask an institution administrator to create one.',
-    createCta: 'Create cohort ↓',
-    createTitle: 'Create cohort',
+    createCta: 'Create group ↓',
+    createTitle: 'Create group',
     nameLabel: 'Name',
     namePlaceholder: 'E.g. Class of 2026',
     descriptionLabel: 'Description (optional)',
-    create: 'Create cohort',
+    create: 'Create group',
+    creating: 'Creating…',
   },
 };
 
@@ -60,12 +68,7 @@ interface Cohort {
   _count: { members: number };
 }
 
-export default async function CohortesPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ error?: string }>;
-}) {
-  const { error } = await searchParams;
+export default async function CohortesPage() {
   const token = await requireAccessToken();
   const t = TEXT[await getLocale()];
   const permissions = await getPermissions(token);
@@ -81,12 +84,6 @@ export default async function CohortesPage({
   return (
     <div className="mx-auto max-w-3xl">
       <PageHeader title={t.title} description={t.description} />
-
-      {error && (
-        <div className="mb-6">
-          <ErrorBanner message={decodeURIComponent(error)} />
-        </div>
-      )}
 
       {cohorts.length === 0 ? (
         <div className="mb-8">
@@ -127,19 +124,13 @@ export default async function CohortesPage({
       {canCreate && (
         <Card id="crear-cohorte">
           <h2 className="mb-4 text-base font-medium">{t.createTitle}</h2>
-          <form action={crearCohorte} className="flex flex-col gap-4">
-            <label className="flex flex-col gap-1.5 text-sm">
-              <span className={labelClasses}>{t.nameLabel}</span>
-              <input name="name" type="text" required maxLength={120} placeholder={t.namePlaceholder} className={fieldClasses} />
-            </label>
-            <label className="flex flex-col gap-1.5 text-sm">
-              <span className={labelClasses}>{t.descriptionLabel}</span>
-              <input name="description" type="text" maxLength={500} className={fieldClasses} />
-            </label>
-            <Button type="submit" className="self-start">
-              {t.create}
-            </Button>
-          </form>
+          <CrearGrupoForm
+            nameLabel={t.nameLabel}
+            namePlaceholder={t.namePlaceholder}
+            descriptionLabel={t.descriptionLabel}
+            submitLabel={t.create}
+            submittingLabel={t.creating}
+          />
         </Card>
       )}
     </div>

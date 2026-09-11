@@ -15,12 +15,10 @@
 
 import { requireAccessToken, apiFetch, toErrorMessage, getCoursePermissions, can } from '@/lib/api';
 import { ErrorBanner } from '@/components/ErrorBanner';
-import { Button } from '@/components/ui/Button';
-import { ConfirmSubmitButton } from '@/components/ui/ConfirmSubmitButton';
 import { LinkButton } from '@/components/ui/LinkButton';
 import { Breadcrumbs } from '@/components/ui/Breadcrumbs';
 import { getLocale, type Locale } from '@/lib/locale';
-import { crearPregunta, eliminarPregunta, calificarRespuesta } from './actions';
+import { EliminarPreguntaButton, CalificarRespuestaForm, CrearPreguntaForm } from './AssessmentForms';
 
 interface Assessment {
   id: string;
@@ -98,6 +96,7 @@ const TEXT = {
     openLabel: 'Respuesta abierta: consigna',
     promptPlaceholder: 'Ej. Explica con tus palabras...',
     addQuestionSubmit: 'Agregar pregunta',
+    addingQuestion: 'Agregando…',
     submissions: 'Entregas',
     noSubmissions: 'Todavía no hay ninguna entrega.',
     attemptLabel: 'intento',
@@ -110,6 +109,7 @@ const TEXT = {
     scorePlaceholder: 'Puntaje',
     commentPlaceholder: 'Comentario (opcional)',
     gradeSubmit: 'Calificar',
+    grading: 'Calificando…',
     matchSummary: (left: number, right: number) => `${left} elementos a emparejar con ${right} opciones`,
   },
   en: {
@@ -143,6 +143,7 @@ const TEXT = {
     openLabel: 'Open answer: prompt',
     promptPlaceholder: 'E.g. Explain in your own words...',
     addQuestionSubmit: 'Add question',
+    addingQuestion: 'Adding…',
     submissions: 'Submissions',
     noSubmissions: 'No submissions yet.',
     attemptLabel: 'attempt',
@@ -155,6 +156,7 @@ const TEXT = {
     scorePlaceholder: 'Score',
     commentPlaceholder: 'Comment (optional)',
     gradeSubmit: 'Grade',
+    grading: 'Grading…',
     matchSummary: (left: number, right: number) => `${left} items to match with ${right} options`,
   },
 };
@@ -175,13 +177,10 @@ function questionSummary(q: Question, t: (typeof TEXT)['es']): string {
 
 export default async function EvaluacionDetallePage({
   params,
-  searchParams,
 }: {
   params: Promise<{ courseId: string; assessmentId: string }>;
-  searchParams: Promise<{ error?: string }>;
 }) {
   const { courseId, assessmentId } = await params;
-  const { error } = await searchParams;
   const token = await requireAccessToken();
   const locale = await getLocale();
   const t = TEXT[locale];
@@ -247,12 +246,6 @@ export default async function EvaluacionDetallePage({
         {assessment.maxAttempts} {assessment.maxAttempts === 1 ? t.attempt : t.attempts}
       </p>
 
-      {error && (
-        <div className="mb-6">
-          <ErrorBanner message={decodeURIComponent(error)} />
-        </div>
-      )}
-
       {canSubmit && (
         <div className="mb-8">
           {submissions && canAttempt && (
@@ -289,14 +282,13 @@ export default async function EvaluacionDetallePage({
                 )}
               </div>
               {canSeeAnswers && (
-                <form action={eliminarPregunta.bind(null, courseId, assessmentId, q.id)}>
-                  <ConfirmSubmitButton
-                    className="text-xs text-red-600 underline dark:text-red-400"
-                    confirmMessage={t.deleteConfirm}
-                  >
-                    {t.delete}
-                  </ConfirmSubmitButton>
-                </form>
+                <EliminarPreguntaButton
+                  courseId={courseId}
+                  assessmentId={assessmentId}
+                  questionId={q.id}
+                  confirmMessage={t.deleteConfirm}
+                  label={t.delete}
+                />
               )}
             </li>
           ))}
@@ -306,111 +298,7 @@ export default async function EvaluacionDetallePage({
       {canSeeAnswers && (
       <>
       <h2 className="mb-3 text-lg font-medium">{t.addQuestion}</h2>
-      <form
-        action={crearPregunta.bind(null, courseId, assessmentId)}
-        className="mb-10 flex max-w-xl flex-col gap-3 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800"
-      >
-        <div className="flex gap-2">
-          <select
-            name="type"
-            required
-            className="rounded border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
-          >
-            <option value="mcq">{TYPE_LABELS.mcq}</option>
-            <option value="tf">{TYPE_LABELS.tf}</option>
-            <option value="matching">{TYPE_LABELS.matching}</option>
-            <option value="open">{TYPE_LABELS.open}</option>
-          </select>
-          <input
-            name="points"
-            type="number"
-            min={0}
-            step="0.01"
-            required
-            placeholder={t.points}
-            className="w-28 rounded border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
-          />
-        </div>
-
-        <p className="text-xs text-zinc-500">{t.fillMatchingType}</p>
-
-        <div>
-          <label className="mb-1 block text-xs font-medium text-zinc-500">{t.mcqLabel}</label>
-          <textarea
-            name="options"
-            rows={3}
-            placeholder={t.optionsPlaceholder}
-            className="w-full rounded border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-          />
-          <div className="mt-1 flex items-center gap-3">
-            <input
-              name="correctIndexes"
-              type="text"
-              placeholder={t.correctPlaceholder}
-              className="flex-1 rounded border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-            />
-            <label className="flex items-center gap-1 text-xs text-zinc-500">
-              <input type="checkbox" name="allowMultiple" /> {t.allowMultiple}
-            </label>
-          </div>
-        </div>
-
-        <div>
-          <label className="mb-1 block text-xs font-medium text-zinc-500">{t.tfLabel}</label>
-          <input
-            name="statement"
-            type="text"
-            placeholder={t.statementPlaceholder}
-            className="w-full rounded border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-          />
-          <div className="mt-1 flex gap-3 text-xs text-zinc-500">
-            <label className="flex items-center gap-1">
-              <input type="radio" name="correctValue" value="true" /> {t.true}
-            </label>
-            <label className="flex items-center gap-1">
-              <input type="radio" name="correctValue" value="false" /> {t.false}
-            </label>
-          </div>
-        </div>
-
-        <div>
-          <label className="mb-1 block text-xs font-medium text-zinc-500">{t.matchingLabel}</label>
-          <div className="flex gap-2">
-            <textarea
-              name="leftItems"
-              rows={3}
-              placeholder={t.leftPlaceholder}
-              className="w-1/2 rounded border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-            />
-            <textarea
-              name="rightItems"
-              rows={3}
-              placeholder={t.rightPlaceholder}
-              className="w-1/2 rounded border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-            />
-          </div>
-          <input
-            name="pairs"
-            type="text"
-            placeholder={t.pairsPlaceholder}
-            className="mt-1 w-full rounded border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-          />
-        </div>
-
-        <div>
-          <label className="mb-1 block text-xs font-medium text-zinc-500">{t.openLabel}</label>
-          <input
-            name="prompt"
-            type="text"
-            placeholder={t.promptPlaceholder}
-            className="w-full rounded border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-          />
-        </div>
-
-        <Button type="submit" className="self-start">
-          {t.addQuestionSubmit}
-        </Button>
-      </form>
+      <CrearPreguntaForm courseId={courseId} assessmentId={assessmentId} typeLabels={TYPE_LABELS} t={t} />
       </>
       )}
 
@@ -452,38 +340,16 @@ export default async function EvaluacionDetallePage({
                           ) : !canGrade ? (
                             <p className="text-zinc-500">{t.pendingReview}</p>
                           ) : (
-                            <form
-                              action={calificarRespuesta.bind(
-                                null,
-                                courseId,
-                                assessmentId,
-                                s.id,
-                                a.questionId,
-                              )}
-                              className="mt-1 flex flex-wrap items-center gap-2"
-                            >
-                              <input
-                                name="score"
-                                type="number"
-                                min={0}
-                                step="0.01"
-                                required
-                                placeholder={t.scorePlaceholder}
-                                className="w-24 rounded border border-zinc-300 px-2 py-1 dark:border-zinc-700 dark:bg-zinc-900"
-                              />
-                              <input
-                                name="feedback"
-                                type="text"
-                                placeholder={t.commentPlaceholder}
-                                className="flex-1 rounded border border-zinc-300 px-2 py-1 dark:border-zinc-700 dark:bg-zinc-900"
-                              />
-                              <button
-                                type="submit"
-                                className="rounded-full border border-zinc-300 px-3 py-1 text-xs hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
-                              >
-                                {t.gradeSubmit}
-                              </button>
-                            </form>
+                            <CalificarRespuestaForm
+                              courseId={courseId}
+                              assessmentId={assessmentId}
+                              submissionId={s.id}
+                              questionId={a.questionId}
+                              scorePlaceholder={t.scorePlaceholder}
+                              commentPlaceholder={t.commentPlaceholder}
+                              submitLabel={t.gradeSubmit}
+                              submittingLabel={t.grading}
+                            />
                           )}
                         </li>
                       );

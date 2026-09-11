@@ -19,12 +19,19 @@
 // checkout de pago real, "resolvePlanCtaHref" es el UNICO lugar que hay
 // que tocar (agregar un caso 'checkout' a PlanCtaAction) — ningun
 // componente visual necesita cambiar.
+//
+// "registrarSeleccionPlan" ya NO llama a redirect() (ver la nota extensa
+// en periodos/actions.ts): registro-institucion/page.tsx lee headers()
+// directo para mostrar el dominio raiz real, y el re-render post-redirect()
+// de Next.js le devolvia el host INTERNO del contenedor. Ahora devuelve
+// "redirectTo" y el CLIENTE navega con router.push() (ver
+// useActionRedirect.ts) -- un request real del navegador, sin ese problema.
 // ============================================================================
 
-import { redirect } from 'next/navigation';
 import { headers } from 'next/headers';
 import { trackEvent } from '@/lib/analytics';
 import { getPricingPlan, type BillingPeriod, type PlanId } from '@/lib/pricing';
+import type { ActionState } from '@/lib/action-state';
 
 function resolvePlanCtaHref(planId: PlanId): string {
   // Los dos casos de PlanCtaAction ('register' | 'contactSales') resuelven
@@ -43,7 +50,8 @@ function resolvePlanCtaHref(planId: PlanId): string {
 export async function registrarSeleccionPlan(
   planId: PlanId,
   billingPeriod: BillingPeriod,
-): Promise<void> {
+  _prevState: ActionState,
+): Promise<ActionState> {
   const host = (await headers()).get('host') ?? undefined;
 
   // El plan Enterprise no es una "seleccion de compra" (no tiene precio
@@ -56,7 +64,7 @@ export async function registrarSeleccionPlan(
     void trackEvent('plan_selected', { host, metadata: { planId, billingPeriod } });
   }
 
-  redirect(resolvePlanCtaHref(planId));
+  return { error: null, redirectTo: resolvePlanCtaHref(planId) };
 }
 
 // Llamado directamente (sin <form>) desde BillingToggle.tsx (Client

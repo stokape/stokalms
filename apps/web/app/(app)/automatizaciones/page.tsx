@@ -7,12 +7,9 @@
 
 import { requireAccessToken, apiFetch, toErrorMessage } from '@/lib/api';
 import { ErrorBanner } from '@/components/ErrorBanner';
-import { SuccessBanner } from '@/components/SuccessBanner';
 import { PageHeader } from '@/components/ui/PageHeader';
-import { Card } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
 import { getLocale } from '@/lib/locale';
-import { guardarAutomatizaciones } from './actions';
+import { AutomatizacionesForm } from './AutomatizacionesForm';
 
 const TEXT = {
   es: {
@@ -34,6 +31,7 @@ const TEXT = {
     digestHelp:
       'Cada lunes, un correo a cada Coordinador académico con la lista completa de alumnos en riesgo (14+ días sin actividad) — mismo criterio que usa el reporte "Analítica avanzada" en Reportes.',
     save: 'Guardar',
+    saving: 'Guardando…',
   },
   en: {
     title: 'Automations',
@@ -54,6 +52,7 @@ const TEXT = {
     digestHelp:
       'Every Monday, each Academic Coordinator gets an email with the full list of at-risk students (14+ days without activity) — same criteria as the "Advanced analytics" report under Reports.',
     save: 'Save',
+    saving: 'Saving…',
   },
 };
 
@@ -64,12 +63,7 @@ interface AutomationSettings {
   atRiskWeeklyDigest: boolean;
 }
 
-export default async function AutomatizacionesPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ error?: string; saved?: string }>;
-}) {
-  const { error, saved } = await searchParams;
+export default async function AutomatizacionesPage() {
   const token = await requireAccessToken();
   const t = TEXT[await getLocale()];
 
@@ -84,73 +78,7 @@ export default async function AutomatizacionesPage({
     <div className="mx-auto max-w-2xl">
       <PageHeader title={t.title} description={t.description} />
 
-      {error && (
-        <div className="mb-6">
-          <ErrorBanner message={decodeURIComponent(error)} />
-        </div>
-      )}
-      {saved && <SuccessBanner>{t.done}</SuccessBanner>}
-
-      <Card>
-        <form action={guardarAutomatizaciones} className="flex flex-col gap-6">
-          <label className="flex items-start gap-3">
-            <input
-              type="checkbox"
-              name="autoIssueCertificate"
-              defaultChecked={settings.autoIssueCertificate}
-              className="mt-0.5 h-4 w-4 rounded border-border text-primary focus:ring-primary/30"
-            />
-            <span className="text-sm">
-              <span className="font-medium">{t.certTitle}</span>
-              <span className="block text-xs text-muted">{t.certHelp}</span>
-            </span>
-          </label>
-
-          <label className="flex items-start gap-3">
-            <input
-              type="checkbox"
-              name="dueDateReminders"
-              defaultChecked={settings.dueDateReminders}
-              className="mt-0.5 h-4 w-4 rounded border-border text-primary focus:ring-primary/30"
-            />
-            <span className="text-sm">
-              <span className="font-medium">{t.reminderTitle}</span>
-              <span className="block text-xs text-muted">{t.reminderHelp}</span>
-              <span className="mt-1 block text-xs text-warning">{t.reminderNote}</span>
-            </span>
-          </label>
-
-          <label className="flex items-start gap-3">
-            <input
-              type="checkbox"
-              name="inactivityAlerts"
-              defaultChecked={settings.inactivityAlerts}
-              className="mt-0.5 h-4 w-4 rounded border-border text-primary focus:ring-primary/30"
-            />
-            <span className="text-sm">
-              <span className="font-medium">{t.inactivityTitle}</span>
-              <span className="block text-xs text-muted">{t.inactivityHelp}</span>
-            </span>
-          </label>
-
-          <label className="flex items-start gap-3">
-            <input
-              type="checkbox"
-              name="atRiskWeeklyDigest"
-              defaultChecked={settings.atRiskWeeklyDigest}
-              className="mt-0.5 h-4 w-4 rounded border-border text-primary focus:ring-primary/30"
-            />
-            <span className="text-sm">
-              <span className="font-medium">{t.digestTitle}</span>
-              <span className="block text-xs text-muted">{t.digestHelp}</span>
-            </span>
-          </label>
-
-          <div className="flex justify-end">
-            <Button type="submit">{t.save}</Button>
-          </div>
-        </form>
-      </Card>
+      <AutomatizacionesForm settings={settings} t={t} />
     </div>
   );
 }
