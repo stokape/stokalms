@@ -53,6 +53,14 @@ export class RequestLoggingMiddleware implements NestMiddleware {
         durationMs,
         userTenantId: request.user?.userTenantId,
         tenantId: request.user?.tenantId,
+        // Solo en 401 (ver "isNoteworthy" abajo): permite diagnosticar de
+        // un vistazo un "Este dominio no corresponde a ninguna institucion"
+        // (ver auth.service.ts, findOrProvisionUser) -- sin esto, un 401 de
+        // ese tipo no deja ningun rastro de CUAL host trajo el request que
+        // fallo, porque "request.user" nunca llega a poblarse (Passport
+        // corta antes). Se omite en el resto de los status codes para no
+        // ensuciar el log con un dato que ahi no aporta nada.
+        ...(statusCode === 401 && { host: request.headers['x-tenant-host'] ?? request.headers.host }),
       };
 
       // WARN para lo que un panel de alertas deberia poder filtrar de un
