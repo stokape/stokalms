@@ -346,7 +346,11 @@ model Term {
 model Course {
   id              String   @id @default(uuid())
   tenantId        String   @map("tenant_id")
-  termId          String   @map("term_id")
+  // Opcional a proposito (ver create-course.dto.ts): exigir un periodo
+  // academico ANTES de poder crear el primer curso bloqueaba a cualquier
+  // institucion nueva sin ninguno todavia creado — hoy se puede asignar
+  // despues (ver update-course.dto.ts) o dejar el curso sin periodo.
+  termId          String?  @map("term_id")
   // onDelete: Restrict (no Cascade): borrar un periodo academico que
   // TODAVIA tiene cursos NO debe arrastrar silenciosamente todo lo que
   // cuelga de esos cursos (secciones, matriculas, notas, certificados...).
@@ -355,7 +359,7 @@ model Course {
   // primero debe borrar/mover los cursos a proposito. Se detecto esto
   // probando de verdad: un DELETE de prueba en el modulo Academico borro un
   // curso y su seccion en cascada sin avisar, con la config por defecto.
-  term            Term     @relation(fields: [termId], references: [id], onDelete: Restrict)
+  term            Term?    @relation(fields: [termId], references: [id], onDelete: Restrict)
   code            String
   title           String
   // Escala de notas que usa ESTE curso (cada tenant puede tener varias

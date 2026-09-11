@@ -6,8 +6,13 @@ import { IsNotEmpty, IsOptional, IsString, IsUUID, MaxLength } from 'class-valid
 
 export class CreateCourseDto {
   // A que periodo academico pertenece este curso (ver docs/architecture/02-modelo-de-datos.md).
+  // Opcional: una institucion sin ningun periodo creado todavia puede crear
+  // su primer curso igual, y asignarle un periodo despues (ver
+  // update-course.dto.ts) — antes esto bloqueaba por completo la pantalla
+  // de "crear curso" hasta ir a crear un periodo primero.
+  @IsOptional()
   @IsUUID()
-  termId: string;
+  termId?: string;
 
   @IsString()
   @IsNotEmpty()

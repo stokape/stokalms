@@ -1,15 +1,22 @@
 // ============================================================================
-// periodos/page.tsx — Periodos académicos (Term): el primer escalón antes
-// de poder crear un curso (todo Course necesita un termId, ver
-// create-course.dto.ts). Sin esta pantalla, dar de alta un curso nuevo era
-// imposible desde la interfaz — hoy solo Coordinador académico/Administrador
-// tienen "term:create" (ver prisma/seed.js).
+// periodos/page.tsx — Periodos académicos (Term): opcional desde que un
+// curso puede crearse sin ninguno (ver create-course.dto.ts) — antes era
+// un paso OBLIGATORIO antes de poder crear el primer curso, lo que
+// bloqueaba a cualquier institución nueva sin ninguno todavía creado. Hoy
+// solo Coordinador académico/Administrador tienen "term:create" (ver
+// prisma/seed.js).
 // ============================================================================
 
 import { requireAccessToken, apiFetch, toErrorMessage, getPermissions, can } from '@/lib/api';
 import { ErrorBanner } from '@/components/ErrorBanner';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { crearPeriodo } from './actions';
+import { ConfirmSubmitButton } from '@/components/ui/ConfirmSubmitButton';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { CalendarIcon } from '@/components/ui/icons';
+import { fieldClasses, labelClasses } from '@/components/ui/field-styles';
+import { crearPeriodo, eliminarPeriodo } from './actions';
 
 interface Term {
   id: string;
@@ -35,10 +42,14 @@ export default async function PeriodosPage({
 
   const permissions = await getPermissions(token);
   const canCreate = can(permissions, 'term', 'create');
+  const canDelete = can(permissions, 'term', 'delete');
 
   return (
     <div className="mx-auto max-w-3xl">
-      <h1 className="mb-6 text-2xl font-semibold">Periodos académicos</h1>
+      <PageHeader
+        title="Periodos académicos"
+        description="Agrupan cursos por ciclo/semestre. Son opcionales: un curso se puede crear sin periodo y asignarle uno después."
+      />
 
       {error && (
         <div className="mb-6">
@@ -46,25 +57,44 @@ export default async function PeriodosPage({
         </div>
       )}
 
-      {terms.length === 0 ? (
-        <p className="mb-8 text-zinc-500">Todavía no hay ningún periodo académico creado.</p>
-      ) : (
-        <ul className="mb-8 divide-y divide-zinc-200 dark:divide-zinc-800">
-          {terms.map((term) => (
-            <li key={term.id} className="py-3">
-              <span className="font-medium">{term.name}</span>{' '}
-              <span className="text-sm text-zinc-500">
-                ({new Date(term.startDate).toLocaleDateString('es-PE')} –{' '}
-                {new Date(term.endDate).toLocaleDateString('es-PE')})
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
+      <Card className="mb-8">
+        {terms.length === 0 ? (
+          <EmptyState
+            icon={CalendarIcon}
+            title="Todavía no hay ningún periodo académico creado."
+            description="No hace falta crear uno para empezar — se puede crear un curso sin periodo y asignárselo más adelante."
+          />
+        ) : (
+          <ul className="divide-y divide-border">
+            {terms.map((term) => (
+              <li key={term.id} className="flex items-center justify-between gap-3 py-3">
+                <div>
+                  <span className="font-medium">{term.name}</span>{' '}
+                  <span className="text-sm text-muted">
+                    ({new Date(term.startDate).toLocaleDateString('es-PE')} –{' '}
+                    {new Date(term.endDate).toLocaleDateString('es-PE')})
+                  </span>
+                </div>
+                {canDelete && (
+                  <form action={eliminarPeriodo.bind(null, term.id)}>
+                    <ConfirmSubmitButton
+                      variant="danger"
+                      size="sm"
+                      confirmMessage={`¿Eliminar el periodo "${term.name}"? Esto solo funciona si ningún curso lo usa todavía.`}
+                    >
+                      Eliminar
+                    </ConfirmSubmitButton>
+                  </form>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
 
       {canCreate && (
-        <>
-          <h2 className="mb-3 text-lg font-medium">Crear un periodo nuevo</h2>
+        <Card>
+          <h2 className="mb-3 text-base font-medium">Crear un periodo nuevo</h2>
           <form action={crearPeriodo} className="flex max-w-sm flex-col gap-3">
             <input
               name="name"
@@ -72,31 +102,21 @@ export default async function PeriodosPage({
               required
               maxLength={120}
               placeholder='Ej. "2026 - Semestre I"'
-              className="rounded border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
+              className={fieldClasses}
             />
-            <label className="text-xs text-zinc-500">
+            <label className={labelClasses} htmlFor="term-start">
               Fecha de inicio
-              <input
-                name="startDate"
-                type="date"
-                required
-                className="mt-1 w-full rounded border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
-              />
+              <input id="term-start" name="startDate" type="date" required className={`mt-1 ${fieldClasses}`} />
             </label>
-            <label className="text-xs text-zinc-500">
+            <label className={labelClasses} htmlFor="term-end">
               Fecha de fin
-              <input
-                name="endDate"
-                type="date"
-                required
-                className="mt-1 w-full rounded border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
-              />
+              <input id="term-end" name="endDate" type="date" required className={`mt-1 ${fieldClasses}`} />
             </label>
             <Button type="submit" className="self-start">
               Crear periodo
             </Button>
           </form>
-        </>
+        </Card>
       )}
     </div>
   );

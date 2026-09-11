@@ -5,6 +5,12 @@
 import { IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
 
 export class UpdateCourseDto {
+  // Permite asignar (o cambiar) el periodo academico de un curso que se
+  // creo sin uno (ver create-course.dto.ts, termId opcional ahi).
+  @IsOptional()
+  @IsUUID()
+  termId?: string;
+
   @IsOptional()
   @IsString()
   @MaxLength(30)

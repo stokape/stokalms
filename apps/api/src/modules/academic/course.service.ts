@@ -27,9 +27,13 @@ export class CourseService {
     const tenantId = this.tenantContext.requireTenantId();
 
     return this.prisma.withTenant(tenantId, async (tx) => {
-      const term = await tx.term.findUnique({ where: { id: dto.termId } });
-      if (!term) {
-        throw new NotFoundException(`No existe el periodo academico "${dto.termId}".`);
+      // "termId" es opcional (ver create-course.dto.ts) -- solo se valida
+      // que exista y sea de ESTE tenant cuando de verdad se mando uno.
+      if (dto.termId) {
+        const term = await tx.term.findUnique({ where: { id: dto.termId } });
+        if (!term) {
+          throw new NotFoundException(`No existe el periodo academico "${dto.termId}".`);
+        }
       }
 
       return tx.course.create({
@@ -73,10 +77,22 @@ export class CourseService {
     await this.findOne(id);
     const tenantId = this.tenantContext.requireTenantId();
 
-    return this.prisma.withTenant(tenantId, (tx) =>
-      tx.course.update({
+    return this.prisma.withTenant(tenantId, async (tx) => {
+      // Misma validacion de pertenencia que "create" (ver la nota grande al
+      // principio del archivo) -- necesaria aca tambien porque este es el
+      // unico lugar donde se puede asignar un periodo a un curso que se
+      // creo sin ninguno.
+      if (dto.termId !== undefined) {
+        const term = await tx.term.findUnique({ where: { id: dto.termId } });
+        if (!term) {
+          throw new NotFoundException(`No existe el periodo academico "${dto.termId}".`);
+        }
+      }
+
+      return tx.course.update({
         where: { id },
         data: {
+          ...(dto.termId !== undefined && { termId: dto.termId }),
           ...(dto.code !== undefined && { code: dto.code }),
           ...(dto.title !== undefined && { title: dto.title }),
           ...(dto.gradingScaleId !== undefined && { gradingScaleId: dto.gradingScaleId }),
@@ -84,8 +100,8 @@ export class CourseService {
             certificateTemplateId: dto.certificateTemplateId,
           }),
         },
-      }),
-    );
+      });
+    });
   }
 
   async remove(id: string) {
